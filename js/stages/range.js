@@ -250,9 +250,9 @@ function config(tier, v) {
   c.decoy = (tier | 0) >= 2;                         // decoys (bombs painted like targets, #35), Very Hard / Insane only
   c.ammo = [
     'unlimited',
-    { mag: 6, reloadTime: b.rel, autoReload: c.autoReload },
+    { mag: 8, reloadTime: b.rel, autoReload: c.autoReload },
     { cap: 0 },                                      // = quota + slack, set by timeline() (estimate below for menus)
-    { mag: 8, reloadTime: +(b.rel * 0.9).toFixed(2), autoReload: c.autoReload }
+    { mag: 12, reloadTime: +(b.rel * 0.9).toFixed(2), autoReload: c.autoReload }
   ][v];
   c.variant = v; c.tier = tier | 0; c.title = 'SHOOTING RANGE'; c.subtitle = VARIANT_NAMES[v];
   if (c.ammo.cap === 0) { const est = Object.assign({}, c); timeline(est, B.Stage.mulberry32(0x5eed)); c.ammo = est.ammo; c.quota = est.quota; }

@@ -170,7 +170,7 @@ function clientRecv(m) {
 // ---------- both ----------
 // a local shot in a versus match: { st, k: 'hit'|'miss'|'bomb'|'duck', tid, a: ammo (-1 = infinite), ar: reloading }
 N.sendShot = m => { m.t = 'shot'; if (N.isHost) hostRecv(N.me, m); else sendTo(N.conn, m); };
-// local ammo / reload state changed without a shot (a reload started or finished): keep the other side's HUD
+// local ammo changed without a shot (a reload; instant since build 0.005, so ar is always 0): keep the other side's HUD
 // honest. Never counts as a shot, never adjudicated.
 N.sendAmmo = run => {
   if (!run || !run.versus) return;

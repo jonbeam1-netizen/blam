@@ -278,6 +278,15 @@ UI.screens.title = {
 // SETTINGS: toggles are signs you shoot (they flip, they don't shatter)
 // =========================================================================================
 const onOff = b => b ? 'ON' : 'OFF';
+// RELOAD TYPE (build 0.005, #40): one sign that cycles the options of the CURRENT input type (mouse / touch);
+// each input type keeps its own saved choice (Save.settings.reloadPC / reloadTouch)
+const RELOAD_TYPES = { pc: ['arcade', 'rclick'], touch: ['swipe', 'tap'] };
+const RELOAD_NAMES = { arcade: 'ARCADE', rclick: 'RIGHT CLICK', swipe: 'SWIPE DOWN', tap: 'TAP SIDES' };
+const RELOAD_HELP = { arcade: 'SHOOT OR AIM AT THE SIDE PILLARS', rclick: 'RIGHT MOUSE BUTTON, ANYWHERE',
+  swipe: 'SWIPE DOWN ANYWHERE', tap: 'TAP THE SIDE OF THE SCREEN' };
+const reloadSignText = () => 'RELOAD: ' + RELOAD_NAMES[G().reloadMode()];
+UI.reloadHelp = () => { const touch = B.Input.touch, m = G().reloadMode();
+  return { group: touch ? 'PHONE: SWIPE DOWN / TAP SIDES' : 'PC: ARCADE / RIGHT CLICK', help: RELOAD_HELP[m] + (touch ? '' : '. KEY R ALWAYS WORKS') }; };
 UI.screens.settings = {
   enter() {
     const g = G(), st = B.Save.settings; g.placeDuck('title'); g.duckPose('idle');
@@ -289,7 +298,10 @@ UI.screens.settings = {
       Object.assign(tog('shake', 'SCREEN SHAKE'), { u: 0.31, v: 0.64 }),
       { text: 'GUN: ' + g.skinName(), keep: true, color: 'plum', s: 0.036, u: 0.66, v: 0.3, act: sign => { g.setSkin(g.skin + 1); sign.setText('GUN: ' + g.skinName()); } },
       { text: 'NAME: ' + st.name, keep: true, color: 'blue', s: 0.036, u: 0.66, v: 0.47, act: sign => UI.prompt('PLAYER NAME (VERSUS)', B.Save.settings.name, 10, v => { if (v) { B.Save.set('name', v); sign.setText('NAME: ' + v); } }) },
-      { text: 'BACK', color: 'crimson', s: 0.045, u: 0.66, v: 0.64, act: () => g.go('title') }
+      { text: 'BACK', color: 'crimson', s: 0.045, u: 0.66, v: 0.64, act: () => g.go('title') },
+      { text: reloadSignText(), keep: true, color: 'amber', s: 0.036, u: 0.48, v: 0.81, act: sign => {
+        const touch = B.Input.touch, key = touch ? 'reloadTouch' : 'reloadPC', list = RELOAD_TYPES[touch ? 'touch' : 'pc'];
+        B.Save.set(key, list[(list.indexOf(g.reloadMode()) + 1) % list.length]); sign.setText(reloadSignText()); } }
     ]);
   },
   exit() { this.menu.dispose(); },
@@ -297,6 +309,8 @@ UI.screens.settings = {
     this.menu.update(dt, t);
     const gs = this.menu.items[3].sign, want = 'GUN: ' + G().skinName();   // key 4 changes the skin anywhere
     if (gs.alive && gs.opts.text !== want) gs.setText(want);
+    const rs = this.menu.items[6].sign, rw = reloadSignText();              // mouse <-> touch swaps the option group
+    if (rs.alive && rs.opts.text !== rw) rs.setText(rw);
   },
   draw(t) {
     if (tall()) return;                                                       // portrait: drawPortrait() has the text
@@ -304,6 +318,7 @@ UI.screens.settings = {
     const m = this.menu.items;
     caption(m[0].sign, 'OFF = PALETTE SNAP ONLY');
     caption(m[3].sign, 'KEY 4 CYCLES GUNS ANYWHERE');
+    const rh = UI.reloadHelp(); caption(m[6].sign, rh.group, 'yellow'); caption(m[6].sign, rh.help, 'mist', 10);
     statusLine('BUILD ' + G().BUILD, B.R.MODE_NAMES[B.R.mode]);
   },
   fire(u, v, inside) { menuFire(this, u, v, inside); }
@@ -416,7 +431,7 @@ function shotsPillar(x, y, rule) {
   H.text3c('SHOTS', x + w / 2, y + 14, 'bone', 2, 'void');
   const r = rule || 'unlimited';
   if (r === 'unlimited' || (!r.mag && !r.cap)) { H.sprite(H.INF, x + w / 2 - 13, y + 52, 3, { X: 'bone' }, 'inf3'); H.text3c('NO LIMIT', x + w / 2, y + 80, 'lemon', 1, 'void'); }
-  else if (r.mag) { H.text7c(String(r.mag), x + w / 2, y + 40, 4, 'bone', 'void', 2); H.text3c('PER MAG', x + w / 2, y + 76, 'lemon', 1, 'void'); H.text3c(r.autoReload ? 'AUTO' : 'SHOOT SIDE', x + w / 2, y + 86, 'bone', 1, 'void'); H.text3c(r.autoReload ? 'RELOAD' : 'TO RELOAD', x + w / 2, y + 93, 'bone', 1, 'void'); }
+  else if (r.mag) { H.text7c(String(r.mag), x + w / 2, y + 40, 4, 'bone', 'void', 2); H.text3c('PER MAG', x + w / 2, y + 76, 'lemon', 1, 'void'); const rl = r.autoReload ? ['AUTO', 'RELOAD'] : ({ arcade: ['SHOOT SIDE', 'TO RELOAD'], rclick: ['RIGHT CLICK', 'TO RELOAD'], swipe: ['SWIPE DOWN', 'TO RELOAD'], tap: ['TAP SIDE', 'TO RELOAD'] })[G().reloadMode()] || ['SHOOT SIDE', 'TO RELOAD']; H.text3c(rl[0], x + w / 2, y + 86, 'bone', 1, 'void'); H.text3c(rl[1], x + w / 2, y + 93, 'bone', 1, 'void'); }
   else { H.text7c(String(r.cap), x + w / 2, y + 40, 4, 'bone', 'void', 2); H.text3c('IN TOTAL', x + w / 2, y + 76, 'lemon', 1, 'void'); H.text3c('MAKE THEM', x + w / 2, y + 86, 'bone', 1, 'void'); H.text3c('COUNT!', x + w / 2, y + 93, 'bone', 1, 'void'); }
 }
 function timePillar(x, y, secs) {

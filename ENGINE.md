@@ -13,10 +13,10 @@ The render pipeline, palette, fonts and the voxel builder are lifted from `lookt
 |---|---|
 | `index.html`, `style.css` | shell: canvas, script tags (in order), viewport meta, the DOM text prompt style |
 | `js/core/render.js` | `BLAM.R`: palette `PAL`/`CSS`, fonts `F3`/`F7` (+ generated bold glyphs), `Vox` builder, materials `MAT.env/obj/glow/hot`, renderer, 426x240 scene target, palette+Bayer post pass (`setDither(on)`, dev `setMode(1..3)`), HUD canvas `hx`, letterbox + **outer canvas** (pillar frame / portrait HUD strip on its own pixel grid), `rayAt(u,v)`, `screenToWorld(u,v,z)`, `screenToCam(u,v,d)`, `toPx(v3)` |
-| `js/core/input.js` | `BLAM.Input`: mouse crosshair + left click, touch tap fires where tapped (pointer events), keys, no page scroll/zoom; `aim {u,v}`, `onFire`, `onKey`, `onLayout(touch)` |
-| `js/core/save.js` | `BLAM.Save`: localStorage `blam.save.v1` (settings, best per `stageKey|tier`, gun skin) |
+| `js/core/input.js` | `BLAM.Input`: mouse crosshair + left click, right button (`onAlt`), raw pointer `ptr {u,v,inside,over}` (also over the frame), touch tap fires where tapped + swipe down (`onSwipe`, `SWIPE_PX` 40), keys, no page scroll/zoom / context menu; `aim {u,v}`, `onFire`, `onKey`, `onLayout(touch)` |
+| `js/core/save.js` | `BLAM.Save`: localStorage `blam.save.v1` (settings incl. `reloadPC` / `reloadTouch`, best per `stageKey|tier`, gun skin) |
 | `js/core/audio.js` | `BLAM.SFX` **stub**: `play(name, opts)` logs to `BLAM.SFX.log`; the event list is documented at the top of the file |
-| `js/core/ammo.js` | `BLAM.Ammo`: `'unlimited'` / `{mag, reloadTime, autoReload?}` / `{cap}`; magazine reload is MANUAL (shoot the frame / R, see Build 0.003), `startReload()` calls `gun.reload(t)` and locks the trigger; `autoReload: true` = the old automatic reload |
+| `js/core/ammo.js` | `BLAM.Ammo`: `'unlimited'` / `{mag, reloadTime?, autoReload?}` / `{cap}`; magazine reload is MANUAL and INSTANT (Build 0.005): `startReload()` fills the magazine at once, plays the cosmetic `gun.reload(0.12)`, never locks the trigger; `reloadTime` is ignored; `autoReload: true` refills instantly when the last round is spent |
 | `js/core/hud.js` | `BLAM.HUD`: cached 3x5 / bold text, sprites, ammo shell, hearts, HIT badge (0.35 s, beside the shell), timer ball, quota pill, versus counters, crosshair, briefing/results panels (stone banner, red panel, sticker, plate, starburst, icons), `drawPlay(hs)`, `drawOuter(frame, t, hs)` |
 | `js/core/targets.js` | `BLAM.Targets`: chips (InstancedMesh), bullet-hole decals with a rim, sparks, bomb puff, `Target` base class, `pick(ray, targets)`, `Sign` (shootable menu board) |
 | `js/core/stage.js` | `BLAM.Stage`: tiers, `mulberry32`, stage registry, env cache, `Run` (one stage being played, scoring, versus adjudication), `Course` |
@@ -31,7 +31,7 @@ The render pipeline, palette, fonts and the voxel builder are lifted from `lookt
 | `js/main.js` | `BLAM.G`: boot, mounting gun + duck, game flow (course / free play / versus), the loop, keys, **build stamp** |
 | `js/guns.js`, `js/duck.js` | owned by the art agent; used through `BLAM.Guns` / `BLAM.Duck` if present |
 
-Keys: **R** reload (PC fallback for shoot-to-reload, during a stage), **4** next gun skin (anywhere), **F** FPS readout, **1/2/3** dither modes (dev, not saved), **Esc** back / leave.
+Keys: **R** reload (every RELOAD TYPE, during a stage), **4** next gun skin (anywhere), **F** FPS readout, **1/2/3** dither modes (dev, not saved), **Esc** back / leave.
 URL params: `?seed=N` fixes every stage seed (repeatable runs), `?go=free|settings|scores|lobby|tiers` jumps to a menu,
 `?slow=0.25` (testing) runs a solo stage clock at that rate (HUD label shows SLOW; versus ignores it).
 
@@ -211,3 +211,42 @@ Stage 2 ALLEY, stage 3 BONEYARD and the props art pass (`props.js`, `targets.js`
 - **SFX events** added to `audio.js` (`ricochet`, Alley `bystanderIn` / `pigeon`, Boneyard `skullThrow` / `skullBonk` / `boneRattle` / `bombFlip` / `batFlap`).
 - **"Unexpected end of input" x6** seen by the props agent: not from the game. The browser pane's console log is kept per tab across reloads, so six old `Uncaught SyntaxError` entries from one earlier page load kept showing in that tab; every game script parses (all 19 checked) and fresh loads log no errors. Testing tip: a tab's console history survives navigation; use a fresh tab (or a marker log) before judging errors.
 - Files: `js/core/targets.js`, `js/core/stage.js`, `js/core/ui.js`, `js/core/portrait.js`, `js/core/audio.js`, `js/net.js`, `js/main.js`, `js/stages/alley.js`, `js/stages/boneyard.js`, `index.html`, this file.
+
+## Build 0.005
+
+RELOAD rework (owner items #44, #40, #38). Proof captures: `review/phase3/reload/`.
+
+### Instant reload (#44)
+
+- Time Crisis / Area 51 rule: the moment a reload trigger registers, the magazine is full and the next shot fires. Every method, tier, variant and stage.
+- `Ammo.startReload()` sets `count = max`, `kick = 0.3` (HUD capsule flash), emits `reload {time: 0}` + `reloadDone`, calls `gun.reload(0.12)`. `reloading` is always `false`, `reloadFrac` 0, nothing ever locks the trigger.
+- `reloadTime` in a stage's `ammo` rule (range / alley / boneyard / skyshow still pass `b.rel`) is **ignored**; keep it or drop it, it is harmless. The per-tier reload times in "Build 0.003 / Numbers" are dead values.
+- `autoReload: true`: the magazine refills instantly when the last round is spent (it then plays like an unlimited gun with a rack every N shots).
+- Gun (`guns.js`): `reload(s)` accepts down to 0.08 s (was clamped to >= 0.3); `fire()` during the rack animation snaps it to the end and fires (it used to swallow the shot).
+- HUD shell: no progress bar, no `...`; a single lemon capsule flash + yellow `RELOAD` for `kick` (no strobe). The empty-mag `RELOAD` over the shell and the crosshair `RELOAD` prompt alternate red / white letters at 2 Hz (no on/off blink, no box).
+- Versus: unchanged protocol. `G.sideReload` sends `{t:'am', a, ar:0}` (guest) / a `sc` snapshot (host) after every reload, so the rival's shell shows the full magazine; `ar` is always 0 now. Reloads and frame shots are never `shot` messages.
+
+### RELOAD TYPE setting (#40)
+
+`Save.settings.reloadPC` (`'arcade'` default | `'rclick'`) and `reloadTouch` (`'swipe'` default | `'tap'`); `G.reloadMode()` returns the one for the current input type (`Input.touch`). Settings screen: an amber `RELOAD: ...` sign (centre, bottom row) cycles the options of the CURRENT input type; captions name the group (`PC: ARCADE / RIGHT CLICK` or `PHONE: SWIPE DOWN / TAP SIDES`) and what the current one does. Portrait settings text and the portrait briefing SHOTS card follow the mode.
+
+| mode | reload by | frame shot / tap | edge zone (exact 16:9) |
+|---|---|---|---|
+| ARCADE (PC default) | shoot the frame, or rest the mouse on it for 0.1 s (wall clock, only while the mag is not full; leaving the frame resets the timer, so a flick across the edge never reloads) | reloads | yes |
+| RIGHT CLICK | right mouse button anywhere (context menu suppressed; chorded presses work) | nothing (not a shot) | no (normal shots) |
+| TAP SIDES | tap the frame | reloads | yes |
+| SWIPE DOWN (touch default) | a touch that travels >= 40 CSS px mostly downward (dy > 1.2 |dx|), recognised on pointermove, once per touch | nothing (not a shot) | no |
+
+Key **R** works in every mode. A frame shot is never a shot (no stats, no cap round, never sent to the host) in every mode.
+**Swipe vs tap:** a tap fires on `pointerdown` exactly as before; swipe detection never delays it. So the touch that starts a swipe is itself a tap: on an empty magazine it is only a dry click (no shot, no stats), but a tactical swipe on a partial magazine spends that first round before the swipe reloads.
+Hooks: `Input.onAlt(fn(u, v, inside))`, `Input.onSwipe(fn(u, v))`, `Input.ptr`; main.js `G.reloadMode()`, `G.frameReloads()`, the dwell runs in `playExtras`.
+
+### Markers (#38)
+
+`H.reloadMarker(cx, cy, dir, st, sc, kind)`, `kind = H.markerKind(mode)`: `'arcade'` (ARCADE / TAP SIDES: `< R E L O A D <`), `'mouse'` (RIGHT CLICK: pixel mouse, right button lit, + RELOAD), `'swipe'` (SWIPE DOWN: `SWIPE` + a down arrow). Pillars stack vertically, top / bottom bars horizontally. `hs.reload = { empty, kick, mode }`.
+States: `dim` (quiet slate plaque, mag not empty), `hotR` / `hotW` (mag empty: ONLY the letters and arrows switch red <-> white at 2 Hz, bold and one size up when the pillar / bar has room, a 1 px dark outline for legibility; no plaque, nothing behind them changes), `kick` (steady lemon letters while `ammo.kick` runs). The HUD edge-zone markers (no frame) are drawn only in ARCADE / TAP SIDES. `buildOuter` spots are now `[cx, cy, dir, sc, room across, room along]` (bars: `cy` = the game rect edge, the plaque is centred in the bar or hugs the edge).
+
+### Rough edges / not done
+
+- The landscape briefing card in `ui.js` (not this pass's area) still reads `SHOOT SIDE TO RELOAD` in every mode; the portrait card is mode-aware.
+- Files: `js/core/ammo.js`, `js/core/input.js`, `js/core/save.js`, `js/core/hud.js`, `js/core/ui.js` (settings screen), `js/core/portrait.js`, `js/net.js` (comment), `js/guns.js` (reload timing), `js/main.js`, `index.html`, this file.

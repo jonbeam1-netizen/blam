@@ -711,7 +711,7 @@ const TIER_P = [
   { time: 35, hold: 1.0,  quick: 0.38, mix: 0.5, enter: 0.28, live: 4, civ: 0.38, civCap: 0.42, gap: [0.45, 0.9],  overlap: 1,    peek: 0.16, swap: 0.14, civPop: 0.3,  rel: 0.62, slack: 6,  share: 0.64 },
   { time: 32, hold: 0.9,  quick: 0.3,  mix: 0.5, enter: 0.24, live: 5, civ: 0.42, civCap: 0.45, gap: [0.32, 0.72], overlap: 1,    peek: 0.2,  swap: 0.18, civPop: 0.35, rel: 0.55, slack: 4,  share: 0.66 }
 ];
-const VARIANT_NAMES = ['SIX SHOOTER', 'COUNT YOUR SHOTS', 'LAST CALL'];
+const VARIANT_NAMES = ['EIGHT SHOOTER', 'COUNT YOUR SHOTS', 'LAST CALL'];
 const CROOKS = ['fedora', 'beanie'], CIVS = ['cook', 'kid', 'lady'], POPPERS = ['cook', 'kid'];
 const capEst = {};
 function config(tier, v) {
@@ -723,9 +723,9 @@ function config(tier, v) {
   c.autoReload = false;
   c.tier = tier; c.variant = v; c.title = 'THE ALLEY'; c.subtitle = VARIANT_NAMES[v];
   c.ammo = [
-    { mag: 6, reloadTime: b.rel, autoReload: c.autoReload },
+    { mag: 8, reloadTime: b.rel, autoReload: c.autoReload },
     { cap: 0 },                                      // = quota + slack, set by timeline() (estimate below for menus)
-    { mag: 8, reloadTime: +(b.rel * 0.9).toFixed(2), autoReload: c.autoReload }
+    { mag: 12, reloadTime: +(b.rel * 0.9).toFixed(2), autoReload: c.autoReload }
   ][v];
   if (c.ammo.cap === 0) {
     const key = tier + '|' + v;

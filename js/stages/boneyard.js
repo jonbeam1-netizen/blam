@@ -691,7 +691,7 @@ function config(tier, v) {
   c.share = Math.min(0.75, b.share + 0.02 * v);
   c.flipbomb = tier >= 2;                            // flip bombs: Very Hard / Insane only
   c.autoReload = false;
-  c.ammo = tier === 0 ? 'unlimited' : { mag: v >= 2 ? 8 : 6, reloadTime: b.rel, autoReload: false };
+  c.ammo = tier === 0 ? 'unlimited' : { mag: v >= 2 ? 12 : 8, reloadTime: b.rel, autoReload: false };
   c.tier = tier; c.variant = v; c.title = 'BONEYARD'; c.subtitle = VARIANT_NAMES[v];
   c.quota = 8;                                       // timeline() derives the real quota; a fixed-seed estimate for menus:
   const est = Object.assign({}, c); timeline(est, B.Stage.mulberry32(0x5eed)); c.quota = est.quota;

@@ -140,18 +140,14 @@ function shellImg(p, mirror, flash) {
 }
 // player p (0/1), ammo (B.Ammo), x,y = top-left; mirrored for P2 in versus
 function shell(x, y, p, ammo, mirror, t) {
-  const rel = ammo && ammo.reloading, fl = rel && ((t * 12) | 0) % 2 === 0;
+  // reload is instant (build 0.005): just a quick capsule flash (ammo.kick) + a yellow RELOAD tag, no progress bar
+  const kick = !!(ammo && ammo.kick > 0), fl = kick;                       // one steady flash, no strobe
   draw(shellImg(p, mirror, fl), x, y);
   const cx = x + (mirror ? 18 : 29);
   if (!ammo || ammo.infinite) sprite(INF, cx - 9, y + 4, 2, { X: 'bone' }, 'inf');
-  else if (rel) text3c('...', cx, y + 4, 'void', 2);
-  else text3c(String(ammo.count), cx, y + 4, ammo.count === 0 ? 'oxblood' : 'bone', 2);
-  if (rel && ammo.reloadFrac != null) {                                     // reload progress along the hull
-    const x0 = x + (mirror ? 4 : 14), w = 30, f = Math.max(0, Math.min(1, ammo.reloadFrac));
-    rect(x0, y + 13, w, 2, 'void'); rect(x0, y + 13, Math.round(w * f), 2, 'lemon');
-  }
-  if (rel) text3c('RELOAD', x + 24, y - 7, 'yellow', 1, 'void');
-  else if (ammo && ammo.magEmpty) { if (((t * 4) | 0) % 2 === 0) text3c('RELOAD', x + 24, y - 7, 'red', 1, 'void'); }   // manual reload: shoot the frame
+  else text3c(String(ammo.count), cx, y + 4, fl ? 'void' : ammo.count === 0 ? 'oxblood' : 'bone', 2);
+  if (kick) text3c('RELOAD', x + 24, y - 7, 'yellow', 1, 'void');
+  else if (ammo && ammo.magEmpty) text3c('RELOAD', x + 24, y - 7, ((t * 4) | 0) % 2 ? 'bone' : 'red', 1, 'void');   // letters only, red <-> white 2 Hz
   else if (ammo && ammo.empty && ((t * 4) | 0) % 2 === 0) text3c('EMPTY', x + 24, y - 7, 'red', 1, 'void');
   else if (ammo && ammo.flash > 0) text3c('EMPTY', x + 24, y - 7, 'red', 1, 'void');
 }
@@ -210,15 +206,20 @@ function counter(x, y, n, p) {                 // versus hit counter in the play
 // small blinking RELOAD prompt next to the aim point (empty magazine). u,v in the game rect; below the point,
 // above it near the bottom edge (the HUD strip lives there)
 function reloadPrompt(u, v, t) {
-  if (((t * 4) | 0) % 2) return;
-  const x = Math.round(u * RW), y = Math.round(v * RH), below = y < RH - 60;
-  text3c('RELOAD', Math.max(14, Math.min(RW - 14, x)), below ? y + 10 : y - 16, 'red', 1, 'void');
+  const x = Math.round(u * RW), y = Math.round(v * RH), below = y < RH - 60;   // letters only: red <-> white at 2 Hz
+  text3c('RELOAD', Math.max(14, Math.min(RW - 14, x)), below ? y + 10 : y - 16, ((t * 4) | 0) % 2 ? 'bone' : 'red', 1, 'void');
 }
-// vertical / horizontal REL0AD marker for the frame: plaque with "< R E L O A D <" (arrows point outward).
-// dir: 'l' | 'r' (vertical, on a pillar) or 'u' | 'd' (horizontal, on a top / bottom bar). cx, cy = centre.
-// st: 'dim' | 'on' | 'blink' (lit, alternate frame) | 'flash' (reload just triggered) | 'rel' (reloading)
-const MK = { dim: ['midnight', 'slate', 'haze'], on: ['oxblood', 'red', 'lemon'], blink: ['void', 'crimson', 'coral'],
-  flash: ['lemon', 'yellow', 'void'], rel: ['rust', 'amber', 'lemon'] };
+// Frame RELOAD markers (#31, build 0.005 #38). Stacked items: vertical on a pillar (dir 'l' / 'r'), horizontal on
+// a top / bottom bar (dir 'u' / 'd'). kind (from the RELOAD TYPE):
+//   'arcade' (ARCADE / TAP SIDES): "< R E L O A D <", arrows pointing outward
+//   'mouse'  (RIGHT CLICK): a pixel mouse with the right button lit + RELOAD
+//   'swipe'  (SWIPE DOWN): SWIPE + a downward arrow
+// st: 'dim' (quiet plaque, magazine not empty) | 'hotR' / 'hotW' (empty: ONLY the letters / arrows switch red <->
+// white at 2 Hz, one size up and bold, with a thin dark outline; no box, nothing behind them flashes) |
+// 'kick' (reload just triggered: steady lemon letters for ammo.kick, no box, no strobe)
+const MK = { dim: ['midnight', 'slate', 'haze'], hotR: [null, null, 'red'], hotW: [null, null, 'bone'], kick: [null, null, 'lemon'] };
+MK.on = MK.flash = MK.kick; MK.blink = MK.hotW; MK.rel = MK.kick;       // pre-0.005 names (old callers)
+const HOT = { hotR: 1, hotW: 1 }, BARE = { hotR: 1, hotW: 1, kick: 1 };   // BARE: drawn without a plaque
 function arrowGlyph(x, y, dir, c, sc) {         // 3x5 (or 5x3) solid arrow head pointing dir
   for (let i = 0; i < 3; i++) {                 // i = column (l / r) or row (u / d); the tip is 1 cell
     const grow = 1 + 2 * i, o = 2 - i;          // tip at i = 0 for l / u
@@ -228,34 +229,60 @@ function arrowGlyph(x, y, dir, c, sc) {         // 3x5 (or 5x3) solid arrow head
     else rect(x + o * sc, y + (2 - i) * sc, grow * sc, sc, c);
   }
 }
-function reloadMarker(cx, cy, dir, st, sc = 1) {
-  const C = MK[st] || MK.dim, word = 'RELOAD', vert = dir === 'l' || dir === 'r';
-  if (vert) {
-    const cell = 7 * sc, n = word.length + 2, h = n * cell - 2 * sc + 6, w = 3 * sc + 6;
-    const x = Math.round(cx - w / 2), y = Math.round(cy - h / 2);
-    box(x, y, w, h, C[0], C[1], null);
-    for (let i = 0; i < n; i++) {
-      const gy = y + 3 + i * cell, gx = x + 3;
-      if (i === 0 || i === n - 1) arrowGlyph(gx, gy, dir, C[2], sc);
-      else text3(word[i - 1], gx, gy, C[2], sc);
-    }
-  } else {
-    const w = (word.length + 2) * 4 * sc + 4 * sc + 6, h = 5 * sc + 6;
-    const x = Math.round(cx - w / 2), y = Math.round(cy - h / 2);
-    box(x, y, w, h, C[0], C[1], null);
-    arrowGlyph(x + 3, y + 3 + sc, dir, C[2], sc);
-    text3(word, x + 3 + 7 * sc, y + 3, C[2], sc);
-    arrowGlyph(x + w - 3 - 5 * sc, y + 3 + sc, dir, C[2], sc);
-  }
+const MOUSE = ['.vvvvv.', 'vLLvRRv', 'vLLvRRv', 'vLLvRRv', 'vvvvvvv', 'vBBBBBv', 'vBBBBBv', 'vBBBBBv', '.vvvvv.'];
+const SWIPE_L = ['..X..', '..X..', '..X..', '..X..', 'XXXXX', '.XXX.', '..X..'];   // pillars
+const SWIPE_S = ['..X..', 'XXXXX', '.XXX.', '..X..'];                                // bars
+const ALLVOID = { v: 'void', L: 'void', B: 'void', R: 'void', X: 'void' };
+// items: { w, h, d(x, y, c, sil) }: c = ink colour; sil = draw the dark silhouette (outline pass) instead
+function markerItems(dir, sc, kind, st) {
+  const vert = dir === 'l' || dir === 'r', b = HOT[st] ? 1 : 0, out = [];
+  const txt = (s, x, y, c) => { text3(s, x, y, c, sc); if (b) text3(s, x + 1, y, c, sc); };
+  const glyph = ch => ({ w: 3 * sc + b, h: 5 * sc, d: (x, y, c) => txt(ch, x, y, c) });
+  const word = w => vert ? w.split('').forEach(ch => out.push(glyph(ch)))
+    : out.push({ w: w.length * 4 * sc - sc + b, h: 5 * sc, d: (x, y, c) => txt(w, x, y, c) });
+  const arrow = () => out.push({ w: (vert ? 3 : 5) * sc, h: (vert ? 5 : 3) * sc, d: (x, y, c) => arrowGlyph(x, y, dir, c, sc) });
+  const spr = (rows, u, key, id) => out.push({ w: rows[0].length * u, h: rows.length * u,
+    d: (x, y, c, sil) => sil ? sprite(rows, x, y, u, ALLVOID, id + 'v') : sprite(rows, x, y, u, key(c), id) });
+  if (kind === 'mouse') {
+    const u = vert ? Math.max(1, sc - 1) : sc;                              // bars: about the word's height
+    spr(MOUSE, u, c => ({ v: 'void', L: st === 'dim' ? 'slate' : 'mist', B: st === 'dim' ? 'haze' : 'bone',
+      R: st === 'dim' ? 'crimson' : st === 'kick' ? 'lemon' : 'red' }), 'mouse');
+    word('RELOAD');
+  } else if (kind === 'swipe') {
+    word('SWIPE');
+    spr(vert ? SWIPE_L : SWIPE_S, vert ? sc : Math.max(1, sc - 1), c => ({ X: c }), vert ? 'swl' : 'sws');
+  } else { arrow(); word('RELOAD'); arrow(); }
+  return out;
 }
-// marker state from the HUD state's reload block { empty, reloading, kick } at time t
+function markerSize(dir, sc, kind, st) {
+  const vert = dir === 'l' || dir === 'r', it = markerItems(dir, sc, kind, st), gap = 2 * sc;
+  const along = it.reduce((a, i) => a + (vert ? i.h : i.w), 0) + gap * (it.length - 1) + 6;
+  const across = Math.max(...it.map(i => vert ? i.w : i.h)) + 6;
+  return vert ? { w: across, h: along, it, gap } : { w: along, h: across, it, gap };
+}
+function reloadMarker(cx, cy, dir, st, sc = 1, kind = 'arcade') {
+  const C = MK[st] || MK.dim, vert = dir === 'l' || dir === 'r', m = markerSize(dir, sc, kind, st), bare = !!BARE[st];
+  const x = Math.round(cx - m.w / 2), y = Math.round(cy - m.h / 2);
+  if (!bare) box(x, y, m.w, m.h, C[0], C[1], null);
+  const pos = [];
+  let p = vert ? y + 3 : x + 3;
+  for (const i of m.it) {
+    if (vert) { pos.push([i, Math.round(x + (m.w - i.w) / 2), p]); p += i.h + m.gap; }
+    else { pos.push([i, p, Math.round(y + (m.h - i.h) / 2)]); p += i.w + m.gap; }
+  }
+  // bare (no plaque): a 1 px dark outline keeps the letters readable on the striped pillar / bar
+  if (bare) for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) for (const [i, ix, iy] of pos) i.d(ix + ox, iy + oy, 'void', true);
+  for (const [i, ix, iy] of pos) i.d(ix, iy, C[2], false);
+  return m;
+}
+// marker state from the HUD state's reload block { empty, kick } at time t
 function markerState(r, t) {
   if (!r) return '';
-  if (r.kick > 0) return ((r.kick * 16) | 0) % 2 ? 'flash' : 'on';
-  if (r.reloading) return 'rel';
-  if (r.empty) return ((t * 4) | 0) % 2 ? 'blink' : 'on';
+  if (r.kick > 0) return 'kick';
+  if (r.empty) return ((t * 4) | 0) % 2 ? 'hotW' : 'hotR';                  // red <-> white, 2 Hz, letters only
   return 'dim';
 }
+const markerKind = mode => mode === 'rclick' ? 'mouse' : mode === 'swipe' ? 'swipe' : 'arcade';
 function crosshair(u, v, hot) {
   const x = Math.round(u * RW - 0.5), y = Math.round(v * RH - 0.5), g = hot ? 4 : 2, c = hot ? 'yellow' : 'bone';
   const bars = [[x - g - 5, y, 5, 1], [x + g + 1, y, 5, 1], [x, y - g - 5, 1, 5], [x, y + g + 1, 1, 5]];
@@ -301,7 +328,7 @@ function drawPlay(hs, t) {
   }
   if (hs.label) text3r(hs.label, RW - 4, 4, 'yellow', 1, 'void');
 }
-Object.assign(H, { shell, hearts, hitBadge, timerBall, quotaPill, counter, crosshair, reloadPrompt, reloadMarker, markerState, strip, drawPlay, HIT_LIFE, PCOL });
+Object.assign(H, { shell, hearts, hitBadge, timerBall, quotaPill, counter, crosshair, reloadPrompt, reloadMarker, markerState, markerSize, markerKind, strip, drawPlay, HIT_LIFE, PCOL });
 
 // =========================================================================================
 // Panels and icons for the briefing card / results / menus
@@ -437,10 +464,12 @@ function buildOuter(fr) {
     [0, 1].forEach(side => {
       const bw = sideW[side], edge = side ? gx + gw : gx - 1, cw = Math.min(bw - 11, 36);
       const cx = bw >= 22 ? (side ? edge + 9 + cw / 2 : edge - 8 - cw / 2) : (side ? gx + gw + bw / 2 : gx - bw / 2);
-      mkSpots.push([cx, gy + gh / 2, side ? 'r' : 'l', bw >= 30 && gh >= 150 ? 2 : 1]);
+      // [cx, cy, dir, sc, room across, room along] (the room decides whether the empty-mag marker can go one size up)
+      mkSpots.push([cx, gy + gh / 2, side ? 'r' : 'l', bw >= 30 && gh >= 150 ? 2 : 1, bw >= 22 ? cw + 2 : bw - 2, gh - 24]);
     });
   } else if (vertH[0] >= 9 && vertH[1] >= 9) {
-    mkSpots.push([gx + gw / 2, gy - Math.min(vertH[0] >> 1, 7), 'u', 1], [gx + gw / 2, gy + gh + Math.min(vertH[1] >> 1, 7), 'd', 1]);
+    // bars: cy = the game rect edge; drawOuter centres the plaque in the bar, hugging the edge when the bar is tall
+    mkSpots.push([gx + gw / 2, gy, 'u', 1, vertH[0], gw - 4], [gx + gw / 2, gy + gh, 'd', 1, vertH[1], gw - 4]);
   }
   // top / bottom bars (portrait): valance with bulbs on top, wooden HUD shelf below
   [0, 1].forEach(side => {
@@ -474,12 +503,19 @@ function drawOuter(fr, t, hs) {
   const o = fr.outer, key = [o.OW, o.OH, o.gx, o.gy, o.gw, o.gh].join(',');
   if (key !== outerKey) { outerKey = key; buildOuter(fr); bulbStep = -1; }
   const step = Math.floor(t * 9), portrait = fr.portrait, mk = markerState(hs && hs.reload, t);
-  if (step === bulbStep && mk === mkLast && !portrait) return;
-  bulbStep = step; mkLast = mk;
+  const kind = markerKind(hs && hs.reload && hs.reload.mode), mkKey = mk + '|' + kind;
+  if (step === bulbStep && mkKey === mkLast && !portrait) return;
+  bulbStep = step; mkLast = mkKey;
   const prev = ctx; ctx = R.ox;
   ctx.drawImage(outerBase, 0, 0);
   bulbs.forEach(([x, y], i) => rect(x, y, 2, 2, (i + step) % 3 === 0 ? 'lemon' : (i + step) % 3 === 1 ? 'amber' : 'rust'));
-  if (mk) for (const [x, y, dir, sc] of mkSpots) reloadMarker(x, y, dir, mk, sc);
+  if (mk) for (const [x, y, dir, sc, room, roomAlong] of mkSpots) {
+    const vert = dir === 'l' || dir === 'r';
+    let s = sc;
+    if (HOT[mk]) { const m = markerSize(dir, sc + 1, kind, mk); if ((vert ? m.w : m.h) <= room && (vert ? m.h : m.w) <= roomAlong) s = sc + 1; }   // empty: one size up when it fits
+    if (vert) reloadMarker(x, y, dir, mk, s, kind);
+    else { const h = markerSize(dir, s, kind, mk).h, off = Math.min(room / 2, h / 2 + 2); reloadMarker(x, dir === 'u' ? y - off : y + off, dir, mk, s, kind); }
+  }
   if (portrait) {
     const gy = Math.round(o.gy), gh = Math.round(o.gh), topH = gy;
     if (hs && hs.panel) hs.panel({ W: o.OW, H: o.OH, top: gy, bot: gy + gh, cx: Math.round(o.OW / 2) });   // tall phone: the screen's own layout

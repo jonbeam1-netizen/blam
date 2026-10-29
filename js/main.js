@@ -6,7 +6,7 @@
 window.BLAM = window.BLAM || {};
 (function (B) {
 const R = B.R, I = B.Input, H = B.HUD, S = B.Stage, Tg = B.Targets, Save = B.Save, SFX = B.SFX, UI = B.UI, N = B.Net;
-const BUILD = '0.004';                      // bump on every publish (shown on the title status line)
+const BUILD = '0.005';                      // bump on every publish (shown on the title status line)
 const Q = new URLSearchParams(location.search);
 // ?slow=0.25 (dev/testing): single-player stage clock runs at that rate, so slow tools (screenshot -> click
 // takes seconds) can still shoot a target that is really there. Versus always runs on the wall clock.
@@ -138,12 +138,21 @@ function touchPick(run, u, v) {
   R.rayAt(u, v);
   return p;
 }
-// ---- shoot-to-reload (#23): a shot at the frame beside the game rect (pillars, or the top / bottom bars) reloads
-// a magazine, full or partial. It is not a shot: no stats, no ammo from a cap, never sent to the versus host.
-// When the game rect fills the whole canvas (no frame), a thin edge zone of the rect stands in for the frame.
-const EDGE_ZONE = 0.028;
+// ---- RELOAD (build 0.005): instant (#44); the trigger depends on the RELOAD TYPE setting (#40):
+//   PC    'arcade' (default): shoot the frame beside the game rect (pillars, or the top / bottom bars) OR rest the
+//          crosshair on it for DWELL s (only when the magazine isn't full; a flick across the edge doesn't count)
+//         'rclick': the right mouse button reloads anywhere; a frame click does nothing
+//   touch 'swipe' (default): swipe down >= Input.SWIPE_PX CSS px anywhere; a frame tap does nothing
+//         'tap': tap the frame
+//   key R reloads in every mode. A frame shot is never a shot: no stats, no ammo from a cap, never sent to the
+//   versus host. When the game rect fills the whole canvas (no frame), a thin edge zone of the rect stands in for
+//   the frame (arcade / tap only).
+const EDGE_ZONE = 0.028, DWELL = 0.1;
+G.reloadMode = () => I.touch ? Save.settings.reloadTouch || 'swipe' : Save.settings.reloadPC || 'arcade';
+G.frameReloads = () => { const m = G.reloadMode(); return m === 'arcade' || m === 'tap'; };
 G.edgeZone = () => !R.frame.portrait && !H.markerSpots().length;
-G.isSideShot = (run, u, v, inside) => !inside || (run.ammo.type === 'mag' && G.edgeZone() && (u < EDGE_ZONE || u > 1 - EDGE_ZONE));
+const inEdge = (run, u) => G.frameReloads() && run.ammo.type === 'mag' && G.edgeZone() && (u < EDGE_ZONE || u > 1 - EDGE_ZONE);
+G.isSideShot = (run, u, v, inside) => !inside || inEdge(run, u);
 G.sideReload = run => {
   if (!run || !run.canShoot()) return false;
   const ammo = run.ammo;
@@ -153,7 +162,7 @@ G.sideReload = run => {
 };
 // a shot during a stage
 G.playFire = (run, u, v, inside, touch) => {
-  if (G.isSideShot(run, u, v, inside)) { G.sideReload(run); return; }
+  if (G.isSideShot(run, u, v, inside)) { if (G.frameReloads()) G.sideReload(run); return; }   // never a shot
   if (!run.canShoot()) return;
   if (inside) G.lastTap = { u, v, t: G.t };
   const ammo = run.ammo;
@@ -165,7 +174,7 @@ G.playFire = (run, u, v, inside, touch) => {
   const ray = G.shoot(u, v), me = run.local;
   ammo.use();
   if (!run.versus) run.me.shots++;
-  const send = (k, tid, z) => { if (run.versus) N.sendShot({ st: +run.t.toFixed(3), k, tid, z, a: ammo.infinite ? -1 : ammo.count, ar: ammo.reloading ? 1 : 0 }); };
+  const send = (k, tid, z) => { if (run.versus) N.sendShot({ st: +run.t.toFixed(3), k, tid, z, a: ammo.infinite ? -1 : ammo.count, ar: 0 }); };
   if (G.duckShot(ray)) { send('duck', -1); return; }                        // shooting the deputy is just for fun
   const p = Tg.pick(ray, run.live) || (touch ? touchPick(run, u, v) : null);
   if (p) {
@@ -182,8 +191,8 @@ G.hudState = run => ({
   timeFrac: run.state === 'count' ? 1 : run.timeLeft / run.cfg.time, secs: Math.ceil(run.timeLeft),
   quota: run.cfg.quota, score: run.me.score, best: run.versus ? 0 : Save.best(run.stage + ':' + run.variant, run.tier),
   label: G.stageLabel + (G.slow < 1 && !run.versus ? ' SLOW' : ''), status: G.statusText,
-  // frame RELOAD markers (#31): only on magazine stages
-  reload: run.ammo.type === 'mag' ? { empty: run.ammo.magEmpty, reloading: run.ammo.reloading, kick: run.ammo.kick } : null
+  // frame RELOAD markers (#31, #38): only on magazine stages; mode picks the art (plaque / mouse / swipe arrow)
+  reload: run.ammo.type === 'mag' ? { empty: run.ammo.magEmpty, kick: run.ammo.kick, mode: G.reloadMode() } : null
 });
 G.toast = (text, secs = 2) => { G.toastMsg = { text, t: secs }; };
 G.after = (secs, fn) => { G.timers.push({ t: secs, fn }); };
@@ -282,7 +291,7 @@ G.vsAbort = reason => { if (G.run) { G.run.dispose(); G.run = null; } G.go('lobb
 // =========================================================================================
 I.onKey((k, e) => {
   if (k === '4') G.setSkin(G.skin + 1);
-  else if (k === 'r' || k === 'R') { if (G.screenName === 'play' && G.run) G.sideReload(G.run); }   // PC fallback for shoot-to-reload
+  else if (k === 'r' || k === 'R') { if (G.screenName === 'play' && G.run) G.sideReload(G.run); }   // works in every RELOAD TYPE
   else if (k === 'f' || k === 'F') Save.set('fps', !Save.settings.fps);
   else if (k >= '1' && k <= '3') { R.setMode(+k); G.toast('DITHER MODE ' + k + ': ' + R.MODE_NAMES[+k], 1.2); }
   else if (k === 'Escape') {
@@ -293,6 +302,10 @@ I.onKey((k, e) => {
   }
 });
 I.onFire((u, v, inside, touch) => { if (G.screen && G.screen.fire) G.screen.fire(u, v, inside, touch); });
+// RIGHT CLICK mode: the right button reloads anywhere (the context menu is suppressed in input.js)
+I.onAlt(() => { if (G.screenName === 'play' && G.run && G.reloadMode() === 'rclick') G.sideReload(G.run); });
+// SWIPE DOWN mode: a downward swipe anywhere reloads (the tap that started it already fired, as every tap does)
+I.onSwipe(() => { if (G.screenName === 'play' && G.run && G.reloadMode() === 'swipe') G.sideReload(G.run); });
 
 // =========================================================================================
 // Main loop
@@ -340,8 +353,11 @@ function step(dt, draw) {
   H.use(R.hx);
   R.render();
 }
-// per-frame play extras: duck hover hook (the mini HUD duck under the crosshair) + versus reload sync
-let duckHoverOn = false, vsReloading = false, vsRun = null;
+// per-frame play extras: duck hover hook (the mini HUD duck under the crosshair) + ARCADE hover-to-reload
+let duckHoverOn = false, dwellAt = 0;
+function onFrameNow(run) {                       // the mouse rests on the frame (or the edge zone)
+  const p = I.ptr; return p.over && !I.touch && (!p.inside || inEdge(run, p.u));
+}
 function playExtras(run) {
   if (typeof G.duck.setHover === 'function') {
     let on = false;
@@ -349,11 +365,13 @@ function playExtras(run) {
     if (on || duckHoverOn) { try { G.duck.setHover(on); } catch (e) {} }
     duckHoverOn = on;
   }
-  if (run.versus) {                                                         // reload started / finished: tell the other side (not a shot)
-    if (vsRun !== run) { vsRun = run; vsReloading = false; }
-    const ar = run.ammo.reloading;
-    if (ar !== vsReloading) { vsReloading = ar; if (N.sendAmmo) N.sendAmmo(run); }
-  }
+  // ARCADE hover reload: the pointer has to stay on the frame for DWELL s (wall clock, sampled per frame) while
+  // the magazine isn't full; leaving the frame resets it, so a flick across the edge never reloads
+  const now = performance.now();
+  if (G.reloadMode() === 'arcade' && onFrameNow(run) && run.ammo.canReload && run.canShoot()) {
+    if (!dwellAt) dwellAt = now;
+    else if (now - dwellAt >= DWELL * 1000) { dwellAt = 0; G.sideReload(run); }
+  } else dwellAt = 0;
 }
 // empty magazine: small blinking RELOAD under the crosshair (desktop) or at the last tap / lower centre (touch);
 // no frame around the game rect: the edge zone + its markers are drawn on the HUD instead
@@ -364,8 +382,8 @@ function drawReloadHud(run, crossOn) {
     if (crossOn) H.reloadPrompt(I.aim.u, I.aim.v, G.t);
     else if (I.touch) { const lt = G.lastTap; H.reloadPrompt(lt ? lt.u : 0.5, lt ? lt.v : 0.72, G.t); }
   }
-  if (G.edgeZone()) {
-    const st = H.markerState({ empty: am.magEmpty, reloading: am.reloading, kick: am.kick }, G.t);
+  if (G.edgeZone() && G.frameReloads()) {
+    const st = H.markerState({ empty: am.magEmpty, kick: am.kick }, G.t);
     H.reloadMarker(6, R.RH * 0.42, 'l', st, 1); H.reloadMarker(R.RW - 6, R.RH * 0.42, 'r', st, 1);
   }
 }

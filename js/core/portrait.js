@@ -82,7 +82,10 @@ SC.settings.drawPortrait = function (t, L) {
   headline(L, 'SETTINGS', 'TAP A SIGN TO CHANGE IT');
   let y = lines('DITHER OFF = PALETTE SNAP ONLY', L.cx, shelf(L), L.W - 12, 'mist');
   y = lines('NAME = WHAT YOUR RIVAL SEES IN VERSUS', L.cx, y + 3, L.W - 12, 'mist');
-  if (!G().touch) lines('KEY 4 CYCLES GUNS ANYWHERE', L.cx, y + 3, L.W - 12, 'mist');
+  if (!G().touch) y = lines('KEY 4 CYCLES GUNS ANYWHERE', L.cx, y + 3, L.W - 12, 'mist');
+  const rh = B.UI.reloadHelp();                                              // RELOAD TYPE (build 0.005)
+  y = lines('RELOAD TYPE ' + rh.group, L.cx, y + 6, L.W - 12, 'yellow');
+  lines(rh.help, L.cx, y + 3, L.W - 12, 'mist');
   foot(L, 'BUILD ' + G().BUILD, R.MODE_NAMES[R.mode]);
 };
 SC.tiers.drawPortrait = function (t, L) {
@@ -176,7 +179,7 @@ SC.briefing.drawPortrait = function (t, L) {
   card(x1, y, cw, ch, 'red');
   H.text3c('SHOTS', x1 + cw / 2, y + 6, 'bone', 1, 'void');
   if (r === 'unlimited' || (!r.mag && !r.cap)) { H.sprite(H.INF, x1 + cw / 2 - 9, y + 22, 2, { X: 'bone' }, 'inf'); H.text3c('NO LIMIT', x1 + cw / 2, y + 44, 'lemon', 1, 'void'); }
-  else { H.text7c(String(r.mag || r.cap), x1 + cw / 2, y + 18, 2, 'bone', 'void', 1); H.text3c(r.mag ? 'PER MAG' : 'IN TOTAL', x1 + cw / 2, y + 38, 'lemon', 1, 'void'); H.text3c(r.mag ? (r.autoReload ? 'AUTO RELOAD' : 'SHOOT SIDE') : 'COUNT!', x1 + cw / 2, y + 48, 'bone', 1, 'void'); }
+  else { H.text7c(String(r.mag || r.cap), x1 + cw / 2, y + 18, 2, 'bone', 'void', 1); H.text3c(r.mag ? 'PER MAG' : 'IN TOTAL', x1 + cw / 2, y + 38, 'lemon', 1, 'void'); H.text3c(r.mag ? (r.autoReload ? 'AUTO RELOAD' : ({ arcade: 'SHOOT SIDE', rclick: 'RIGHT CLICK', swipe: 'SWIPE DOWN', tap: 'TAP SIDE' })[G().reloadMode()] || 'SHOOT SIDE') : 'COUNT!', x1 + cw / 2, y + 48, 'bone', 1, 'void'); }
   const x2 = x1 + cw + 4;
   card(x2, y, cw, ch, 'magenta');
   H.text3c('TIME', x2 + cw / 2, y + 6, 'bone', 1, 'void');

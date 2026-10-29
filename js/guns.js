@@ -790,7 +790,9 @@ function create(THREE, opts) {
   function fire() {
     // The engine may start the reload / set empty for the LAST round just before calling fire() in the same frame:
     // that shot still gets its flash and recoil.  A real dry trigger only clicks.
-    if (!skin || (reloadDur > 0 && S.reloadFrame !== S.frame)) return;
+    // Build 0.005 (#44): reload is instant, the rack animation is cosmetic: firing mid-rack snaps it to the end.
+    if (!skin) return;
+    if (reloadDur > 0 && S.reloadFrame !== S.frame) { reloadDur = 0; S.rp = -1; S.rpPrev = -1; }
     S.trig = 1;
     if (S.empty && S.emptyFrame !== S.frame) { S.dryAge = 0; S.kickV += 2.5; if (skin.dry) skin.dry(S, skin.meshes, fx, skin.st); return; }
     S.fireAge = 0; S.shots++; S.kickV += 10;
@@ -809,7 +811,7 @@ function create(THREE, opts) {
     setLayout(name) { name = menuPark(name); layoutName = LAYOUTS[name] ? name : (String(name).indexOf('mobile') === 0 ? 'mobile' : 'desktop'); },
     setAim(x, y) { aim.x = Math.max(-1.3, Math.min(1.3, +x || 0)); aim.y = Math.max(-1.3, Math.min(1.3, +y || 0)); },
     fire,
-    reload(seconds) { if (!skin) return; reloadDur = Math.max(0.3, +seconds || 1.2); reloadT = 0; S.rp = 0; S.rpPrev = 0; S.reloadFrame = S.frame; },
+    reload(seconds) { if (!skin) return; reloadDur = Math.max(0.08, +seconds || 0.12); reloadT = 0; S.rp = 0; S.rpPrev = 0; S.reloadFrame = S.frame; },
     setEmpty(b) { if (b && !S.empty) S.emptyFrame = S.frame; S.empty = !!b; },
     update,
     muzzleWorldPos(out) { out = out || new THREE.Vector3(); skin.root.updateWorldMatrix(true, false); return skin.root.localToWorld(out.copy(skin.muzzleV)); },
