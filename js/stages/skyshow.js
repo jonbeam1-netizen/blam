@@ -132,7 +132,7 @@ function fxStep() {
   let dt = FX.last ? Math.min(0.05, (now - FX.last) / 1000) : 0.016; FX.last = now;
   if (G && G.screenName === 'play' && G.slow < 1 && !(G.run && G.run.versus)) dt *= G.slow;
   FX.t += dt; FU.uTime.value = FX.t;
-  for (let k = 0; k < 4; k++) { FU.uF.value[k].w *= Math.exp(-dt * 6.5); FU.uFW.value[k].z *= Math.exp(-dt * 6.5); }
+  for (let k = 0; k < 4; k++) { FU.uF.value[k].w *= Math.exp(-dt * 4.5); FU.uFW.value[k].z *= Math.exp(-dt * 4.5); }
   shellStep(dt);
   const M = FX.mesh.instanceMatrix.array, IC = FX.mesh.instanceColor; let live = 0, colDirty = false;
   for (let i = 0; i < FXN; i++) {
@@ -201,7 +201,7 @@ function burstFX(type, x, y, z, s = 1) {
       spark(x, y, z, d[0] * v, d[1] * v, d[2] * v, R.rnd(0.2, 0.26), Ty.cols[k & 3], R.rnd(0.75, 1.05), 0.4, 1.6, 0, F_CRACKLE | (k & 1 ? F_TWINKLE : 0), PAL.bone);
     }
   }
-  flash(x, y, z, Ty.flash, 0.36 + 0.12 * s);
+  flash(x, y, z, Ty.flash, 0.48 + 0.14 * s);
 }
 // the bomb rocket's blast: a black cloud, red embers, one big skull puff
 function blastFX(x, y, z) {
@@ -247,7 +247,7 @@ function chainFX(a, b) {
 }
 
 // ---------- finale: four shells burst into the letters B / L / A / M (the dots ride with the letter before) ----------
-const FIN = { S: 0.82, cx: 0, cy: 6.4, z: -24 };
+const FIN = { S: 0.74, cx: 1.4, cy: 7.0, z: -24 };
 let FIN_LETTERS = null;
 function finLetters() {
   if (FIN_LETTERS) return FIN_LETTERS;
@@ -277,9 +277,10 @@ function shellStep(dt) {
     if (p >= 1 && !s.burst) {
       s.burst = true; FX.shells.splice(i, 1);
       const D = 4.2, hold = 1.9;
-      for (const q of s.L.pts) for (let k = 0; k < 2; k++) {
-        const tx = q.x + R.rnd(-0.12, 0.12), ty = q.y + R.rnd(-0.12, 0.12);
-        spark(x, y, z, (tx - x) * D, (ty - y) * D, (s.z1 - z) * D, R.rnd(0.42, 0.52), ROW_COL[q.row], hold + R.rnd(0.9, 1.3), 0.5, D, 0, k ? F_TWINKLE : 0, PAL.bone, hold + R.rnd(0, 0.4));
+      for (const q of s.L.pts) {                          // one solid block per letter pixel + a twinkling core in front
+        const g = hold + R.rnd(0, 0.4), life = g + R.rnd(0.9, 1.3);
+        spark(x, y, z, (q.x - x) * D, (q.y - y) * D, 0, FIN.S * 0.9, ROW_COL[q.row], life, 0.5, D, 0, 0, 0, g);
+        spark(x, y, z + 0.3, (q.x - x) * D, (q.y - y) * D, 0, FIN.S * 0.42, q.row < 2 ? PAL.bone : PAL.lemon, life, 0.5, D, 0, F_TWINKLE, ROW_COL[q.row], g);
       }
       for (let k = 0; k < 26; k++) { const d = rndDir(), v = 5.5; spark(x, y, z, d[0] * v, d[1] * v, d[2] * v, 0.2, [PAL.pink, PAL.cyan, PAL.lime, PAL.amber][k & 3], R.rnd(0.6, 0.9), 0.3, 1.6); }
       flash(x, y, z, PAL.yellow, 0.55);
@@ -743,10 +744,10 @@ class Show extends T.Target {
 // Variants: 0 hard shot cap; 1 a 6-round magazine (shoot the frame to reload); 2 hard cap, faster rockets, +1 live.
 // =========================================================================================
 const TIER_P = [
-  { time: 42, climb: 2.7,  fast: 0,    mix: 0,   hang: 0.5,  live: 4, salvo: 0.2,  s3: 0,    gap: [1.0, 1.6],   bomb: 0,    bombCap: 0,    rel: 0.75, slack: 10, share: 0.55 },
-  { time: 38, climb: 2.05, fast: 0,    mix: 0,   hang: 0.38, live: 4, salvo: 0.24, s3: 0.06, gap: [0.72, 1.2],  bomb: 0,    bombCap: 0,    rel: 0.7,  slack: 8,  share: 0.58 },
-  { time: 35, climb: 1.85, fast: 1.05, mix: 0.5, hang: 0.3,  live: 5, salvo: 0.26, s3: 0.1,  gap: [0.48, 0.88], bomb: 0.36, bombCap: 0.24, rel: 0.62, slack: 6,  share: 0.6  },
-  { time: 32, climb: 1.65, fast: 0.9,  mix: 0.5, hang: 0.26, live: 6, salvo: 0.28, s3: 0.14, gap: [0.36, 0.72], bomb: 0.44, bombCap: 0.3,  rel: 0.55, slack: 4,  share: 0.62 }
+  { time: 42, climb: 2.7,  fast: 0,    mix: 0,   hang: 0.5,  live: 4, salvo: 0.2,  s3: 0,    gap: [1.0, 1.6],   bomb: 0,    bombCap: 0,    rel: 0.75, slack: 10, share: 0.53 },
+  { time: 38, climb: 2.05, fast: 0,    mix: 0,   hang: 0.38, live: 4, salvo: 0.24, s3: 0.06, gap: [0.72, 1.2],  bomb: 0,    bombCap: 0,    rel: 0.7,  slack: 8,  share: 0.55 },
+  { time: 35, climb: 1.85, fast: 1.05, mix: 0.5, hang: 0.3,  live: 5, salvo: 0.26, s3: 0.1,  gap: [0.48, 0.88], bomb: 0.36, bombCap: 0.24, rel: 0.62, slack: 6,  share: 0.56 },
+  { time: 32, climb: 1.65, fast: 0.9,  mix: 0.5, hang: 0.26, live: 6, salvo: 0.28, s3: 0.14, gap: [0.36, 0.72], bomb: 0.44, bombCap: 0.3,  rel: 0.55, slack: 5,  share: 0.57 }
 ];
 const VARIANT_NAMES = ['OPENING NIGHT', 'RAPID RELOAD', 'GRAND FINALE'];
 const capEst = {};

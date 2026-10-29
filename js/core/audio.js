@@ -40,13 +40,19 @@
      boneRattle  : a skeleton rattles as it climbs out of the heap (opts.u)
      bombFlip    : a bomb skull's candle went out and it flipped into a shootable skull (opts.u)
      batFlap     : a bat flies across (opts.u = 0 from the left, 1 from the right)
+     rocketLaunch: SKY SHOW rocket leaves a barge (opts.u, opts.bomb)
+     rocketBurst : a firework bursts (opts.u, opts.type peony|ring|willow|crackle|letter, opts.height)
+     rocketFizzle: a rocket fizzles out unshot (opts.u)
+     chain       : a chain burst (opts.n link number, opts.u)
+     finale      : the B.L.A.M. finale launches
 */
 window.BLAM = window.BLAM || {};
 (function (B) {
 const EVENTS = ['shot', 'hit', 'miss', 'reload', 'reloadDone', 'empty', 'bomb', 'bystander', 'lifeLost', 'stageStart',
   'stageClear', 'stageFail', 'quota', 'tick', 'countdown', 'go', 'menuShoot', 'menuHover', 'duckHit', 'duckHappy', 'duckAngry',
   'targetIn', 'targetStep', 'gameOver', 'continue', 'courseClear', 'newRecord', 'vsJoin', 'vsLeave', 'vsWin', 'vsLose', 'vsTaken', 'skin',
-  'ricochet', 'bystanderIn', 'pigeon', 'skullThrow', 'skullBonk', 'boneRattle', 'bombFlip', 'batFlap'];
+  'ricochet', 'bystanderIn', 'pigeon', 'skullThrow', 'skullBonk', 'boneRattle', 'bombFlip', 'batFlap',
+  'rocketLaunch', 'rocketBurst', 'rocketFizzle', 'chain', 'finale'];
 const log = [];
 B.SFX = B.SFX || {
   EVENTS,
