@@ -1118,7 +1118,7 @@ const DSG = {
 };
 // painted balls: [stroke, geometry key suffix, long fuse]
 const PAINTED = { a: [decoyStroke, '', false], a2: [strokeA2, 'a2', false], c2: [strokeC2, 'c2', true] };
-const DECOY_VARIANTS = ['a'];                                         // enabled variants (B.Props.DECOY_VARIANTS; the game sets it)
+const DECOY_VARIANTS = ['a2', 'c2', 'e2'];                            // Jon's picks 2026-10-29 (round 2)                                         // enabled variants (B.Props.DECOY_VARIANTS; the game sets it)
 function rayUnlessOff(r, i) { if (!this.userData.off) THREE.Mesh.prototype.raycast.call(this, r, i); }
 function decoyVariant(o) {
   const v = String(o.variant || '').toLowerCase();
