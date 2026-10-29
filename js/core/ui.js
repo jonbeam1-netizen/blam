@@ -119,6 +119,7 @@ function marqueeRect() {
   return projRect(pts);
 }
 function routeRopes(items) {
+  return;   // gripe #30 final: Jon wants NO strings on menu signs at all (signs float). Kept for reference.
   const obst = [];
   if (marquee.visible) obst.push({ r: marqueeRect(), mq: true });
   for (const it of items) if (it.sign.alive) obst.push({ r: signRect(it.sign), sign: it.sign });
