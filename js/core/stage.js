@@ -187,16 +187,30 @@ class Course {
   constructor(tier, seed) {
     this.tier = tier; this.seed = seed >>> 0; this.index = 0; this.total = 0; this.log = [];
     this.lives = TIERS[tier].lives; this.maxLives = this.lives;
-    // every registered stage once (shuffled) before any repeats; when the pool runs dry it refills with every
-    // stage except the one just played (never the same stage twice in a row). One stage: it repeats, variants 0..3.
+    // every registered stage once (shuffled) before any repeats (4+ stages: four different stages); when the pool
+    // runs dry it refills with every stage except the one just played (never the same stage twice in a row).
+    // Variant = min(slot, variants - 1) (escalation); a REPEATED stage takes a variant it has not played yet in
+    // this course (the highest one below the cap first), else any variant other than its previous one, so a
+    // repeat never replays the same variant when the stage has more than one. One stage: it repeats.
     const r = mulberry32(this.seed ^ 0x9e3779b9);
     let pool = [];
+    const used = {};
     this.stages = [];
     for (let i = 0; i < 4; i++) {
       const last = this.stages.length ? this.stages[this.stages.length - 1].id : null;
       if (!pool.length) pool = order.length > 1 ? order.filter(id => id !== last) : order.slice();
       const id = pool.splice(Math.floor(r() * pool.length), 1)[0];
-      this.stages.push({ id, variant: Math.min(i, get(id).variants - 1) });
+      const nv = Math.max(1, get(id).variants | 0), cap = Math.min(i, nv - 1), had = used[id] || (used[id] = []);
+      let variant = cap;
+      if (had.includes(variant)) {
+        const fresh = [];
+        for (let v = cap; v >= 0; v--) if (!had.includes(v)) fresh.push(v);
+        for (let v = cap + 1; v < nv; v++) if (!had.includes(v)) fresh.push(v);
+        if (fresh.length) variant = fresh[0];
+        else if (nv > 1) { const prev = had[had.length - 1]; variant = prev === cap ? (cap > 0 ? cap - 1 : 1) : cap; }
+      }
+      had.push(variant);
+      this.stages.push({ id, variant });
     }
   }
   get current() { return this.stages[this.index]; }

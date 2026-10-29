@@ -118,11 +118,11 @@ SC.scores.drawPortrait = function (t, L) {
   rows.push(['COURSE', 'course']);
   const n = Math.min(rows.length, 14), w = Math.min(L.W - 6, 206), x0 = Math.round(L.cx - w / 2), y0 = shelf(L) - 2, cw = (w - 50) / 4;
   H.plate(x0, y0, w, 22 + n * 10);
-  ['BEG', 'ADV', 'V.HARD', 'INSANE'].forEach((a, i) => H.text3c(a, x0 + 46 + cw * i + cw / 2, y0 + 7, 'oxblood', 1));
+  ['BEG', 'ADV', 'V.HARD', 'INSANE'].forEach((a, i) => H.text3c(a, x0 + 46 + cw * i + cw / 2, y0 + 7, 'oxblood', 1, 'bone'));
   rows.slice(0, n).forEach(([label, key], r) => {
     const y = y0 + 18 + r * 10;
-    H.rect(x0 + 4, y - 2, w - 8, 1, 'rust'); H.text3(label, x0 + 6, y + 1, 'umber', 1);
-    for (let i = 0; i < 4; i++) { const b = B.Save.best(key, i); H.text3c(b ? String(b) : '-', x0 + 46 + cw * i + cw / 2, y + 1, b ? 'void' : 'chestnut', 1); }
+    H.rect(x0 + 4, y - 2, w - 8, 1, 'rust'); H.text3(label, x0 + 6, y + 1, 'umber', 1, 'bone');
+    for (let i = 0; i < 4; i++) { const b = B.Save.best(key, i); H.text3c(b ? String(b) : '-', x0 + 46 + cw * i + cw / 2, y + 1, b ? 'void' : 'chestnut', 1, 'bone'); }
   });
   foot(L, 'BUILD ' + G().BUILD);
 };
@@ -179,7 +179,7 @@ SC.briefing.drawPortrait = function (t, L) {
   card(x1, y, cw, ch, 'red');
   H.text3c('SHOTS', x1 + cw / 2, y + 6, 'bone', 1, 'void');
   if (r === 'unlimited' || (!r.mag && !r.cap)) { H.sprite(H.INF, x1 + cw / 2 - 9, y + 22, 2, { X: 'bone' }, 'inf'); H.text3c('NO LIMIT', x1 + cw / 2, y + 44, 'lemon', 1, 'void'); }
-  else { H.text7c(String(r.mag || r.cap), x1 + cw / 2, y + 18, 2, 'bone', 'void', 1); H.text3c(r.mag ? 'PER MAG' : 'IN TOTAL', x1 + cw / 2, y + 38, 'lemon', 1, 'void'); H.text3c(r.mag ? (r.autoReload ? 'AUTO RELOAD' : ({ arcade: 'SHOOT SIDE', rclick: 'RIGHT CLICK', swipe: 'SWIPE DOWN', tap: 'TAP SIDE' })[G().reloadMode()] || 'SHOOT SIDE') : 'COUNT!', x1 + cw / 2, y + 48, 'bone', 1, 'void'); }
+  else { H.text7c(String(r.mag || r.cap), x1 + cw / 2, y + 18, 2, 'bone', 'void', 1); H.text3c(r.mag ? 'PER MAG' : 'IN TOTAL', x1 + cw / 2, y + 38, 'lemon', 1, 'void'); H.text3c(r.mag ? (r.autoReload ? 'AUTO RELOAD' : B.UI.reloadCard(false)[0]) : 'COUNT!', x1 + cw / 2, y + 48, 'bone', 1, 'void'); }
   const x2 = x1 + cw + 4;
   card(x2, y, cw, ch, 'magenta');
   H.text3c('TIME', x2 + cw / 2, y + 6, 'bone', 1, 'void');
@@ -192,7 +192,7 @@ SC.briefing.drawPortrait = function (t, L) {
     else { H.bombIcon(L.cx - 56, y + 11, 7, t); H.redX(L.cx - 56, y + 11, 5); }
     H.text3("DON'T SHOOT!", L.cx - 42, y + 4, 'void', 1); H.text3('LIFE -1', L.cx - 42, y + 12, 'crimson', 1); y += 28;
   }
-  if (b.tip && !vs) { H.text3c(b.tip, L.cx, y, 'lemon', 1, 'void'); y += 10; }
+  if (b.tip && !vs) { H.text3c(B.UI.reloadTip(b.tip, c.ammo), L.cx, y, 'lemon', 1, 'void'); y += 10; }
   if (vs) {
     const P = run.players, line = P[0].name + ' VS ' + P[1].name, x = Math.round(L.cx - H.text3w(line) / 2);
     H.text3(P[0].name, x, y, 'coral', 1, 'void'); H.text3('VS', x + H.text3w(P[0].name + ' ') + 1, y, 'bone', 1, 'void'); H.text3(P[1].name, x + H.text3w(P[0].name + ' VS ') + 1, y, 'ice', 1, 'void');
@@ -214,7 +214,7 @@ SC.results.drawPortrait = function (t, L) {
   // shelf: the stats plate
   const w = Math.min(L.W - 8, 200), x0 = Math.round(L.cx - w / 2), py = shelf(L) - 4, row = 13;
   H.plate(x0, py, w, 15 + row * 5);
-  const rowF = (i, k, v, c = 'void') => { H.text3(k, x0 + 9, py + 9 + i * row, 'umber', 2); H.text3r(v, x0 + w - 9, py + 9 + i * row, c, 2); };
+  const rowF = (i, k, v, c = 'void') => { H.text3(k, x0 + 9, py + 9 + i * row, 'umber', 2, 'bone'); H.text3r(v, x0 + w - 9, py + 9 + i * row, c, 2, 'bone'); };
   rowF(0, 'HITS', r.hits + (this.a.versus ? '' : '/' + r.quota), r.hits >= r.quota ? 'forest' : 'crimson');
   rowF(1, 'HIT %', r.pct + '%');
   rowF(2, 'FASTEST', isFinite(r.fastest) ? r.fastest.toFixed(2) + 'S' : '-');
@@ -253,14 +253,16 @@ SC.final.drawPortrait = function (t, L) {
 SC.vsresults.drawPortrait = function (t, L) {
   const run = this.a.run, me = run.local, P = run.players;
   const word = this.win < 0 ? 'DRAW!' : this.win === me ? 'WINNER!' : 'LOSER...';
-  const y0 = Math.max(4, Math.round((L.top - 10 - 26) / 2));
-  shout(L, word, this.win < 0 ? 'bone' : this.win === me ? 'gold' : 'blue', 3, this.win === me, t, y0);
+  // 0.007: banner, then the verdict line (YOU WIN / <NAME> WINS) right under it in the curtain; never on the cards
+  const vl = B.UI.vsVerdict(this.win, me, P), vsc = H.text7w(vl[0], 2) <= L.W - 12 && L.top >= 70 ? 2 : 1;
+  const bh = 21, lh = 7 * vsc, y0 = Math.max(4, Math.round((L.top - 6 - bh - 6 - lh) / 2));
+  const ly = shout(L, word, this.win < 0 ? 'bone' : this.win === me ? 'gold' : 'blue', 3, this.win === me, t, y0) + 2;
+  H.text7c(vl[0], L.cx, ly, vsc, vl[1], 'void', vsc === 2 ? 2 : 1);
   const bw = Math.floor((L.W - 14) / 2), by = shelf(L) + 8;
   [0, 1].forEach(i => {
     const p = P[i], x = i ? L.cx + 3 : L.cx - 3 - bw, C = H.PCOL[i];
-    H.box(x, by, bw, 66, C[2], C[1], 'void');
+    H.box(x, by, bw, 66, C[2], C[1], 'void', this.win === i ? 'yellow' : 'void');
     H.text3c(p.name + (i === me ? ' (YOU)' : ''), x + bw / 2, by + 4, 'bone', 1);
-    if (this.win === i) H.text7c(i === me ? 'YOU WIN' : 'WINS', x + bw / 2, by - 12, 1, 'gold', 'void', 1);
     const shots = Math.max(p.shots, p.hits), pct = shots ? Math.round(p.hits / shots * 100) : 0;
     [['HITS', p.hits], ['HIT %', pct + '%'], ['FASTEST', isFinite(p.fastest) ? p.fastest.toFixed(2) + 'S' : '-'], ['SCORE', p.score], ['LIVES', p.lives]].forEach(([k, v], r) => {
       H.text3(k, x + 5, by + 15 + r * 10, C[0], 1); H.text3r(String(v), x + bw - 5, by + 15 + r * 10, 'bone', 1);

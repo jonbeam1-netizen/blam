@@ -1,70 +1,70 @@
 'use strict';
 /* =========================================================================================
-   B.L.A.M. core/props.js -- shared shooting-gallery props: bullseye paddles, cast-iron bombs,
-   decoys (bombs painted like targets) and flip bombs. Every stage can use them.
+   B.L.A.M. core/props.js -- shared shooting-gallery props: hex target plates, cast-iron bombs,
+   decoys (bombs sloppily painted to pass for a plate) and flip bombs. Every stage can use them.
 
-   LOOK: voxels on the BLAM-34 palette, sampled from signed-distance shapes so they read ROUND
-   (smooth per-voxel normals), lit by ONE shared toon material: three exact palette tones per
-   colour (shadow / base / lit), a void outline (inverted hull whose width is constant in screen
-   pixels, plus a rim test), NO plastic gloss band. Output alpha 1.0 = the "object" dither class.
-   Each prop is 3-5 draw calls (static base, swinging arm, the face, optional fuse + spark);
-   geometry is built ONCE per kind and shared by every instance.
-   PAINTED WOOD (paddles, 2nd pass): the face's relief is baked into the voxel tones from a top-left
-   light (lit bevel on the edges that face it, shadow bevel + cast shadow on the far side), the rim
-   cells keep live toon light so the disc's thickness reads. Fine detail (wood grain, chipped paint,
-   scuffs, the decoy's tells) is a 4th "accent" colour per voxel that only appears up close: each
-   feature has a rank and a range, and the shader shows it once the view depth is inside that range
-   (whole features fade in one by one, never per-pixel noise at the far lanes).
-   IRON (bombs): shaded from the TRUE sphere normal (not the voxel one), so the terminator is a clean
-   circle, the hard spot is one small round dot (>= ~1.5 game px at any distance) and a rim band of
-   constant screen width (steel on the lit side, slate on the dark side) separates the ball from the
-   dark room. The skull + crossbones is one big 9x11 icon on a 2-cell grid (fewer, bigger pixels).
+   LOOK (3rd pass): hard, crisp toy hardware, lit by ONE shared toon material: exact palette tones,
+   one hard lit side + one shadow side, and a void outline whose width is constant in screen pixels.
+   TARGET PLATE: a flat-top HEXAGONAL tin plate (apothem 0.53: it contains the old 0.51 disc, so the hit
+     volume only grew), painted flat LIME (no other prop or wall in the range uses lime: it owns "shoot me")
+     with two black rings and a yellow bull's-eye. Straight-cut steel edge, a thin 45 deg chamfer that is the only
+     bevel (lemon where it faces the light, green where it faces away), slate back with ONE plain brace,
+     clamped to a clean steel post. Flat polygons, no voxel noise, no grain: ~0.5k tris (old disc 8.4k).
+   IRON (bombs): shaded from the TRUE sphere normal with a level-of-detail handoff on the ball's view depth
+     (uLod.xy, between the 9.4 and 11.45 range stops, so a stationary bomb never sits mid-blend):
+       near = the 1st pass character: broad steel highlight + navy band, slate rim on the shadow side, and the
+              cartoon skull (round cranium, eye sockets, nose, teeth, knobbed crossbones) on a 1-cell grid;
+       far  = the 2nd pass clarity: one small hard spot, a constant-width rim band, ONE big 9x11 skull on a
+              2-cell grid.
+     Every ball cell carries a far + a near material and a rank (4x4 ordered): while a ball scoots through the
+     band the cells switch rank by rank (a quick ordered dissolve) and the tones / rim / spot interpolate.
+   DECOY: the same bomb (iron, skull, cap, fuse, spark plain to see) with THIN sloppy strokes in the plate's
+     paint (the black rings come free on black iron): a wobbly lime hexagon, a lime ring, a little yellow circle for
+     the bull, gaps, two drips. A stroke never gets thinner than uLod.w game px, so at the far lane they thicken into
+     a lime-ringed, yellow-dotted target-ish thing; up close it is plainly a bomb someone scribbled on.
 
    API  (BLAM.Props)
-     paddle({ color:'red', size:1, hang:false, slot:false })   bullseye disc on a post (hang: ceiling hanger;
+     paddle({ color:'lime', size:1, hang:false, slot:false })   hex target plate on a post (hang: ceiling hanger;
                                                     slot: a slim carriage that rides in a floor slot
                                                     instead of the wooden sled + base plate; any prop takes it)
      bomb({ size:1, hang:false, burn:false })       iron ball, skull + crossbones, cap, fuse, spark
                                                     (burn: the fuse is its own mesh so setFuse() can shorten it)
-     decoy({ size:1, hang:false })                  a BOMB badly painted over to look like a target: the
-                                                    paddle's own red / white / yellow, but sloppy rings,
-                                                    brush gaps, drips and the skull ghosting through (the
-                                                    tells show up close); round, cap + fuse + spark; call
-                                                    wobble(t) every frame. kind 'bomb'
-     flipbomb({ size:1, hang:false, color:'red' })  a burning bomb that flips into a paddle face
+     decoy({ size:1, hang:false })                  a BOMB with the plate's colours brushed on in thin sloppy
+                                                    strokes; call wobble(t) every frame. kind 'bomb'
+     flipbomb({ size:1, hang:false, color:'lime' }) a burning bomb that flips into a target plate
      -> prop {
        kind        'target' | 'bomb' (flipbomb: 'bomb'; the stage switches kind when it flips)
        group       THREE.Group: origin on the floor under the post (hang: at the ceiling rail clamp,
                    everything hangs DOWN from it). Position / scale it. Static base is in here.
        pivot       Group at the hinge (y = +PIVOT_Y, hang: -PIVOT_Y). Rotate it to swing / drop / fold.
        base, arm   meshes (not hittable): base plate or hanger, and the post + bracket on the pivot
-       face        the hittable mesh (disc / ball), centre at pivot-space y = +-FACE_Y
-       face2       flipbomb only: the paddle face it flips to (hidden until it flips)
+       face        the hittable mesh (plate / ball), centre at pivot-space y = +-FACE_Y
+       face2       flipbomb only: the plate it flips to (hidden until it flips)
        spark, fuse bombs: glow spark mesh, fuse mesh (burn / flipbomb only)
        register(target) -> [part, part2?]   calls target.part(face, chips...) (and returns the
                    flipbomb's second part record so a stage can swap target.parts[0])
        show() / hide()   face + fuse + spark on / off (hide on shatter: the arm stays to fold away)
        setFuse(f)  f = 1 full .. 0 burnt (spark rides the fuse; burn / flipbomb shorten it)
        sparkle(t, fast)  flicker the spark (call each frame while it is a live bomb)
-       setFlip(f)  flipbomb: f 0 = bomb .. 1 = paddle, 0.5 = edge-on; returns true once flipped
+       setFlip(f)  flipbomb: f 0 = bomb .. 1 = plate, 0.5 = edge-on; returns true once flipped
        wobble(t)   decoy tell: a nervous wobble of the face (pure function of t)
        chips       the shatter list [[i, j, k, colourHex, sizeMul]...] used by register()
      }
      Props.warm()           build every shared geometry now (call at stage load, not mid-play)
      Props.mat              the shared toon ShaderMaterial (uOut = outline width: world units per unit of view
-                            depth, 0.0042 ~ 1 game px; uLight = view-space light, top-left like the duck)
-                            (iron: uSpotN.xy spot offset, uSpotPx / uRimPx sizes in game px)
+                            depth, 0.0042 ~ 1 game px; uLight = view-space light, top-left like the duck;
+                            iron: uSpotN.xy spot offset, uSpotPx / uRimPx sizes in game px; uLod: see LOOK)
      Props.cspec(spec)      'base' or 'base/shadow/lit/spot' palette names -> the toon colour record
      Props.CHIP_S           chip lattice size the chip lists use
-     Props.FACE_Y, PIVOT_Y, PADDLE_R, BOMB_R, POST_Z   layout (world units)
-     Props.SCHEMES          paddle paint schemes: red, blue, green, pink, amber
-     Props.Geo, Props.sdf   the builder (SDF voxeliser + toon geometry) for new props in this style
+     Props.FACE_Y, PIVOT_Y, PADDLE_R, PLATE_A, BOMB_R, POST_Z   layout (world units; PADDLE_R = the old disc radius,
+                            PLATE_A = the plate's apothem)
+     Props.SCHEMES          plate paint schemes { face, rings: [[outer radius, colour]...] from the bull out, edge, back }:
+                            lime (the range's target), cyan, amber, magenta
+     Props.Geo, Props.sdf   the builders (voxel SDF sampler, flat polygons + outline hull) for new props in this style
    Hit feedback lives in core/targets.js: Target.shatter() honours a 5th chip element (size
    multiplier, rims fly as bigger pieces) and Targets.burst(p, scale) is the cartoon flower
    explosion for bombs.
-   Budget: paddle face ~8.4k tris, ball ~14k (smooth round voxels + silhouette hull); arm/base ~0.2k each.
-   Hit volumes: only colours / tones changed in the 2nd pass; every hittable shape (disc, ball + cap + fuse,
-   battens) is the first pass's, so motions, hit windows and the timeline are untouched.
+   Budget: plate face ~0.5k tris, ball ~14k (round voxels + silhouette hull); arm / base ~0.1-0.2k each.
    Many of one prop at once (crowds of 20+): share prop.face.geometry in an InstancedMesh with
    Props.mat (it is instancing-safe) instead of calling paddle() 20 times.
    ========================================================================================= */
@@ -94,19 +94,22 @@ function cspec(s) {
   c = names.map(n => rgb(PAL[n])); _spec.set(s, c); return c;
 }
 const hexOf = s => PAL[s.split('/')[0]];
+const glc = n => 'vec3(' + rgb(PAL[n]).map(v => v.toFixed(4)).join(', ') + ')';   // a palette colour as a GLSL constant
 
 // ---------- the toon material (shared by every prop) ----------
-// per vertex: cBase / cLo (shadow) / cHi (lit) / cSp (iron: spot; else the accent colour) + aInfo (x: 1 iron, 2 paint on
-// the ball (both shaded from the true sphere normal), y: hull, z: flat / baked tone, w: no rim outline) + aOff (hull: corner
-// direction; any other vertex: the accent record [rank, range, mode]). The hull is pushed out by uOut screen pixels at any
-// depth; hull fragments whose smooth normal faces the camera are discarded, so voxel stair-steps never streak the surface.
+// per vertex: cBase / cLo (shadow) / cHi (lit) / cSp (accent colour) + aInfo (x: 1 iron, 2 paint on the ball (both shaded
+// from the true sphere normal), y: hull, z: flat / baked tone, w: no rim outline) + aOff (hull: offset direction; any other
+// vertex: the accent record [rank, range, mode]) + aLod (ball cells: [far material, near material, rank, stroke]; materials
+// 1 iron, 2 bone paint, 3 socket; stroke = colour id * 64 + distance to the stroke's centre line in cells, scaled by the
+// local brush width). The hull is pushed out by uOut screen pixels at any depth; hull fragments whose normal faces the
+// camera are discarded, so voxel stair-steps never streak the surface.
 const VS = `
-attribute vec3 cBase; attribute vec3 cLo; attribute vec3 cHi; attribute vec3 cSp; attribute vec4 aInfo; attribute vec3 aOff;
+attribute vec3 cBase; attribute vec3 cLo; attribute vec3 cHi; attribute vec3 cSp; attribute vec4 aInfo; attribute vec3 aOff; attribute vec4 aLod;
 uniform float uOut;
-varying vec3 vB; varying vec3 vL; varying vec3 vH; varying vec3 vS; varying vec4 vI; varying vec3 vN; varying vec3 vP; varying vec3 vD; varying vec3 vSN; varying vec3 vC;
+varying vec3 vB; varying vec3 vL; varying vec3 vH; varying vec3 vS; varying vec4 vI; varying vec3 vN; varying vec3 vP; varying vec3 vD; varying vec3 vSN; varying vec3 vC; varying vec4 vLd;
 #include <fog_pars_vertex>
 void main() {
-  vB = cBase; vL = cLo; vH = cHi; vS = cSp; vI = aInfo; vD = aOff;
+  vB = cBase; vL = cLo; vH = cHi; vS = cSp; vI = aInfo; vD = aOff; vLd = aLod;
   vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
   vC = (modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;             // the mesh origin = the ball's centre (view space)
   #ifdef USE_INSTANCING
@@ -122,33 +125,51 @@ void main() {
   gl_Position = projectionMatrix * mvPosition;
   #include <fog_vertex>
 }`;
+const STROKE_HW = '0.55';                                            // a decoy brush stroke's half width up close (cells)
 const FS = `
-uniform vec3 uLight; uniform vec3 uSpotN; uniform float uTHi; uniform float uTLo; uniform float uRim;
+uniform vec3 uLight; uniform vec3 uSpotN; uniform float uTHi; uniform float uTLo; uniform float uRim; uniform vec4 uLod;
 uniform float uBallPx; uniform float uRimPx; uniform float uSpotPx; uniform vec3 uRimLit; uniform vec3 uRimDk;
-varying vec3 vB; varying vec3 vL; varying vec3 vH; varying vec3 vS; varying vec4 vI; varying vec3 vN; varying vec3 vP; varying vec3 vD; varying vec3 vSN; varying vec3 vC;
+varying vec3 vB; varying vec3 vL; varying vec3 vH; varying vec3 vS; varying vec4 vI; varying vec3 vN; varying vec3 vP; varying vec3 vD; varying vec3 vSN; varying vec3 vC; varying vec4 vLd;
 #include <fog_pars_fragment>
 void main() {
   vec3 n = vI.x > 0.5 ? normalize(vSN) : normalize(vN);
   float d = dot(n, uLight), rv = dot(n, normalize(-vP)), depth = max(0.1, -vP.z);
-  bool paint = vI.x > 1.5;                                           // paint on a ball: narrow lit + shadow sides (reads flatter)
-  float t = d > (paint ? 0.9 : uTHi) ? 2.0 : (d > (paint ? 0.02 : uTLo) ? 1.0 : 0.0);
-  vec3 c = t > 1.5 ? vH : (t > 0.5 ? vB : vL);
-  if (vI.x > 0.5 && vI.x < 1.5) {                                    // cast iron: one small round spot (upper left, out by the rim,
-                                                                     // clear of the skull; uSpotN.xy = its screen offset / radius)
-                                                                     // + a constant-width rim band
-    float rpx = uBallPx / max(0.1, -vC.z);                            // ball radius in game px
-    float sp = max(uSpotPx / rpx, 0.075), s = 1.0 - clamp(uRimPx / rpx, 0.035, 0.45);
+  float dc = max(0.1, -vC.z), lk = smoothstep(uLod.x, uLod.y, dc);  // ball LOD: 0 near (1st pass look) .. 1 far (2nd pass)
+  float kind = vI.x, flt = vI.z;
+  vec3 cb = vB, cl = vL, ch = vH, c;
+  if (vLd.x + vLd.y > 0.5) {                                         // a ball cell: near / far material, a stroke on top
+    float m = vLd.z >= lk ? vLd.y : vLd.x;
+    if (vLd.w > 0.5) { float sc = floor(vLd.w / 64.0);
+      if (vLd.w - sc * 64.0 < max(${STROKE_HW}, uLod.w * dc / uLod.z)) m = 3.0 + sc; }   // never thinner than uLod.w px
+    kind = m < 1.5 ? 1.0 : 2.0; flt = (m > 2.5 && m < 3.5) ? 1.0 : 0.0;
+    if (m > 3.5 && m < 4.5) { cb = ${glc('lime')}; cl = ${glc('green')}; ch = ${glc('lemon')}; }
+    else if (m > 2.5 && m < 3.5) cb = ${glc('void')};
+    else if (m > 4.5) { cb = ${glc('yellow')}; cl = ${glc('amber')}; ch = ${glc('lemon')}; }
+    else { cb = ${glc('bone')}; cl = ${glc('mist')}; ch = ${glc('bone')}; }
+  }
+  float t = 1.0;
+  if (kind > 0.5 && kind < 1.5) {                                    // cast iron, true sphere normal
+    float rpx = uBallPx / dc;                                        // ball radius in game px
+    c = d > mix(0.70, 9.0, lk) ? ${glc('steel')} : d > mix(0.47, uTHi, lk) ? ${glc('navy')} : d > mix(-0.02, uTLo, lk) ? ${glc('midnight')} : ${glc('void')};
     vec3 w = normalize(-vC), u = normalize(cross(vec3(0.0, 1.0, 0.0), w)), v = cross(w, u);   // the ball as the camera sees it
-    if (dot(n, w) > 0.0 && length(vec2(dot(n, u), dot(n, v)) - uSpotN.xy) < sp) c = vS;   // a round dot, even out by the limb
-    else if (rv < sqrt(1.0 - s * s)) c = d > -0.05 ? uRimLit : uRimDk;
+    float sFar = 1.0 - clamp(uRimPx / rpx, 0.035, 0.45), sp = lk * max(uSpotPx / rpx, 0.075);
+    bool dk = d < mix(0.25, -0.05, lk);                              // near: a wide slate rim on the shadow side only
+    float s = dk ? mix(0.905, sFar, lk) : mix(1.0, sFar, lk);        // far: a constant-width band all round
+    if (dot(n, w) > 0.0 && length(vec2(dot(n, u), dot(n, v)) - uSpotN.xy) < sp) c = ${glc('haze')};   // far: one round hard spot
+    else if (rv < sqrt(1.0 - s * s)) c = dk ? uRimDk : uRimLit;
+  } else {
+    bool paint = kind > 1.5;                                         // paint on a ball: narrow lit side, shadow side by LOD
+    t = d > (paint ? 0.9 : uTHi) ? 2.0 : (d > (paint ? mix(0.25, 0.02, lk) : uTLo) ? 1.0 : 0.0);
+    c = t > 1.5 ? ch : (t > 0.5 ? cb : cl);
   }
-  if (vI.z > 0.5) c = vB;                                            // flat / baked tone
-  if (vD.y > 0.0 && vI.y < 0.5) {                                    // accent detail: only up close, whole features at a time
+  if (flt > 0.5) c = cb;                                             // flat / baked tone
+  if (vD.y > 0.0 && vI.y < 0.5) {                                    // accent detail by view depth, whole features at a time
     float k = clamp((vD.y - depth) / (0.3 * vD.y), 0.0, 1.0);
-    if (vD.x < k) c = vD.z > 0.5 ? (t > 0.5 ? vL : vS) : vS;          // mode 1: one shade darker (ghost), else the accent
+    if (vD.z > 1.5) { if (vD.x >= k) c = vB; }                       // mode 2: live tones up close, the flat base far away
+    else if (vD.x < k) c = vD.z > 0.5 ? (t > 0.5 ? vL : vS) : vS;    // mode 1: one shade darker, mode 0: the accent
   }
-  if (vI.y > 0.5 && rv > 0.2) discard;                                // hull only at the silhouette and behind (no stair-step streaks)
-  if ((rv < uRim && vI.w < 0.5) || vI.y > 0.5) c = vec3(0.0431, 0.0431, 0.1020);   // outline: rim + hull = void
+  if (vI.y > 0.5 && rv > 0.2) discard;                               // hull only at the silhouette and behind
+  if ((rv < uRim && vI.w < 0.5) || vI.y > 0.5) c = ${glc('void')};    // outline: rim + hull = void
   gl_FragColor = vec4(c, 1.0);
   #include <fog_fragment>
 }`;
@@ -157,44 +178,67 @@ const mat = new THREE.ShaderMaterial({
   uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
     uLight: { value: L0 }, uSpotN: { value: new THREE.Vector3(-0.55, 0.65, 0) }, uTHi: { value: 0.8 }, uTLo: { value: 0.22 },
     uRim: { value: 0.1 }, uBallPx: { value: 0 }, uRimPx: { value: 1.35 }, uSpotPx: { value: 1.3 },
-    uRimLit: { value: new THREE.Color(PAL.steel) }, uRimDk: { value: new THREE.Color(PAL.slate) }, uOut: { value: 0.0042 }
+    uRimLit: { value: new THREE.Color(PAL.steel) }, uRimDk: { value: new THREE.Color(PAL.slate) }, uOut: { value: 0.0042 },
+    uLod: { value: new THREE.Vector4(9.9, 11.0, 1, 0.8) }             // z (game px per ball cell at depth 1) is set below
   }]),
   vertexShader: VS, fragmentShader: FS, fog: true
 });
 
-// ---------- geometry: voxel faces with smooth normals + screen-constant inverted hull ----------
+// ---------- geometry: voxel faces / flat polygons + a screen-constant inverted hull (the outline) ----------
 const FACES = [
   [1, 0, 0, [1, -1, 1, 1, -1, -1, 1, 1, -1, 1, 1, 1]], [-1, 0, 0, [-1, -1, -1, -1, -1, 1, -1, 1, 1, -1, 1, -1]],
   [0, 1, 0, [-1, 1, 1, 1, 1, 1, 1, 1, -1, -1, 1, -1]], [0, -1, 0, [-1, -1, -1, 1, -1, -1, 1, -1, 1, -1, -1, 1]],
   [0, 0, 1, [-1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1]], [0, 0, -1, [1, -1, -1, -1, -1, -1, -1, 1, -1, 1, 1, -1]]];
 const VK = (i, j, k) => ((i + 512) * 1024 + (j + 512)) * 1024 + (k + 512);
-const HULL = cspec('void'), NOI = [0, 0, 0, 0];
+const HULL = cspec('void'), NOI = [0, 0, 0, 0], HULLI = [0, 1, 0, 0], Z3 = [0, 0, 0], NOL = [0, 0, 0, 0];
 const hullZ = v => !v.nrm || Math.abs(v.nrm[2]) < 0.8;   // hull only the silhouette band (faces looking along +-z never outline)
 class Geo {
-  constructor(smooth = 0.75) { this.p = []; this.n = []; this.cb = []; this.cl = []; this.ch = []; this.cs = []; this.inf = []; this.off = []; this.idx = []; this.vc = 0; this.k = smooth; }
+  constructor(smooth = 0.75) { this.p = []; this.n = []; this.cb = []; this.cl = []; this.ch = []; this.cs = []; this.inf = []; this.off = []; this.ld = []; this.idx = []; this.vc = 0; this.k = smooth; }
   // one face f of an axis box centred (x,y,z) with half sizes (hx,hy,hz); C = cspec; I = aInfo; nrm = smooth normal; hull = void copy
-  // D (optional, not on hulls): accent record [rank 0..1, range (view depth where it is gone), mode 0 accent / 1 darker]
-  face(x, y, z, hx, hy, hz, f, C, I, nrm, hull, D) {
+  // D (optional, not on hulls): accent record [rank 0..1, range (view depth where it is gone), mode]; L: aLod record (ball cells)
+  face(x, y, z, hx, hy, hz, f, C, I, nrm, hull, D, L) {
     const F = FACES[f], q = F[3];
     let nx = F[0], ny = F[1], nz = F[2];
     if (nrm) { const k = hull ? 1 : this.k; nx = nx * (1 - k) + nrm[0] * k; ny = ny * (1 - k) + nrm[1] * k; nz = nz * (1 - k) + nrm[2] * k;
       const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l; }
-    const c = hull ? HULL : C, inf = hull ? [0, 1, 0, 0] : I;
+    const c = hull ? HULL : C, inf = hull ? HULLI : I, ld = hull || !L ? NOL : L;
     for (let v = 0; v < 12; v += 3) {
       this.p.push(x + q[v] * hx, y + q[v + 1] * hy, z + q[v + 2] * hz); this.n.push(nx, ny, nz);
-      this.cb.push(...c[0]); this.cl.push(...c[1]); this.ch.push(...c[2]); this.cs.push(...c[3]); this.inf.push(...inf);
+      this.cb.push(...c[0]); this.cl.push(...c[1]); this.ch.push(...c[2]); this.cs.push(...c[3]); this.inf.push(...inf); this.ld.push(...ld);
       if (hull) this.off.push(q[v], q[v + 1], q[v + 2]); else if (D) this.off.push(D[0], D[1], D[2]); else this.off.push(0, 0, 0);
     }
     const b = this.vc; this.vc += 4;
     if (hull) this.idx.push(b, b + 2, b + 1, b, b + 3, b + 2); else this.idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
   }
-  // axis box in world units with flat normals (posts, plates, bolts). hull: true | false | mask of faces
+  // axis box in world units with flat normals (posts, plates, bolts). hull: true | false | mask of faces (bit f = face f)
   bx(x0, y0, z0, x1, y1, z1, col, hull = true, info = NOI) {
     const C = cspec(col), x = (x0 + x1) / 2, y = (y0 + y1) / 2, z = (z0 + z1) / 2, hx = (x1 - x0) / 2, hy = (y1 - y0) / 2, hz = (z1 - z0) / 2;
     for (let f = 0; f < 6; f++) {
       this.face(x, y, z, hx, hy, hz, f, C, info, null, false);
       if (hull === true || (typeof hull === 'number' && (hull >> f) & 1)) this.face(x, y, z, hx, hy, hz, f, C, info, null, true);
     }
+    return this;
+  }
+  // one vertex at any position / normal -> its index
+  vert(p, n, C, I, off, L) {
+    this.p.push(p[0], p[1], p[2]); this.n.push(n[0], n[1], n[2]);
+    this.cb.push(...C[0]); this.cl.push(...C[1]); this.ch.push(...C[2]); this.cs.push(...C[3]);
+    this.inf.push(...I); this.off.push(off[0], off[1], off[2]); this.ld.push(...(L || NOL));
+    return this.vc++;
+  }
+  // a flat convex polygon (a fan), points counter-clockwise seen from the side its normal n points to
+  poly(pts, n, col, I = NOI, D = Z3) {
+    const C = typeof col === 'string' ? cspec(col) : col, b = this.vc;
+    for (const p of pts) this.vert(p, n, C, I, D);
+    for (let k = 1; k < pts.length - 1; k++) this.idx.push(b, b + k, b + k + 1);
+    return this;
+  }
+  // outline hull copy of a polygon: vertex k is pushed out along offs[k] by uOut screen px; reversed winding, so only
+  // its inside shows (behind the object, just past the silhouette); n = the polygon's outward normal (discard test)
+  hullPoly(pts, offs, n) {
+    const b = this.vc;
+    pts.forEach((p, k) => this.vert(p, n, HULL, HULLI, offs[k]));
+    for (let k = 1; k < pts.length - 1; k++) this.idx.push(b, b + k + 1, b + k);
     return this;
   }
   // voxel map from sdf() on lattice size s; (cx, cy, cz) = lattice point that lands on the origin.
@@ -207,18 +251,12 @@ class Geo {
       const x = (v.i + 0.5 - cx) * s, y = (v.j + 0.5 - cy) * s, z = (v.k + 0.5 - cz) * s, C0 = cspec(v.col);
       // alt: accent colour (4th slot) shown up close; rank / range / mode: see the shader. ball: paint on a sphere
       const C = v.alt ? [C0[0], C0[1], C0[2], cspec(v.alt)[0]] : C0, D = v.alt ? [v.rank, v.range, v.mode || 0] : null;
-      const I = [v.iron ? 1 : v.ball ? 2 : 0, 0, v.flat ? 1 : 0, v.nh ? 1 : 0];      // w: paint relief, no rim outline (tones only)
+      const I = [v.iron ? 1 : v.ball ? 2 : 0, 0, v.flat ? 1 : 0, v.nh ? 1 : 0];      // w: no rim outline (tones only)
       for (let f = 0; f < 6; f++) {
         const F = FACES[f];
         if (map.has(VK(v.i + F[0], v.j + F[1], v.k + F[2]))) continue;
-        if (v.nh) {                                                   // paint relief: crisp flat paint, sides one shadow tone (emboss)
-          const Cs = f === 4 ? C : [C[1], C[1], C[1], C[1]];
-          this.face(x, y, z, h, h, h, f, Cs, [0, 0, 1, 1], null, false, f === 4 ? D : null); continue;
-        }
-        if (v.ff && f === 4) { const F0 = cspec(v.ff);                 // ff: baked front tone, the other faces stay live-lit
-          this.face(x, y, z, h, h, h, f, v.alt ? [F0[0], F0[1], F0[2], C[3]] : F0, [I[0], 0, 1, I[3]], v.nrm, false, D);
-        } else this.face(x, y, z, h, h, h, f, C, I, v.nrm, false, D);
-        if (!v.nh && (hullFront || f !== 4) && hullZ(v)) this.face(x, y, z, h, h, h, f, C, I, v.nrm, true);
+        this.face(x, y, z, h, h, h, f, C, I, v.nrm, false, D, v.lod);
+        if ((hullFront || f !== 4) && hullZ(v)) this.face(x, y, z, h, h, h, f, C, I, v.nrm, true);
       }
     }
     return this;
@@ -228,12 +266,14 @@ class Geo {
     g.setAttribute('position', F(this.p, 3)); g.setAttribute('normal', F(this.n, 3));
     g.setAttribute('cBase', F(this.cb, 3)); g.setAttribute('cLo', F(this.cl, 3)); g.setAttribute('cHi', F(this.ch, 3));
     g.setAttribute('cSp', F(this.cs, 3)); g.setAttribute('aInfo', F(this.inf, 4)); g.setAttribute('aOff', F(this.off, 3));
+    g.setAttribute('aLod', F(this.ld, 4));
     g.setIndex(this.idx); g.computeBoundingBox(); g.computeBoundingSphere();
     return g;
   }
 }
 // ---------- SDF voxeliser (lattice units): cells centred on (i+.5, j+.5, k+.5) inside box b = [x0,y0,z0,x1,y1,z1] ----------
-// paint(x,y,z) -> 'colour' | { col, iron, flat, nh, ball, alt, rank, range, mode } | null.  Later calls overwrite earlier cells.
+// paint(x,y,z) -> 'colour' | { col, iron, flat, ball, nh (no rim outline), alt, rank, range, mode, lod } | null.
+// Later calls overwrite earlier cells.
 const len2 = (x, y) => Math.sqrt(x * x + y * y), len3 = (x, y, z) => Math.sqrt(x * x + y * y + z * z);
 const sdf = {
   // rounded annulus around the z axis: radius a..b (a < 0 = solid disc), z0..z1, edge rounding r
@@ -253,6 +293,8 @@ const sdf = {
     const h = Math.max(0, Math.min(1, (pax * bax + pay * bay + paz * baz) / (bax * bax + bay * bay + baz * baz)));
     return len3(pax - bax * h, pay - bay * h, paz - baz * h) - r;
   },
+  // flat-top hexagon "radius" (the apothem metric): the largest projection on the six edge normals
+  hex: (x, y) => Math.max(Math.abs(y), 0.8660254 * Math.abs(x) + 0.5 * Math.abs(y)),
   voxelise(map, b, shape, paint, nshape) {
     const e = 1.1, ns = nshape || shape;
     for (let i = Math.floor(b[0]); i < Math.ceil(b[3]); i++) for (let j = Math.floor(b[1]); j < Math.ceil(b[4]); j++) for (let k = Math.floor(b[2]); k < Math.ceil(b[5]); k++) {
@@ -266,106 +308,129 @@ const sdf = {
   }
 };
 
-// ---------- layout (world units; matches the range's old paddles so motions and hit windows are unchanged) ----------
-const PIVOT_Y = 0.13, FACE_Y = 1.4175, PADDLE_R = 0.51, BOMB_R = 0.49, POST_Z = -0.15;
-const SP = 0.03, PR = PADDLE_R / SP;                  // paddle lattice (17 cells radius)
+// ---------- layout (world units; motions, hinge and face centre are the range's, unchanged) ----------
+const PIVOT_Y = 0.13, FACE_Y = 1.4175, PADDLE_R = 0.51, PLATE_A = 0.53, BOMB_R = 0.49, POST_Z = -0.15;
 const SB = 0.033, BR = BOMB_R / SB;                   // bomb lattice (~14.85 cells radius)
 mat.uniforms.uBallPx.value = BOMB_R * R.RH / 2 / R.TAN_H;   // ball radius in game px at view depth 1 (rim band, spot size)
+mat.uniforms.uLod.value.z = SB * R.RH / 2 / R.TAN_H;        // game px per ball cell at view depth 1 (stroke widths)
+// plate paint: face (the border out to the edge), rings [outer radius, colour] from the bull's-eye out, cut edge, back.
+// The range's plate: a yellow bull, a black ring, a lime ring, a black ring, the lime border (it reads as rings at the far
+// lane: every band is >= ~1.5 game px there).
+const ringsOf = c => [[0.11, 'yellow'], [0.20, 'void'], [0.30, c], [0.39, 'void']];
 const SCHEMES = {
-  red:   { ring: 'red', light: 'bone', bull: 'yellow', lip: 'crimson', back: 'walnut' },
-  blue:  { ring: 'blue', light: 'bone', bull: 'yellow', lip: 'deepblue', back: 'walnut' },
-  green: { ring: 'green', light: 'bone', bull: 'yellow', lip: 'forest', back: 'walnut' },
-  pink:  { ring: 'magenta', light: 'bone', bull: 'yellow', lip: 'plum', back: 'walnut' },
-  amber: { ring: 'orange', light: 'bone', bull: 'lemon', lip: 'rust', back: 'walnut' }
+  lime:    { face: 'lime', rings: ringsOf('lime'), edge: 'steel', back: 'slate' },
+  cyan:    { face: 'cyan', rings: ringsOf('cyan'), edge: 'steel', back: 'slate' },
+  amber:   { face: 'amber', rings: ringsOf('amber'), edge: 'steel', back: 'slate' },
+  magenta: { face: 'magenta', rings: ringsOf('magenta'), edge: 'steel', back: 'slate' }
 };
-const IRON = { col: 'midnight/void/navy/haze', iron: true };
-// paint by radius (lattice units): bull, ring, light, ring, light, lip
-const ringCol = (r, sc) => r < 4.6 ? sc.bull : r < 8.5 ? sc.ring : r < 10.9 ? sc.light : r < 14.5 ? sc.ring : r < 15.2 ? sc.light : sc.lip;
 
-// ---------- wear + detail helpers ----------
-function hash(a, b = 0, c = 0) {                      // stable integer hash -> [0, 1)
-  let h = (Math.imul(a | 0, 0x27d4eb2d) ^ Math.imul(b | 0, 0x165667b1) ^ Math.imul(c | 0, 0x9e3779b1)) >>> 0;
-  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b); h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35); h ^= h >>> 16;
-  return (h >>> 0) / 4294967296;
-}
-const SHADE = p => (RAMP[p] || [p])[0], LIT = p => (RAMP[p] || [p, p])[1];
-const tone = (p, t) => t === 0 ? SHADE(p) : t === 2 ? LIT(p) : p;
-// accent ranges (view depth where a detail is fully gone; it is fully in at 70 % of it). Range stops: 7.3 (nearest
-// scoot stop) .. 15.6 (far lane). Grain only reads at the near stops, chips a little further, nothing at the far lane.
-const RG_GRAIN = 9.5, RG_SCUFF = 10.5, RG_CHIP = 12.5, RG_BEVEL = 14.5;
-const LXY = [-0.56, 0.83];                            // the light projected on the face: top-left
-// paint bands of a paddle face by radius (lattice units): [inner, outer, raised]; band 5 is the rim lip
-const PAD_BANDS = [[0, 4.6, 1], [4.6, 8.5, 1], [8.5, 10.9, 0], [10.9, 14.5, 1], [14.5, 15.2, 0], [15.2, 99, 1]];
-// paddle wear, lattice units: paint chips (bare wood) on the rim lip and the ring edges, a few light scuffs
-const PAD_CHIPS = [], PAD_SCUFFS = [];
-for (let n = 0; n < 5; n++) { const a = (n + hash(n, 1) * 0.6) * Math.PI * 2 / 5 + 0.4, r = 15.7 + hash(n, 2) * 0.8;
-  PAD_CHIPS.push([Math.cos(a) * r, Math.sin(a) * r, 0.6 + hash(n, 3) * 0.45, hash(n, 4)]); }
-[8.5, 14.5, 4.6].forEach((r, n) => { const a = hash(n, 5) * Math.PI * 2;
-  PAD_CHIPS.push([Math.cos(a) * r, Math.sin(a) * r, 0.6 + hash(n, 6) * 0.3, hash(n, 7)]); });
-for (let n = 0; n < 4; n++) { const a = hash(n, 8) * Math.PI * 2, r = 3 + hash(n, 9) * 10, d = -0.5 + (hash(n, 10) - 0.5) * 0.9, l = 1.0 + hash(n, 11);
-  PAD_SCUFFS.push([Math.cos(a) * r, Math.sin(a) * r, Math.cos(d) * l, Math.sin(d) * l, hash(n, 12)]); }
-const segD = (x, y, s) => { const px = x - s[0], py = y - s[1], h = Math.max(-1, Math.min(1, (px * s[2] + py * s[3]) / (s[2] * s[2] + s[3] * s[3])));
-  return len2(px - s[2] * h, py - s[3] * h); };
-// tone of one front cell: { t: baked tone (the lip: lit / shadow by its side), acc: [colour, rank, range] | null }
-// accents: chips > bevel (a 1-cell lit / shadow arc on each raised edge + the cast shadow beside it) > scuffs > grain
-function paddleCell(x, y, sc) {
-  const r = len2(x, y), f = (x * LXY[0] + y * LXY[1]) / (r || 1), b = PAD_BANDS.findIndex(q => r < q[1]), [r0, r1, up] = PAD_BANDS[b];
-  const p = ringCol(r, sc), side = f > 0.35 ? 1 : f < -0.35 ? -1 : 0;
-  const o = { p, t: b === 5 ? 1 + side : 1, acc: null };
-  for (const c of PAD_CHIPS) if (len2(x - c[0], y - c[1]) < c[2]) { o.acc = ['tan', 0.05 + 0.9 * c[3], RG_CHIP]; return o; }
-  if (b === 5) return o;
-  let bt = -1;
-  if (up) { if (r1 - r < 1) bt = 1 + side; else if (b && r - r0 < 1) bt = 1 - side; }   // raised: lit edge toward the light
-  else if ((r - r0 < 1 && side < 0) || (r1 - r < 1 && side > 0)) bt = 0;             // recessed: cast shadow of the ring beside it
-  if (bt >= 0 && bt !== 1 && tone(p, bt) !== p) { o.acc = [tone(p, bt), 0.5, RG_BEVEL]; return o; }
-  for (const s of PAD_SCUFFS) if (segD(x, y, s) < 0.5) { o.acc = [p === 'bone' ? 'mist' : LIT(p), 0.05 + 0.9 * s[4], RG_SCUFF]; return o; }
-  if (p !== sc.bull) {                                          // wood grain under the paint: wavy vertical lines, in dashes
-    const u = x + 1.5 * Math.sin(y * 0.17 + 0.6) + 0.7 * Math.sin(y * 0.41 + x * 0.12), ln = Math.floor(u / 6);
-    if (u / 6 - ln < 0.17) { const seg = Math.floor((y + hash(ln, 3) * 17) / (4 + 5 * hash(ln, 5)));
-      if (hash(ln, seg, 9) < 0.5) o.acc = [SHADE(p), 0.05 + 0.9 * hash(ln, seg, 11), RG_GRAIN]; }
+// ---------- the target plate: a flat-top hexagonal tin plate, painted flat ----------
+// a: apothem of the cut edge (contains the old 0.51 disc), ac: where the front chamfer starts; zf front face, zc chamfer
+// foot, zb back face; r0 bull, r1 inner field, r2 ring (round, painted on the hex); n segments per circle (a multiple
+// of 6, so the hex corners are vertices of the border fan and its edges stay perfectly straight)
+const PL = { a: PLATE_A, ac: 0.505, zf: 0.03, zc: 0.005, zb: -0.03, r0: 0.16, r1: 0.29, r2: 0.40, n: 48 };
+const hexAt = (a, th) => { const r = a / sdf.hex(Math.cos(th), Math.sin(th)); return [Math.cos(th) * r, Math.sin(th) * r]; };
+const hexCorner = (a, k) => { const th = k * Math.PI / 3, r = a / 0.8660254; return [Math.cos(th) * r, Math.sin(th) * r]; };
+const FRONT = [0, 0, 1], BACK = [0, 0, -1], FLAT = [0, 0, 1, 1];          // flat paint: authored tone, no rim
+function plateGeo(sc) {
+  const g = new Geo(), P = PL, N = P.n, ang = k => k * Math.PI * 2 / N;
+  const circ = (r, k) => [Math.cos(ang(k)) * r, Math.sin(ang(k)) * r, P.zf];
+  // front face: the bull's-eye disc, the rings around it, then the border out to the hexagon (all flat paint)
+  const rings = sc.rings || [[P.r0, sc.bull], [P.r1, sc.face], [P.r2, sc.ring]], rEnd = rings[rings.length - 1][0];
+  g.poly(Array.from({ length: N }, (_, k) => circ(rings[0][0], k)), FRONT, rings[0][1], FLAT);
+  for (let k = 0; k < N; k++) {
+    for (let q = 1; q < rings.length; q++) { const a = rings[q - 1][0], b = rings[q][0];
+      g.poly([circ(a, k), circ(b, k), circ(b, k + 1), circ(a, k + 1)], FRONT, rings[q][1], FLAT); }
+    const h0 = hexAt(P.ac, ang(k)), h1 = hexAt(P.ac, ang(k + 1));
+    g.poly([circ(rEnd, k), [h0[0], h0[1], P.zf], [h1[0], h1[1], P.zf], circ(rEnd, k + 1)], FRONT, sc.face, FLAT);
   }
-  return o;
-}
-
-// ---------- paddle face: a thick painted-wood disc, bevelled rim lip, raised ring paint, back battens ----------
-function paddleFaceGeo(sc) {
-  const shape = (x, y, z) => Math.min(
-    sdf.ring(x, y, z, -PR, PR, -1.5, 1.5, 1.0),                                   // the wooden disc
-    sdf.ring(x, y, z, -4.1, 4.1, 0, 2.6, 0.7),                                     // raised bull
-    sdf.ring(x, y, z, 5.0, 8.0, 0, 2.6, 0.6), sdf.ring(x, y, z, 11.3, 14.1, 0, 2.6, 0.6),   // raised red rings
-    sdf.ring(x, y, z, 15.2, PR, -1.9, 2.8, 0.8));                                  // bevelled rim lip
-  const map = sdf.voxelise(new Map(), [-PR - 1, -PR - 1, -3, PR + 1, PR + 1, 4], shape, (x, y, z) => {
-    const r = len2(x, y);
-    if (z < -0.6) return r > 15.2 ? sc.lip : sc.back;
-    return { col: ringCol(r, sc), nh: r < PR - 1 };          // the outermost cells keep their outline + live-lit sides
-  });
-  // bake the front: the top cell of every column gets its tone and accent (sides keep the paint / live light)
-  const top = new Map(), CK = (i, j) => (i + 64) * 256 + (j + 64);
-  for (const v of map.values()) { const c = CK(v.i, v.j), t = top.get(c); if (t === undefined || v.k > t) top.set(c, v.k); }
-  for (const v of map.values()) {
-    if (v.k !== top.get(CK(v.i, v.j)) || v.col === sc.back) continue;
-    const o = paddleCell(v.i + 0.5, v.j + 0.5, sc), col = tone(o.p, o.t);
-    if (v.nh) v.col = col; else v.ff = col;                    // ff: baked front face, live-lit sides (the disc's thickness)
-    if (o.acc && o.acc[0] !== col) { v.alt = o.acc[0]; v.rank = o.acc[1]; v.range = o.acc[2]; }
+  // the chamfer (the only bevel: live toon, so it is lemon where it faces the light and green where it faces away;
+  // far away it falls back to the flat face colour, mode-2 accent) and the straight-cut steel edge; flat normals
+  const CH = cspec(sc.face), ED = cspec(sc.edge);
+  for (let e = 0; e < 6; e++) {
+    const i0 = hexCorner(P.ac, e), i1 = hexCorner(P.ac, e + 1), o0 = hexCorner(P.a, e), o1 = hexCorner(P.a, e + 1);
+    const th = (e + 0.5) * Math.PI / 3, nx = Math.cos(th), ny = Math.sin(th), nc = [nx * 0.7071, ny * 0.7071, 0.7071];
+    g.poly([[i0[0], i0[1], P.zf], [o0[0], o0[1], P.zc], [o1[0], o1[1], P.zc], [i1[0], i1[1], P.zf]], nc, CH, [0, 0, 0, 1], [0.5, 12.5, 2]);
+    g.poly([[o0[0], o0[1], P.zc], [o0[0], o0[1], P.zb], [o1[0], o1[1], P.zb], [o1[0], o1[1], P.zc]], [nx, ny, 0], ED, [0, 0, 0, 1]);
+    // outline hull of the edge band: pushed out 1 px perpendicular to the edge (corner direction / cos 30)
+    const d0 = [o0[0] / P.a * 1.0, o0[1] / P.a * 1.0], d1 = [o1[0] / P.a * 1.0, o1[1] / P.a * 1.0];
+    g.hullPoly([[o0[0], o0[1], P.zc], [o0[0], o0[1], P.zb], [o1[0], o1[1], P.zb], [o1[0], o1[1], P.zc]],
+      [[d0[0], d0[1], 0.6], [d0[0], d0[1], -0.6], [d1[0], d1[1], -0.6], [d1[0], d1[1], 0.6]], [nx, ny, 0]);
   }
-  const g = new Geo().voxels(map, SP);
-  // back battens (painted wood) where the post bracket bites: each one is laid as grain strips (chestnut, a dark walnut
-  // line, a pale tan line) filling exactly the old batten box (same hit volume); hull only on the strips' outer faces
-  const STRIPS = [[-0.048, -0.03, 'chestnut'], [-0.03, -0.012, 'walnut'], [-0.012, 0.018, 'chestnut'], [0.018, 0.03, 'tan'], [0.03, 0.048, 'chestnut']];
-  STRIPS.forEach(([a, b, col], n) => {
-    const first = n === 0, last = n === STRIPS.length - 1;             // face bits: 0 +x, 1 -x, 2 +y, 3 -y, 4 +z, 5 -z
-    g.bx(-0.39, a, -0.105, 0.39, b, -0.045, col, 0b110011 | (first ? 0b1000 : 0) | (last ? 0b100 : 0));   // horizontal batten
-    g.bx(a, -0.39, -0.105, b, 0.39, -0.045, col, 0b111100 | (first ? 0b10 : 0) | (last ? 0b1 : 0));       // vertical batten
-  });
+  // back face (painted slate) + the outline hulls that give the silhouette seen face-on (the back hex, pushed out) and
+  // from behind (the front hex)
+  const hb = [5, 4, 3, 2, 1, 0].map(k => hexCorner(P.a, k)), hf = [0, 1, 2, 3, 4, 5].map(k => hexCorner(P.ac, k));
+  g.poly(hb.map(p => [p[0], p[1], P.zb]), BACK, sc.back);
+  g.hullPoly(hb.map(p => [p[0], p[1], P.zb]), hb.map(p => [p[0] / P.a, p[1] / P.a, -1]), BACK);
+  g.hullPoly(hf.map(p => [p[0], p[1], P.zf]), hf.map(p => [p[0] / P.ac, p[1] / P.ac, 1]), FRONT);
+  // one plain back brace (the bracket on the post clamps it); hull on every face but the one against the plate
+  g.bx(-0.36, -0.045, P.zb - 0.035, 0.36, 0.045, P.zb, 'steel', 0b101111);
   return g.geometry();
 }
-// ---------- bomb: a round cast-iron ball, steel cap at the top-right, fuse, ONE big skull + crossbones ----------
+// ---------- post + bracket (pivot space) and base plate / ceiling hanger (group space): clean steel, no grime ----------
+function armGeo(ball, hang) {
+  const g = new Geo(), Z = POST_Z, m = hang ? -1 : 1;
+  const b = (x0, y0, z0, x1, y1, z1, col, hull = true) => g.bx(x0, Math.min(m * y0, m * y1), z0, x1, Math.max(m * y0, m * y1), z1, col, hull);
+  b(-0.045, 0, Z - 0.045, 0.045, FACE_Y - 0.08, Z + 0.045, 'steel');            // the post
+  b(-0.07, 0, Z - 0.07, 0.07, 0.1, Z + 0.07, 'slate');                           // collar over the hinge
+  b(-0.072, 0.085, Z + 0.06, 0.072, 0.1, Z + 0.072, 'steel', false);             // its lit top edge
+  b(-0.13, -0.045, Z - 0.05, 0.13, 0.045, Z + 0.05, 'slate');                    // hinge knuckle
+  if (ball) {                                                                    // cup the ball sits in
+    b(-0.1, FACE_Y - 0.52, Z - 0.1, 0.1, FACE_Y - 0.43, Z + 0.1, 'slate');
+    b(-0.102, FACE_Y - 0.45, Z + 0.09, 0.102, FACE_Y - 0.43, Z + 0.102, 'steel', false);
+    b(-0.065, FACE_Y - 0.43, Z - 0.065, 0.065, FACE_Y - 0.36, Z + 0.065, 'steel');
+  } else {                                                                       // a clean clamp bracket onto the back brace
+    b(-0.08, FACE_Y - 0.15, Z - 0.05, 0.08, FACE_Y + 0.06, PL.zb - 0.035, 'steel');
+    b(-0.05, FACE_Y - 0.11, Z - 0.062, -0.02, FACE_Y - 0.08, Z - 0.05, 'haze', false);   // two bolt heads on its back
+    b(0.02, FACE_Y - 0.11, Z - 0.062, 0.05, FACE_Y - 0.08, Z - 0.05, 'haze', false);
+  }
+  return g.geometry();
+}
+function baseGeo(hang, slot) {
+  const g = new Geo(), Z = POST_Z;
+  if (slot) {                                                                    // slim carriage riding in a floor slot / hatch
+    g.bx(-0.06, -0.35, Z - 0.08, 0.06, 0.09, Z + 0.08, 'slate');
+    g.bx(-0.062, 0.075, Z + 0.07, 0.062, 0.09, Z + 0.082, 'steel', false);      // lit top edge
+    for (const sx of [-1, 1]) g.bx(sx * 0.105 - 0.025, 0.04, Z - 0.055, sx * 0.105 + 0.025, 0.19, Z + 0.055, 'steel');
+    g.bx(-0.1, -0.02, Z - 0.1, 0.1, 0.03, Z + 0.1, 'navy');
+  } else if (!hang) {
+    g.bx(-0.3, 0, Z - 0.2, 0.3, 0.07, Z + 0.2, 'chestnut');                     // wooden sled
+    g.bx(-0.3, 0.058, Z + 0.2, 0.3, 0.07, Z + 0.203, 'tan', false);             // its lit top edge
+    g.bx(-0.27, 0.07, Z - 0.17, 0.27, 0.09, Z + 0.17, 'slate');                  // steel base plate
+    g.bx(-0.272, 0.078, Z + 0.17, 0.272, 0.09, Z + 0.173, 'steel', false);      // its lit front edge
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.bx(sx * 0.21 - 0.022, 0.09, Z + sz * 0.11 - 0.022, sx * 0.21 + 0.022, 0.11, Z + sz * 0.11 + 0.022, 'haze', false);
+    for (const sx of [-1, 1]) g.bx(sx * 0.125 - 0.025, 0.09, Z - 0.06, sx * 0.125 + 0.025, 0.19, Z + 0.06, 'steel');   // hinge cheeks
+  } else {
+    g.bx(-0.035, 0, Z - 0.035, 0.035, 0.95, Z + 0.035, 'steel');                 // hanger rod up into the ceiling rail
+    g.bx(-0.15, 0.86, Z - 0.1, 0.15, 0.98, Z + 0.1, 'slate');                    // trolley
+    for (const sx of [-1, 1]) g.bx(sx * 0.1 - 0.035, 0.95, Z - 0.06, sx * 0.1 + 0.035, 1.04, Z + 0.06, 'haze');
+    g.bx(-0.2, -0.07, Z - 0.12, 0.2, 0, Z + 0.12, 'chestnut');                   // hanger block
+    g.bx(-0.2, -0.012, Z + 0.12, 0.2, 0, Z + 0.123, 'tan', false);              // its lit top edge
+    for (const sx of [-1, 1]) g.bx(sx * 0.125 - 0.025, -0.19, Z - 0.06, sx * 0.125 + 0.025, -0.07, Z + 0.06, 'steel');
+  }
+  return g.geometry();
+}
+// ---------- shatter chips: coarse voxel lists in each prop's own colours; [i, j, k, colour, sizeMul] ----------
+const CS = 0.0935;                                     // chip lattice (the old 11x11 disc)
+function plateChips(sc) {                              // flat hex shards: the border flies as bigger chunks
+  const L = [], rings = sc.rings || [[PL.r0, sc.bull], [PL.r1, sc.face], [PL.r2, sc.ring]];
+  for (let j = -6; j <= 6; j++) for (let i = -7; i <= 7; i++) {
+    const x = i * CS, y = j * CS, h = sdf.hex(x, y); if (h > PL.a) continue;
+    const r = len2(x, y), rim = h > PL.a - CS * 0.9, ring = rings.find(q => r < q[0]);
+    const col = rim || !ring ? sc.face : ring[1];
+    L.push([i, j, 0, hexOf(col), rim ? 1.7 : 1]);
+    if (((i * 7 + j * 3) & 3) === 0) L.push([i, j, -1, hexOf(rim ? sc.edge : sc.back), 0.8]);
+  }
+  return L;
+}
+
+// ---------- bomb: a round cast-iron ball, steel cap at the top-right, fuse, skull + crossbones at two levels of detail ----------
 // (cap + fuse are part of the ball mesh, i.e. of its hit volume: their shapes are unchanged from the first pass)
 const CAP_D = (() => { const v = [0.5, 0.82, 0.3], l = len3(...v); return v.map(a => a / l); })();
 const CAP_C = CAP_D.map(a => a * (BR - 0.2));
 const F0 = CAP_D.map(a => a * (BR + 1.2)), F1 = [F0[0] + 0.4, F0[1] + 3.2, F0[2] + 0.3], F2 = [F1[0] + 2.8, F1[1] + 1.6, F1[2] + 0.3];
-// 9 x 11 icon on a 2-cell grid (each icon pixel = 2 x 2 voxels): about one game px per icon pixel from the back lanes
-const SKULL = [
+// FAR (2nd pass): ONE big 9 x 11 icon on a 2-cell grid (each icon pixel = 2 x 2 cells), ~1 game px per icon pixel at the far lane
+const SKULL2 = [
   '..XXXXX..',
   '.XXXXXXX.',
   '.XooXooX.',
@@ -377,11 +442,38 @@ const SKULL = [
   '...XXX...',
   '..XX.XX..',
   'XX.....XX'];
-const SK_TOP = 11;                                     // lattice y of the icon's top edge (the cap sits above-right of it)
-function skullAt(x, y) {                               // -> 'X' bone, 'o' socket, null (front projection, lattice units)
-  const c = Math.floor((x + 9) / 2), r = Math.floor((SK_TOP - y) / 2);
-  if (r < 0 || r >= SKULL.length || c < 0 || c >= 9) return null;
-  const ch = SKULL[r][c]; return ch === '.' ? null : ch;
+// NEAR (1st pass character): 1 cell per pixel, col c -> cell i = c - 8, row r -> cell j = 10 - r. Round cranium, eye
+// sockets with rounded bottoms, a nose, four teeth, crossbones with knobbed ends. Its eyes, jaw and bones sit where
+// the far icon's do, so the handoff reads as the same skull sharpening.
+const SKULL1 = [
+  '.....XXXXX.....',
+  '...XXXXXXXXX...',
+  '..XXXXXXXXXXX..',
+  '..XXXXXXXXXXX..',
+  '..XXoooXoooXX..',
+  '..XXoooXoooXX..',
+  '..XXXooXooXXX..',
+  '...XXXXoXXXX...',
+  '....XXoooXX....',
+  '....XXXXXXX....',
+  'X...X.X.X.X...X',
+  'XX...........XX',
+  'XXXX.......XXXX',
+  '..XXXX...XXXX..',
+  '....XXXXXXX....',
+  '..XXXX...XXXX..',
+  'XXXX.......XXXX',
+  'XX...........XX',
+  'X.............X'];
+function skull2At(x, y) {                              // -> 'X' bone, 'o' socket, null (front projection, lattice units)
+  const c = Math.floor((x + 9) / 2), r = Math.floor((11 - y) / 2);
+  if (r < 0 || r >= SKULL2.length || c < 0 || c >= 9) return null;
+  const ch = SKULL2[r][c]; return ch === '.' ? null : ch;
+}
+function skull1At(x, y) {
+  const c = Math.floor(x) + 8, r = 10 - Math.floor(y);
+  if (r < 0 || r >= SKULL1.length || c < 0 || c >= 15) return null;
+  const ch = SKULL1[r][c]; return ch === '.' ? null : ch;
 }
 const capShape = (x, y, z) => Math.min(sdf.cyl(x, y, z, CAP_C, CAP_D, 1.9, 3.1), sdf.cyl(x, y, z, CAP_C.map((a, i) => a - CAP_D[i] * 0.9), CAP_D, 0.55, 3.9));
 const fuseShape = (x, y, z) => Math.min(sdf.capsule(x, y, z, F0, F1, 1.0), sdf.capsule(x, y, z, F1, F2, 1.0));
@@ -391,12 +483,17 @@ function capPaint(x, y, z) {
   return h > 1.0 && rr < 1.4 ? 'void' : h > 1.0 ? 'slate' : 'steel';
 }
 const fusePaint = (x, y, z) => len3(x - F2[0], y - F2[1], z - F2[2]) < 1.3 ? 'rust' : (Math.floor((x + y + z) * 0.8) & 1) ? 'sand' : 'tan';
-// paint(x,y,z) -> the ball's paint record (null = plain iron)
-const skullPaint = (x, y, z) => { if (z < 2) return null; const s = skullAt(x, y);
-  return s === 'X' ? { col: 'bone/mist/bone', ball: true } : s === 'o' ? { col: 'void', flat: true } : null; };
-function ballGeo(paint, withFuse) {
+// a ball cell: far + near material (1 iron, 2 bone, 3 socket), its 4x4 ordered rank, and an optional stroke record
+const B4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+const MAT_OF = { X: 2, o: 3 };
+function ballCell(x, y, z, stroke) {
+  const front = z >= 2, i = Math.floor(x), j = Math.floor(y);
+  const far = front ? MAT_OF[skull2At(x, y)] || 1 : 1, near = front ? MAT_OF[skull1At(x, y)] || 1 : 1;
+  return { col: 'midnight/void/navy/haze', iron: true, lod: [far, near, (B4[(j & 3) * 4 + (i & 3)] + 0.5) / 16, stroke ? stroke(x, y, z) : 0] };
+}
+function ballGeo(stroke, withFuse) {
   const ball = (x, y, z) => sdf.sphere(x, y, z, 0, 0, 0, BR), B0 = Math.ceil(BR) + 1;
-  const map = sdf.voxelise(new Map(), [-B0, -B0, -B0, B0, B0, B0], ball, (x, y, z) => paint(x, y, z) || IRON);
+  const map = sdf.voxelise(new Map(), [-B0, -B0, -B0, B0, B0, B0], ball, (x, y, z) => ballCell(x, y, z, stroke));
   sdf.voxelise(map, [-B0, 6, -6, B0, B0 + 5, B0], capShape, capPaint);
   if (withFuse) sdf.voxelise(map, [0, 10, -2, B0 + 6, B0 + 10, B0 + 4], fuseShape, fusePaint);
   return new Geo(1).voxels(map, SB).geometry();     // no back cull on a ball: turned 90 deg its back cap is on the silhouette
@@ -406,34 +503,35 @@ function fuseGeo() {                                   // origin at the fuse roo
   return new Geo(1).voxels(map, SB, F0[0], F0[1], F0[2], true).geometry();
 }
 
-// ---------- decoy: a bomb badly painted over to look like the red paddle ----------
-// The paddle's own red / white / yellow (+ crimson lip), but a sloppy job: wobbly, off-centre ring edges (uneven widths),
-// brush gaps down to the iron, drips, and the skull ghosting through the paint. The tells (ghost, gaps, drips) are
-// accents that come in up close; from the back lanes it is a round red-and-white target with a fuse (and a wobble).
-const DK = SCHEMES.red;
-const DEDGE = [[3.9, 0.4, 1.3], [7.3, 0.6, 2.9], [9.8, 0.5, 4.1], [12.3, 0.55, 0.6], [13.3, 0.35, 5.3]];   // r, wobble, phase
-const DCOL = [DK.bull, DK.ring, DK.light, DK.ring, DK.light, DK.lip];
-const DGHOST = { bone: 'haze', red: 'oxblood' };   // the darkest ghost tone per paint (never the bull or the lip)
-function decoyRing(x, y) {                              // base paint by the wobbly ring edges (paint centre a little off)
-  const px = x - 0.5, py = y + 0.35, r = len2(px, py), a = Math.atan2(py, px);
-  for (let e = 0; e < DEDGE.length; e++) { const [r0, w, ph] = DEDGE[e];
-    if (r < r0 + w * Math.sin(a * 2 + ph) + w * 0.6 * Math.sin(a * 5 + ph * 2.3)) return DCOL[e]; }
-  return DCOL[5];
-}
-// brush gaps [x, y, dx, dy] (short strokes along the ring, showing the iron) and drips [x, yTop, yEnd, colour]
-const DGAPS = [[-6.3, 5.6, 1.1, 1.0], [8.4, -3.0, 0.4, 1.2], [-11.4, -4.2, 0.6, -1.3], [3.2, 12.5, 1.3, -0.3], [-1.5, -8.6, 1.2, 0.2]];
-const DDRIPS = [[-2.5, -6.8, -9.0, 'red'], [4.5, -11.0, -13.2, 'red'], [-6.5, -7.0, -9.6, 'bone'], [8.5, -9.6, -12.0, 'bone']];
-function decoyPaint(x, y, z) {
-  if (z < -1) return null;                              // painted all over the front, out past the silhouette
-  const col = decoyRing(x, y), o = { col, ball: true };
-  const acc = (alt, rank, range, mode) => Object.assign(o, { alt, rank, range, mode });
-  for (let n = 0; n < DDRIPS.length; n++) { const d = DDRIPS[n], dx = Math.abs(x - d[0]);
-    if ((dx < 0.5 && y < d[1] && y > d[2]) || (dx < 1 && y <= d[2] + 0.5 && y > d[2] - 1.5)) return d[3] === col ? o : acc(d[3], 0.1 + 0.2 * n, 13, 0); }
-  for (let n = 0; n < DGAPS.length; n++) { const g = DGAPS[n]; if (segD(x, y, g) < 0.55) return acc('midnight', 0.15 + 0.15 * n, 12, 0); }
-  const s = skullAt(x, y);                              // the skull underneath, ghosting through at low contrast
-  if (s === 'X' && DGHOST[col]) return acc(DGHOST[col], 0.3, 12, 1);     // one shade darker: white -> mist, red -> crimson
-  if (s === 'o' && DGHOST[col]) return acc(DGHOST[col], 0.3, 12, 0);     // sockets: haze / oxblood
-  return o;
+// ---------- decoy: the bomb with the plate's paint brushed on in thin, sloppy strokes ----------
+// The plate is lime / black / lime / black / yellow; on a black ball the black rings come free, so the painter only
+// brushed the lime and the yellow: a wobbly lime HEXAGON (the plate's border), a lime ring, a small yellow circle for the
+// bull, each off-centre, uneven in width (w), with brush gaps (angle ranges, rad), plus two drips. Strokes are front
+// projected (lattice units). Each cell stores its distance to the nearest stroke's centre line divided by the local width;
+// the shader paints it while that is under the half width (0.55 cells up close, never under uLod.w game px far away, so
+// at the far lane the yellow circle closes into a dot and the lime thickens into rings). Colour ids: 1 lime, 2 yellow.
+const TAU = Math.PI * 2, angOf = (x, y) => (Math.atan2(y, x) + TAU) % TAU;
+const STROKES = [
+  { id: 1, cx: 0.4, cy: -0.4, hex: true, r: a => 10.9 + 0.45 * Math.sin(3 * a + 1.3) + 0.3 * Math.sin(7 * a + 0.4),
+    w: a => 1 + 0.35 * Math.sin(2 * a + 0.7) + 0.2 * Math.sin(5 * a), gaps: [[0.55, 1.05], [3.9, 4.12]] },
+  { id: 1, cx: -0.2, cy: 0.1, r: a => 7.3 + 0.4 * Math.sin(2 * a + 2.1) + 0.25 * Math.sin(5 * a + 0.3),
+    w: a => 1 + 0.3 * Math.sin(3 * a + 1.1), gaps: [[3.55, 3.95]] },
+  { id: 2, cx: 0.3, cy: 0.6, r: a => 2.1 + 0.25 * Math.sin(2 * a + 0.5), w: a => 0.9 + 0.2 * Math.sin(3 * a), gaps: [[2.1, 2.5]] }];
+const DRIPS = [[1, -4.6, -10.6, -13.2], [2, 0.5, -1.1, -4.2]];    // [colour id, x, top, end]: a run down, a blob at the end
+function decoyStroke(x, y, z) {
+  if (z < -1) return 0;                                // painted all over the front, out past the silhouette
+  let best = 9, id = 0;
+  for (const s of STROKES) {
+    const px = x - s.cx, py = y - s.cy, a = angOf(px, py);
+    if (s.gaps.some(g => a >= g[0] && a <= g[1])) continue;
+    const d = Math.abs((s.hex ? sdf.hex(px, py) : len2(px, py)) - s.r(a)) / s.w(a);
+    if (d < best) { best = d; id = s.id; }
+  }
+  for (const [c, dx, y0, y1] of DRIPS) {
+    const ex = Math.abs(x - dx), d = y > y0 ? 9 : y > y1 ? ex : len2(ex, y - y1) / 1.8;
+    if (d < best) { best = d; id = c; }
+  }
+  return best < 2.4 ? id * 64 + best : 0;
 }
 function sparkGeo() {                                  // unlit twinkle star (MAT.glow): big enough to read from the back lanes
   const v = new R.Vox();
@@ -442,73 +540,6 @@ function sparkGeo() {                                  // unlit twinkle star (MA
   for (const [a, b] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) v.bx(a * 0.068 - 0.022, b * 0.068 - 0.022, -0.022, a * 0.068 + 0.022, b * 0.068 + 0.022, 0.022, PAL.orange);
   v.bx(-0.02, -0.02, 0.048, 0.02, 0.02, 0.066, PAL.bone);
   return v.geo();
-}
-// ---------- post + bracket (pivot space) and base plate / ceiling hanger (group space) ----------
-// a touch of wear: grime at the foot of the post, bright scratches, worn edges on the plates (thin skins, no hull)
-function armGeo(ball, hang) {
-  const g = new Geo(), Z = POST_Z, m = hang ? -1 : 1;
-  const b = (x0, y0, z0, x1, y1, z1, col, hull = true) => g.bx(x0, Math.min(m * y0, m * y1), z0, x1, Math.max(m * y0, m * y1), z1, col, hull);
-  b(-0.045, 0, Z - 0.045, 0.045, FACE_Y - 0.08, Z + 0.045, 'steel');            // the post
-  b(-0.047, 0.1, Z - 0.047, 0.047, 0.24, Z + 0.047, 'slate', false);             // grime at its foot
-  b(-0.047, 0.24, Z - 0.047, -0.02, 0.33, Z + 0.047, 'slate', false);
-  b(-0.03, 0.62, Z + 0.045, -0.005, 0.7, Z + 0.048, 'haze', false);               // scratches
-  b(0.008, 0.94, Z + 0.045, 0.032, 0.99, Z + 0.048, 'haze', false);
-  b(-0.047, FACE_Y - 0.36, Z - 0.047, 0.047, FACE_Y - 0.3, Z + 0.047, 'slate', false);   // a dark band under the head
-  b(-0.07, 0, Z - 0.07, 0.07, 0.1, Z + 0.07, 'slate');                           // collar over the hinge
-  b(-0.072, 0.08, Z + 0.06, 0.072, 0.1, Z + 0.072, 'steel', false);              // worn top edge of the collar
-  b(-0.13, -0.045, Z - 0.05, 0.13, 0.045, Z + 0.05, 'slate');                    // hinge knuckle
-  if (ball) {                                                                    // cup the ball sits in
-    b(-0.1, FACE_Y - 0.52, Z - 0.1, 0.1, FACE_Y - 0.43, Z + 0.1, 'slate');
-    b(-0.102, FACE_Y - 0.45, Z + 0.09, 0.102, FACE_Y - 0.43, Z + 0.102, 'steel', false);
-    b(-0.065, FACE_Y - 0.43, Z - 0.065, 0.065, FACE_Y - 0.36, Z + 0.065, 'steel');
-  } else {                                                                       // clamp bracket on the back battens
-    b(-0.1, FACE_Y - 0.19, -0.2, 0.1, FACE_Y + 0.08, -0.105, 'steel');
-    b(-0.102, FACE_Y - 0.19, -0.202, 0.102, FACE_Y - 0.15, -0.103, 'slate', false);
-    b(-0.07, FACE_Y - 0.15, -0.22, -0.03, FACE_Y - 0.11, -0.2, 'haze'); b(0.03, FACE_Y - 0.15, -0.22, 0.07, FACE_Y - 0.11, -0.2, 'haze');
-  }
-  return g.geometry();
-}
-function baseGeo(hang, slot) {
-  const g = new Geo(), Z = POST_Z;
-  if (slot) {                                                                    // slim carriage riding in a floor slot / hatch
-    g.bx(-0.06, -0.35, Z - 0.08, 0.06, 0.09, Z + 0.08, 'slate');
-    g.bx(-0.062, 0.06, Z + 0.07, 0.062, 0.09, Z + 0.082, 'steel', false);       // worn top edge
-    for (const sx of [-1, 1]) g.bx(sx * 0.105 - 0.025, 0.04, Z - 0.055, sx * 0.105 + 0.025, 0.19, Z + 0.055, 'steel');
-    g.bx(-0.1, -0.02, Z - 0.1, 0.1, 0.03, Z + 0.1, 'navy');
-  } else if (!hang) {
-    g.bx(-0.3, 0, Z - 0.2, 0.3, 0.07, Z + 0.2, 'chestnut');                     // wooden sled
-    g.bx(-0.3, 0.0, Z + 0.2, 0.3, 0.022, Z + 0.203, 'walnut', false);           // its grain / scuffed foot
-    g.bx(-0.16, 0.038, Z + 0.2, 0.22, 0.05, Z + 0.203, 'walnut', false);
-    g.bx(-0.3, 0.058, Z + 0.2, 0.3, 0.07, Z + 0.203, 'tan', false);             // worn top edge
-    g.bx(-0.27, 0.07, Z - 0.17, 0.27, 0.09, Z + 0.17, 'slate');                  // steel base plate
-    g.bx(-0.272, 0.075, Z + 0.17, 0.08, 0.09, Z + 0.173, 'steel', false);       // worn front edge
-    g.bx(0.06, 0.09, Z + 0.02, 0.2, 0.092, Z + 0.15, 'navy', false);            // grime patch
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.bx(sx * 0.21 - 0.022, 0.09, Z + sz * 0.11 - 0.022, sx * 0.21 + 0.022, 0.11, Z + sz * 0.11 + 0.022, 'haze', false);
-    for (const sx of [-1, 1]) g.bx(sx * 0.125 - 0.025, 0.09, Z - 0.06, sx * 0.125 + 0.025, 0.19, Z + 0.06, 'steel');   // hinge cheeks
-  } else {
-    g.bx(-0.035, 0, Z - 0.035, 0.035, 0.95, Z + 0.035, 'steel');                 // hanger rod up into the ceiling rail
-    g.bx(-0.037, 0.0, Z - 0.037, 0.037, 0.12, Z + 0.037, 'slate', false);       // grime at its foot
-    g.bx(-0.15, 0.86, Z - 0.1, 0.15, 0.98, Z + 0.1, 'slate');                    // trolley
-    for (const sx of [-1, 1]) g.bx(sx * 0.1 - 0.035, 0.95, Z - 0.06, sx * 0.1 + 0.035, 1.04, Z + 0.06, 'haze');
-    g.bx(-0.2, -0.07, Z - 0.12, 0.2, 0, Z + 0.12, 'chestnut');                   // hanger block
-    g.bx(-0.2, -0.07, Z + 0.12, 0.2, -0.058, Z + 0.123, 'tan', false);           // worn lower edge
-    g.bx(-0.12, -0.04, Z + 0.12, 0.15, -0.03, Z + 0.123, 'walnut', false);      // grain
-    for (const sx of [-1, 1]) g.bx(sx * 0.125 - 0.025, -0.19, Z - 0.06, sx * 0.125 + 0.025, -0.07, Z + 0.06, 'steel');
-  }
-  return g.geometry();
-}
-// ---------- shatter chips: coarse voxel lists in each prop's own colours; [i, j, k, colour, sizeMul] ----------
-const CS = 0.0935;                                     // chip lattice (the old 11x11 disc)
-function paddleChips(sc) {
-  const L = [];
-  for (let j = -5; j <= 5; j++) for (let i = -5; i <= 5; i++) {
-    const d = Math.hypot(i, j); if (d > 5.45) continue;
-    const r = d * CS / SP;                               // same ring layout as the face
-    if (d > 4.6) L.push([i, j, 0, hexOf((i + j) & 1 ? sc.lip : ringCol(r - 1.5, sc)), 1.7]);   // rim: big chunks
-    else L.push([i, j, 0, hexOf(ringCol(r, sc)), 1]);
-    if (((i * 7 + j * 3) & 3) === 0) L.push([i, j, -1, hexOf(sc.back), 0.8]);
-  }
-  return L;
 }
 function ballChips(face) {
   const L = [], IR = ['midnight', 'void', 'navy', 'midnight', 'slate'];
@@ -520,8 +551,8 @@ function ballChips(face) {
   L.push([2, 6, 1, PAL.steel, 1.6], [3, 6, 1, PAL.slate, 1.3]);   // the cap
   return L;
 }
-const skullChip = (x, y, z) => z > 2 && ({ X: 'bone', o: 'void' })[skullAt(x, y)];
-const decoyChip = (x, y, z) => z > -1 && decoyRing(x, y);
+const skullChip = (x, y, z) => z > 2 && ({ X: 'bone', o: 'void' })[skull1At(x, y)];
+const decoyChip = (x, y, z) => { const s = decoyStroke(x, y, z); return s && s % 64 < 0.8 ? (s >= 128 ? 'yellow' : 'lime') : skullChip(x, y, z); };
 
 // ---------- shared geometry cache (built on first use) ----------
 const G = {};
@@ -580,33 +611,35 @@ class Prop {
     this.face.position.x = 0.02 * Math.sin(t * 11);
   }
 }
+function plateFace(p, c) {
+  const k = SCHEMES[c] ? c : 'lime';
+  return [shared(geo('plate_' + k, () => plateGeo(SCHEMES[k])), mat), geo('chipsP_' + k, () => plateChips(SCHEMES[k]))];
+}
 function paddle(o = {}) {
-  const c = SCHEMES[o.color] ? o.color : 'red', p = new Prop(o, 'target', false);
-  p.face = p.addFace(shared(geo('paddle_' + c, () => paddleFaceGeo(SCHEMES[c])), mat));
-  p.chips = geo('chipsP_' + c, () => paddleChips(SCHEMES[c]));
+  const p = new Prop(o, 'target', false), [face, chips] = plateFace(p, o.color);
+  p.face = p.addFace(face); p.chips = chips;
   return p;
 }
 function bomb(o = {}) {
   const p = new Prop(o, 'bomb', true), burn = !!o.burn;
-  p.face = p.addFace(shared(geo('bomb' + (burn ? '' : 'F'), () => ballGeo(skullPaint, !burn)), mat));
+  p.face = p.addFace(shared(geo('bomb' + (burn ? '' : 'F'), () => ballGeo(null, !burn)), mat));
   p.chips = geo('chipsB', () => ballChips(skullChip));
   p.addFuse(burn);
   return p;
 }
 function decoy(o = {}) {
   const p = new Prop(o, 'bomb', true);
-  p.face = p.addFace(shared(geo('decoyF', () => ballGeo(decoyPaint, true)), mat));
+  p.face = p.addFace(shared(geo('decoyF', () => ballGeo(decoyStroke, true)), mat));
   p.chips = geo('chipsD', () => ballChips(decoyChip));
   p.addFuse(false); p.decoy = true;
   return p;
 }
 function flipbomb(o = {}) {
-  const p = bomb(Object.assign({}, o, { burn: true })), c = SCHEMES[o.color] ? o.color : 'red';
-  p.face2 = p.addFace(shared(geo('paddle_' + c, () => paddleFaceGeo(SCHEMES[c])), mat)); p.face2.visible = false;
-  p.chips2 = geo('chipsP_' + c, () => paddleChips(SCHEMES[c]));
+  const p = bomb(Object.assign({}, o, { burn: true })), [face2, chips2] = plateFace(p, o.color);
+  p.face2 = p.addFace(face2); p.face2.visible = false; p.chips2 = chips2;
   return p;
 }
 // build every shared geometry now (a first bomb mid-stage must not cost a frame)
-function warm() { [paddle(), bomb(), decoy(), flipbomb()].forEach(() => {}); }
-B.Props = { paddle, bomb, decoy, flipbomb, warm, mat, Geo, sdf, cspec, SCHEMES, FACE_Y, PIVOT_Y, PADDLE_R, BOMB_R, POST_Z, CHIP_S: CS };
+function warm() { [paddle(), bomb(), decoy(), flipbomb(), paddle({ hang: true }), bomb({ hang: true }), paddle({ slot: true })].forEach(() => {}); }
+B.Props = { paddle, bomb, decoy, flipbomb, warm, mat, Geo, sdf, cspec, SCHEMES, FACE_Y, PIVOT_Y, PADDLE_R, PLATE_A, BOMB_R, POST_Z, CHIP_S: CS };
 })(window.BLAM);

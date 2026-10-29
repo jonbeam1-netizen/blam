@@ -285,6 +285,20 @@ const RELOAD_NAMES = { arcade: 'ARCADE', rclick: 'RIGHT CLICK', swipe: 'SWIPE DO
 const RELOAD_HELP = { arcade: 'SHOOT OR AIM AT THE SIDE PILLARS', rclick: 'RIGHT MOUSE BUTTON, ANYWHERE',
   swipe: 'SWIPE DOWN ANYWHERE', tap: 'TAP THE SIDE OF THE SCREEN' };
 const reloadSignText = () => 'RELOAD: ' + RELOAD_NAMES[G().reloadMode()];
+const soundSignText = () => { const S = B.SFX || {}; const v = S.muted ? 0 : (S.volume == null ? 0.35 : S.volume); return 'SOUND: ' + Math.round(v * 100) + '%'; };
+const musicSignText = () => 'MUSIC: ' + (B.Save.settings.music !== false ? 'ON' : 'OFF');
+// briefing SHOTS card caption for a magazine (landscape: two lines; portrait: line 0 only). ONE table for both cards,
+// named like the settings sign (0.007): SHOOT SIDE only in ARCADE, never in RIGHT CLICK / SWIPE DOWN / TAP SIDES
+const RELOAD_CARD = { arcade: ['SHOOT SIDE', 'TO RELOAD'], rclick: ['RIGHT CLICK', 'TO RELOAD'], swipe: ['SWIPE DOWN', 'TO RELOAD'], tap: ['TAP SIDES', 'TO RELOAD'] };
+UI.reloadCard = autoReload => autoReload ? ['AUTO', 'RELOAD'] : RELOAD_CARD[G().reloadMode()] || ['PRESS R', 'TO RELOAD'];
+// a stage tip about reloading ('SHOOT THE FRAME (OR R) TO RELOAD!' in range / alley / skyshow) is rewritten for the
+// current RELOAD TYPE so a RIGHT CLICK / SWIPE / TAP player is never told to shoot the frame (0.007)
+const RELOAD_TIP = { arcade: 'SHOOT THE FRAME (OR R) TO RELOAD!', rclick: 'RIGHT CLICK (OR R) TO RELOAD!', swipe: 'SWIPE DOWN TO RELOAD!', tap: 'TAP THE FRAME TO RELOAD!' };
+UI.reloadTip = (tip, ammo) => {
+  if (!tip || !/RELOAD/.test(tip) || !/FRAME|SIDE|PILLAR/.test(tip)) return tip;
+  if (ammo && ammo.autoReload) return 'AUTO RELOAD: JUST KEEP SHOOTING!';
+  return RELOAD_TIP[G().reloadMode()] || tip;
+};
 UI.reloadHelp = () => { const touch = B.Input.touch, m = G().reloadMode();
   return { group: touch ? 'PHONE: SWIPE DOWN / TAP SIDES' : 'PC: ARCADE / RIGHT CLICK', help: RELOAD_HELP[m] + (touch ? '' : '. KEY R ALWAYS WORKS') }; };
 UI.screens.settings = {
@@ -293,15 +307,21 @@ UI.screens.settings = {
     const tog = (key, label, apply) => ({ text: label + ': ' + onOff(st[key]), keep: true, color: 'slate', s: 0.036, act: sign => {
       B.Save.set(key, !B.Save.settings[key]); apply && apply(); sign.setText(label + ': ' + onOff(B.Save.settings[key])); } });
     this.menu = new Menu([
-      Object.assign(tog('dither', 'DITHER', () => g.applySettings()), { u: 0.31, v: 0.3 }),
-      Object.assign(tog('crosshair', 'CROSSHAIR', () => g.applySettings()), { u: 0.31, v: 0.47 }),
-      Object.assign(tog('shake', 'SCREEN SHAKE'), { u: 0.31, v: 0.64 }),
-      { text: 'GUN: ' + g.skinName(), keep: true, color: 'plum', s: 0.036, u: 0.66, v: 0.3, act: sign => { g.setSkin(g.skin + 1); sign.setText('GUN: ' + g.skinName()); } },
-      { text: 'NAME: ' + st.name, keep: true, color: 'blue', s: 0.036, u: 0.66, v: 0.47, act: sign => UI.prompt('PLAYER NAME (VERSUS)', B.Save.settings.name, 10, v => { if (v) { B.Save.set('name', v); sign.setText('NAME: ' + v); } }) },
-      { text: 'BACK', color: 'crimson', s: 0.045, u: 0.66, v: 0.64, act: () => g.go('title') },
-      { text: reloadSignText(), keep: true, color: 'amber', s: 0.036, u: 0.48, v: 0.81, act: sign => {
+      Object.assign(tog('dither', 'DITHER', () => g.applySettings()), { u: 0.31, v: 0.26 }),
+      Object.assign(tog('crosshair', 'CROSSHAIR', () => g.applySettings()), { u: 0.31, v: 0.4 }),
+      Object.assign(tog('shake', 'SCREEN SHAKE'), { u: 0.31, v: 0.54 }),
+      { text: 'GUN: ' + g.skinName(), keep: true, color: 'plum', s: 0.036, u: 0.66, v: 0.26, act: sign => { g.setSkin(g.skin + 1); sign.setText('GUN: ' + g.skinName()); } },
+      { text: 'NAME: ' + st.name, keep: true, color: 'blue', s: 0.036, u: 0.66, v: 0.4, act: sign => UI.prompt('PLAYER NAME (VERSUS)', B.Save.settings.name, 10, v => { if (v) { B.Save.set('name', v); sign.setText('NAME: ' + v); } }) },
+      { text: 'BACK', color: 'crimson', s: 0.045, u: 0.66, v: 0.54, act: () => g.go('title') },
+      { text: reloadSignText(), keep: true, color: 'amber', s: 0.036, u: 0.48, v: 0.84, act: sign => {
         const touch = B.Input.touch, key = touch ? 'reloadTouch' : 'reloadPC', list = RELOAD_TYPES[touch ? 'touch' : 'pc'];
-        B.Save.set(key, list[(list.indexOf(g.reloadMode()) + 1) % list.length]); sign.setText(reloadSignText()); } }
+        B.Save.set(key, list[(list.indexOf(g.reloadMode()) + 1) % list.length]); sign.setText(reloadSignText()); } },
+      { text: soundSignText(), keep: true, color: 'green', s: 0.034, u: 0.31, v: 0.68, act: sign => {
+        const S = B.SFX, steps = [0, 0.15, 0.35, 0.6, 1], cur = S.muted ? 0 : (S.volume == null ? 0.35 : S.volume);
+        let i = steps.findIndex(x => Math.abs(x - cur) < 0.02); i = (i + 1) % steps.length;
+        if (S.setVolume) S.setVolume(steps[i]); S.muted = steps[i] === 0; sign.setText(soundSignText()); } },
+      { text: musicSignText(), keep: true, color: 'green', s: 0.034, u: 0.66, v: 0.68, act: sign => {
+        const S = B.SFX, on = !(B.Save.settings.music !== false); B.Save.set('music', on); if (S.music) S.music(on); sign.setText(musicSignText()); } }
     ]);
   },
   exit() { this.menu.dispose(); },
@@ -402,16 +422,17 @@ UI.screens.scores = {
     const rows = [];
     for (const id of S.order) { const d = S.get(id); for (let v = 0; v < d.variants; v++) rows.push([(d.short || 'RANGE') + ' ' + (v + 1), id + ':' + v]); }
     rows.push(['COURSE', 'course']);
-    // rows squeeze from 14 px down to 9 px so every stage variant + COURSE fits above the BACK sign (12 rows max)
-    const n = Math.min(rows.length, 12), rh = Math.max(9, Math.min(14, Math.floor(126 / n)));
+    // rows squeeze from 14 px down to 9 px so every stage variant + COURSE fits above the BACK sign (14 rows max:
+    // 0.007, four stages = 13 variants + COURSE; 12 cut off SKY 3 and COURSE)
+    const n = Math.min(rows.length, 14), rh = Math.max(9, Math.min(14, Math.floor(126 / n)));
     H.plate(x0 - 8, y0 - 4, 312, Math.max(152, 26 + n * rh));
     const ab = ['BEGINNER', 'ADVANCED', 'VERY HARD', 'INSANE'];
-    ab.forEach((n, i) => H.text3c(n, x0 + 92 + i * cw - 30, y0 + 6, 'oxblood', 1));
+    ab.forEach((n, i) => H.text3c(n, x0 + 92 + i * cw - 30, y0 + 6, 'oxblood', 1, 'bone'));
     rows.slice(0, n).forEach(([label, key], r) => {
       const y = y0 + 20 + r * rh;
       H.rect(x0, y - 3, 296, 1, 'rust');
-      H.text3(label, x0 + 4, y + 1, 'umber', 1);
-      for (let i = 0; i < 4; i++) { const b = B.Save.best(key, i); H.text3c(b ? String(b) : '-', x0 + 92 + i * cw - 30, y + 1, b ? 'void' : 'chestnut', 1); }
+      H.text3(label, x0 + 4, y + 1, 'umber', 1, 'bone');
+      for (let i = 0; i < 4; i++) { const b = B.Save.best(key, i); H.text3c(b ? String(b) : '-', x0 + 92 + i * cw - 30, y + 1, b ? 'void' : 'chestnut', 1, 'bone'); }
     });
     statusLine('BUILD ' + G().BUILD);
   },
@@ -431,7 +452,7 @@ function shotsPillar(x, y, rule) {
   H.text3c('SHOTS', x + w / 2, y + 14, 'bone', 2, 'void');
   const r = rule || 'unlimited';
   if (r === 'unlimited' || (!r.mag && !r.cap)) { H.sprite(H.INF, x + w / 2 - 13, y + 52, 3, { X: 'bone' }, 'inf3'); H.text3c('NO LIMIT', x + w / 2, y + 80, 'lemon', 1, 'void'); }
-  else if (r.mag) { H.text7c(String(r.mag), x + w / 2, y + 40, 4, 'bone', 'void', 2); H.text3c('PER MAG', x + w / 2, y + 76, 'lemon', 1, 'void'); const rl = r.autoReload ? ['AUTO', 'RELOAD'] : ({ arcade: ['SHOOT SIDE', 'TO RELOAD'], rclick: ['RIGHT CLICK', 'TO RELOAD'], swipe: ['SWIPE DOWN', 'TO RELOAD'], tap: ['TAP SIDE', 'TO RELOAD'] })[G().reloadMode()] || ['SHOOT SIDE', 'TO RELOAD']; H.text3c(rl[0], x + w / 2, y + 86, 'bone', 1, 'void'); H.text3c(rl[1], x + w / 2, y + 93, 'bone', 1, 'void'); }
+  else if (r.mag) { H.text7c(String(r.mag), x + w / 2, y + 40, 4, 'bone', 'void', 2); H.text3c('PER MAG', x + w / 2, y + 76, 'lemon', 1, 'void'); const rl = UI.reloadCard(r.autoReload); H.text3c(rl[0], x + w / 2, y + 86, 'bone', 1, 'void'); H.text3c(rl[1], x + w / 2, y + 93, 'bone', 1, 'void'); }
   else { H.text7c(String(r.cap), x + w / 2, y + 40, 4, 'bone', 'void', 2); H.text3c('IN TOTAL', x + w / 2, y + 76, 'lemon', 1, 'void'); H.text3c('MAKE THEM', x + w / 2, y + 86, 'bone', 1, 'void'); H.text3c('COUNT!', x + w / 2, y + 93, 'bone', 1, 'void'); }
 }
 function timePillar(x, y, secs) {
@@ -474,11 +495,11 @@ UI.screens.briefing = {
       H.text3("DON'T SHOOT!", 18, 186, 'void', 2); H.text3('LIFE -1', 18, 199, 'crimson', 2);
       // a stage's own don't-shoot icon (a face) keeps its read: the X moves to its lower-right corner
       if (def.drawDont) { def.drawDont(150, 196, 13, t); H.redX(161, 205, 5); } else { H.bombIcon(150, 196, 13, t); H.redX(150, 196, 9); }
-    } else if (b.tip) H.text3(b.tip, 14, 186, 'lemon', 1, 'void');
+    } else if (b.tip) H.text3(UI.reloadTip(b.tip, c.ammo), 14, 186, 'lemon', 1, 'void');
     shotsPillar(194, 42, c.ammo); timePillar(262, 42, c.time);
     H.text3(this.a.label || '', 194, 182, 'yellow', 1, 'void');
     H.text3((c.title || '') + (c.subtitle ? ': ' + c.subtitle : ''), 194, 190, 'mist', 1, 'void');
-    if (b.dont && b.tip) H.text3(b.tip, 194, 198, 'lemon', 1, 'void');
+    if (b.dont && b.tip) H.text3(UI.reloadTip(b.tip, c.ammo), 194, 198, 'lemon', 1, 'void');
     if (vs) { const P = run.players; H.text3(P[0].name, 194, 206, 'coral', 1, 'void'); H.text3('VS', 194 + H.text3w(P[0].name) + 5, 206, 'bone', 1, 'void'); H.text3(P[1].name, 194 + H.text3w(P[0].name + ' VS ') + 1, 206, 'ice', 1, 'void'); }
     if (!vs && blink(t)) H.text3c(G().touch ? 'TAP TO SKIP' : 'CLICK OR TAP TO SKIP', RW / 2, 222, 'yellow', 1, 'void');
     if (vs) H.text3c('GET READY... ' + Math.max(0, Math.ceil((run.wall0 - performance.now()) / 1000)), RW / 2, 222, 'yellow', 1, 'void');
@@ -545,7 +566,7 @@ UI.screens.results = {
     if (r.cleared) H.starburst(RW / 2, 30, 34, t * 0.8, 'yellow', 'orange', 14);
     H.text7c(r.cleared ? 'CLEARED!' : 'FAILED!', RW / 2, 14, 5, r.cleared ? 'gold' : 'red', 'void', 2);
     H.plate(18, 66, 196, 118);
-    const row = (i, k, v, c = 'void') => { H.text3(k, 30, 78 + i * 20, 'umber', 2); H.text3r(v, 202, 78 + i * 20, c, 2); };
+    const row = (i, k, v, c = 'void') => { H.text3(k, 30, 78 + i * 20, 'umber', 2, 'bone'); H.text3r(v, 202, 78 + i * 20, c, 2, 'bone'); };
     row(0, 'HITS', r.hits + (this.a.versus ? '' : '/' + r.quota), r.hits >= r.quota ? 'forest' : 'crimson');
     row(1, 'HIT %', r.pct + '%');
     row(2, 'FASTEST', isFinite(r.fastest) ? r.fastest.toFixed(2) + 'S' : '-');
@@ -692,6 +713,9 @@ UI.screens.lobby = {
 // =========================================================================================
 // VERSUS RESULTS: WINNER / LOSER with the duck
 // =========================================================================================
+// the verdict line under the WINNER! / LOSER... banner: [text, rows colour]; shared with portrait.js
+const vsVerdict = UI.vsVerdict = (win, me, P) => win < 0 ? ['EVEN MATCH', 'bone']
+  : win === me ? ['YOU WIN', 'gold'] : [String(P[win].name || ('P' + (win + 1))).toUpperCase() + ' WINS', win ? 'blue' : 'red'];
 UI.screens.vsresults = {
   enter(a) {
     this.a = a; this.t = 0; this.done = false; const g = G(), run = a.run, P = run.players;
@@ -709,13 +733,15 @@ UI.screens.vsresults = {
     const run = this.a.run, me = run.local, P = run.players;
     H.dim(0, 0, 356, RH); H.dim(356, 0, RW - 356, 60);                       // like the results card: Deputy Duck (bottom-right) stays bright
     const word = this.win < 0 ? 'DRAW!' : this.win === me ? 'WINNER!' : 'LOSER...';
-    if (this.win === me) H.starburst(RW / 2, 30, 34, t * 0.8, 'yellow', 'orange', 14);
-    H.text7c(word, RW / 2, 14, 5, this.win < 0 ? 'bone' : this.win === me ? 'gold' : 'blue', 'void', 2);
+    // 0.007 layout: banner (y 5..33), then ONE centred verdict line (y 40..54: YOU WIN / <NAME> WINS), cards at 64
+    if (this.win === me) H.starburst(RW / 2, 19, 30, t * 0.8, 'yellow', 'orange', 14);
+    H.text7c(word, RW / 2, 5, 4, this.win < 0 ? 'bone' : this.win === me ? 'gold' : 'blue', 'void', 2);
+    const vl = vsVerdict(this.win, me, P), vsc = H.text7w(vl[0], 2) > RW - 24 ? 1 : 2;
+    H.text7c(vl[0], RW / 2, vsc === 2 ? 40 : 44, vsc, vl[1], 'void', 2);
     [0, 1].forEach(i => {
       const p = P[i], x = i ? 214 : 30, C = H.PCOL[i];
-      H.box(x, 64, 150, 120, C[2], C[1], 'void');
-      H.text3c(p.name, x + 75, 70, 'bone', 2);
-      if (this.win === i) H.text7c(i === me ? 'YOU WIN' : 'WINS', x + 75, 52, 1, 'gold', 'void', 2);
+      H.box(x, 64, 150, 120, C[2], C[1], 'void', this.win === i ? 'yellow' : 'void');
+      H.text3c(p.name + (i === me ? ' (YOU)' : ''), x + 75, 70, 'bone', 2);
       const shots = Math.max(p.shots, p.hits), pct = shots ? Math.round(p.hits / shots * 100) : 0;
       [['HITS', p.hits], ['HIT %', pct + '%'], ['FASTEST', isFinite(p.fastest) ? p.fastest.toFixed(2) + 'S' : '-'], ['SCORE', p.score], ['LIVES', p.lives]].forEach(([k, v], r) => {
         H.text3(k, x + 10, 90 + r * 17, C[0], 2); H.text3r(String(v), x + 140, 90 + r * 17, 'bone', 2);

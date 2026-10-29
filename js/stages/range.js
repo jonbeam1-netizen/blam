@@ -4,6 +4,8 @@
    Bullseye paddles on carriages start FAR at the end of a lane, swing up in from the side,
    SCOOT FORWARD in steps toward the player while they hold, then drop. Far = more points.
    Higher tiers: bomb paddles (skull, don't shoot), faster scoots, shorter holds, more at once.
+   The targets are BLAM.Props hex plates (lime, black rings, yellow bull); Very Hard / Insane add decoys, flip
+   bombs and hidden bombs (a plate with a bomb tucked behind it, #41).
    Everything is a pure function of (seed, tier, variant) and the stage clock.
    ========================================================================================= */
 window.BLAM = window.BLAM || {};
@@ -85,7 +87,7 @@ function buildEnv() {
   return group;
 }
 
-// ---------- paddle models: BLAM.Props (core/props.js) builds and shares them ----------
+// ---------- paddle models: BLAM.Props (core/props.js) builds and shares them (hex target plates since the 3rd props pass) ----------
 // (pivot at y 0.13, face centre 1.4175 above it: Props.PIVOT_Y / Props.FACE_Y, unchanged from the slab paddles)
 B.Props.warm();
 
@@ -166,34 +168,48 @@ function lifeOf(sp) {
 }
 // flip bomb (#24, optional): the fuse burns down; FLIP_T s of turning, then it is a real target for its last moments
 const FLIP_T = 0.12;
+// hidden bomb (#41, Very Hard / Insane): a plate with a bomb tucked right behind it. The first shot breaks the plate as
+// usual (points); the bomb is revealed where the plate stood, its fuse lit and sparking. It springs to attention for HB_GRACE s
+// (not hittable yet: an already queued double tap hits nothing), stays live until HB_BEAT, then drops (shootable for the
+// first 70 % of the drop, like any exit). It is never hittable through the plate: its ball only becomes a hit part at the
+// reveal. Everything after the reveal is a pure function of (lt, the local time the plate broke).
+const HB_GRACE = 0.15, HB_BEAT = 0.6, HB_SPAN = HB_BEAT + LEAVE;
+const HB_HOLD = +(HB_SPAN - LEAVE * 0.3).toFixed(3);   // a lane holding a hidden bomb stays reserved this much longer
 class Paddle extends T.Target {
   constructor(sp) {
-    super(sp.bomb ? 'bomb' : 'target');
+    super(sp.bomb && !sp.hidden ? 'bomb' : 'target');
     this.sp = sp; this.hang = sp.mo === 'drop';
     const P = B.Props, o = { hang: this.hang };
-    this.prop = sp.flip ? P.flipbomb(o) : sp.decoy ? P.decoy(o) : sp.bomb ? P.bomb(o) : P.paddle(o);
+    this.prop = sp.flip ? P.flipbomb(o) : sp.decoy ? P.decoy(o) : sp.bomb && !sp.hidden ? P.bomb(o) : P.paddle(o);
     this.pivot = this.prop.pivot; this.disc = this.prop.face; this.disc2 = this.prop.face2 || null;
     this.group.add(this.prop.group);
     const pp = this.prop.register(this); this.pBomb = pp[0]; this.pGood = pp[1] || null;
+    this.cur = this.prop; this.revealLt = -1; this.boom = false;
+    if (sp.hidden) {                                  // the bomb behind: built now, out of sight, NOT a hit part yet
+      this.hb = P.bomb(o); this.hb.group.visible = false; this.group.add(this.hb.group);   // 4 draw calls, like the bomb slot it took
+      this.pHidden = this.hb.register(this)[0]; this.parts.pop();
+    }
     this.step = 0; this.lastLt = 0; this.deadLt = -1; this.P = {}; this.announced = false;
   }
   // the hanger is built hanging (not a flipped floor paddle): mirror the pivot's x / y turns
-  turn(rx, ry, rz) { const m = this.hang ? -1 : 1; this.pivot.rotation.set(m * rx, m * ry, rz); }
+  turn(rx, ry, rz) { const m = this.hang ? -1 : 1; this.cur.pivot.rotation.set(m * rx, m * ry, rz); }
+  // the carriage (post + base) leaves WITH the paddle: it sinks out of sight (hangers: up into the ceiling)
+  sink(k) { this.group.position.y += (this.hang ? 1.2 : -0.5) * E.inCubic(Math.max(0, Math.min(1, k))); }
   update(lt) {
+    if (this.revealLt >= 0) return this.updateReveal(lt);
     const P = pose(this.sp, lt, this.P), sp = this.sp, pr = this.prop; this.lastLt = lt;
-    // the carriage (post + base) leaves WITH the paddle: it sinks out of sight (hangers: up into the ceiling) in the
-    // last 0.1 s of its life, which is past the shootable window (70 % of the exit), or at the end of the shot fold
-    const sink = k => this.group.position.y += (this.hang ? 1.2 : -0.5) * E.inCubic(Math.max(0, Math.min(1, k)));
+    // the carriage sinks in the last 0.1 s of its life, which is past the shootable window (70 % of the exit), or at
+    // the end of the shot fold
     this.group.position.set(P.x, this.hang ? HANG_Y : P.y, P.z);
     if (!this.alive) {                                                      // shot: the post folds down behind
       if (this.deadLt < 0) this.deadLt = lt;
       const p = Math.min(1, (lt - this.deadLt) / 0.4);
-      this.group.visible = true; pr.hide(); sink((p - 0.55) / 0.45);
+      this.group.visible = true; pr.hide(); this.sink((p - 0.55) / 0.45);
       this.turn(-(Math.PI / 2) * E.inCubic(p), P.ry, P.rz);
       return p >= 1 || P.done;
     }
     this.group.visible = P.visible;
-    if (!P.shootable && lt > sp.swing) sink((lt - (lifeOf(sp) - 0.1)) / 0.1);
+    if (!P.shootable && lt > sp.swing) this.sink((lt - (lifeOf(sp) - 0.1)) / 0.1);
     this.turn(P.rx, P.ry, P.rz);
     this.shootable = P.shootable;
     let fuse = 1;
@@ -210,12 +226,49 @@ class Paddle extends T.Target {
     if (this.kind === 'bomb') pr.sparkle(lt, fuse < 0.35);
     return P.done;
   }
+  // the revealed bomb: springs to attention where the plate stood (lane centre, floor height, the stop it was scooting
+  // to; an outBack hop over HB_GRACE), its lit fuse sparking hot and big for the beat, drops. Shot: it folds away like
+  // any hit target.
+  updateReveal(lt) {
+    const hb = this.hb, q = lt - this.revealLt, A = this.R0; this.lastLt = lt;
+    const g = Math.min(1, q / HB_GRACE), e = E.outBack(g), s = 1 - e;
+    this.group.visible = true;
+    this.group.position.set(A.x * s + A.xl * e, this.hang ? HANG_Y : A.y * s, A.z + (A.zt - A.z) * E.outCubic(g));
+    if (!this.alive) {
+      const p = Math.min(1, (lt - this.deadLt) / 0.4);
+      hb.hide(); this.sink((p - 0.55) / 0.45); this.turn(-(Math.PI / 2) * E.inCubic(p), 0, 0);
+      return p >= 1;
+    }
+    const d = Math.max(0, (q - HB_BEAT) / LEAVE);                           // the drop after the beat
+    this.turn(A.rx * s - (Math.PI / 2) * E.inCubic(Math.min(1, d)), A.ry * s, A.rz * s);
+    this.shootable = q >= HB_GRACE && d < 0.7;
+    hb.sparkle(lt, true); hb.spark.scale.multiplyScalar(1.45);              // a hot, big spark
+    if (d >= 1) { this.group.visible = false; return true; }
+    this.sink((q - (HB_SPAN - 0.1)) / 0.1);
+    return false;
+  }
+  reveal() {
+    const sp = this.sp, lt = this.lastLt, P0 = pose(sp, lt), k = Math.ceil((P0.z - sp.z0) / sp.sd - 1e-6);
+    this.R0 = { x: P0.x, y: P0.y, z: P0.z, rx: P0.rx, ry: P0.ry, rz: P0.rz, xl: LANES[sp.lane],
+      zt: sp.mo === 'scoot' ? sp.z0 + Math.max(0, Math.min(sp.steps - 1, k)) * sp.sd : P0.z };
+    this.revealLt = lt; this.alive = true; this.kind = 'bomb'; this.shootable = false; this.deadLt = -1;
+    this.parts = [this.pHidden];
+    this.prop.group.visible = false; this.hb.group.visible = true; this.hb.show(); this.cur = this.hb; this.pivot = this.hb.pivot;
+    this.hb.sparkle(lt, true);
+    this.group.updateMatrixWorld(true);                    // the fuse catches: a spit of sparks where it burns
+    T.sparks(new THREE.Vector3().setFromMatrixPosition(this.hb.spark.matrixWorld), 7, ['lemon', 'yellow', 'orange'], 1.4, 0.035);
+    B.SFX.play('bombReveal', { u: R.toPx(this.group.position)[0] / R.RW });
+  }
   shatter(point, opts) {
+    if (this.revealLt >= 0 && !this.boom) return;          // a late hit confirmation for the plate (versus): the bomb stays
     super.shatter(point, opts);
-    this.group.visible = true; this.prop.hide();                            // keep the carriage, it folds away
+    this.group.visible = true; this.cur.hide();                             // keep the carriage, it folds away
     this.deadLt = this.lastLt;
+    if (this.hb && this.revealLt < 0) this.reveal();       // a hidden bomb: the plate broke, the bomb stands there
   }
   explode(point) {
+    if (this.hb && this.revealLt < 0) this.shatter(point); // (versus: the rival shot the revealed bomb first) the plate goes too
+    this.boom = true;
     const f = this.parts[0].mesh; f.updateMatrixWorld(true);
     const c = new THREE.Vector3().setFromMatrixPosition(f.matrixWorld);
     T.burst(c, 1);
@@ -248,6 +301,7 @@ function config(tier, v) {
   c.autoReload = false;                              // per-stage option: true = the old automatic reload
   c.flipbomb = (tier | 0) >= 2;                      // flip bombs (#24 optional), Very Hard / Insane only
   c.decoy = (tier | 0) >= 2;                         // decoys (bombs painted like targets, #35), Very Hard / Insane only
+  c.hiddenBomb = (tier | 0) >= 2;                    // a bomb tucked behind a plate (#41), Very Hard / Insane only
   c.ammo = [
     'unlimited',
     { mag: 8, reloadTime: b.rel, autoReload: c.autoReload },
@@ -267,6 +321,9 @@ function pickMotion(rng) {
 //  - bombs <= bombCap share of all spawns so far (checked as they are made), never two bombs in a row,
 //  - a bomb only appears while at least as many real targets are up (and staying a while) as bombs,
 //  - so real targets keep flowing and the quota (a share of the REAL targets) is always reachable.
+// A bomb slot becomes a flip bomb, a decoy or (Very Hard / Insane, #41) a HIDDEN bomb: a real plate with a bomb behind it
+// (sp.bomb stays true: it takes the bomb share and is a bonus like a flip bomb, never counted toward the quota). The hidden
+// roll reuses flipRoll, so a seed that never rolls one keeps the exact same timeline.
 function timeline(c, rng) {
   const out = [], floorFree = LANES.map(() => 0), hangFree = LANES.map(() => 0);
   const sd = +((Z_NEAR - Z_FAR) / (c.steps - 1)).toFixed(3);
@@ -299,10 +356,12 @@ function timeline(c, rng) {
       sp.bomb = true; bombs++;
       const flipAt = life - LEAVE - 0.4;                        // real target for its last ~0.4 s on screen
       if (c.flipbomb && flipRoll < 0.45 && flipAt > sp.swing + 0.25) sp.flip = +flipAt.toFixed(3);
+      else if (c.hiddenBomb && flipRoll >= 0.6 && flipRoll < 0.8 && (mo === 'scoot' || mo === 'pop')) sp.hidden = true;   // #41
       else if (c.decoy && flipRoll >= 0.8) sp.decoy = true;          // painted like a target: still a bomb (~1 in 5 bombs)
     }
     out.push(sp);
-    (mo === 'drop' ? hangFree : floorFree)[lane] = t + life + 0.25;
+    // a hidden bomb can outlive its plate by HB_HOLD (shot at the last moment + the beat + the drop): keep its lane clear
+    (mo === 'drop' ? hangFree : floorFree)[lane] = t + life + 0.25 + (sp.hidden ? HB_HOLD : 0);
     t += rng.range(c.gap[0], c.gap[1]);
   }
   // the quota is a share of the REAL targets this seed produced (flip bombs are a bonus, never counted);
@@ -316,9 +375,22 @@ function timeline(c, rng) {
 const STEP_PTS = [300, 200, 150, 120, 100];
 function points(sp, lt) { return (STEP_PTS[Math.min(STEP_PTS.length - 1, pose(sp, lt).step)] || 100) + (sp.flip ? 100 : 0) + (sp.quick ? 50 : 0); }
 function briefing(c) {
-  const tip = c.ammo && c.ammo.mag ? 'SHOOT THE FRAME (OR R) TO RELOAD!' : c.flipbomb ? 'BURNT FUSE = BOMB FLIPS: SHOOT IT!' : 'FAR AWAY = MORE POINTS';
+  const tip = c.ammo && c.ammo.mag ? 'SHOOT THE FRAME (OR R) TO RELOAD!' : c.hiddenBomb && c.variant === 2 ? 'BOMB BEHIND THE PLATE? HOLD FIRE!'
+    : c.flipbomb ? 'BURNT FUSE = BOMB FLIPS: SHOOT IT!' : 'FAR AWAY = MORE POINTS';
   return { rule: [['SHOOT ', 'void'], [c.quota + ' TARGETS', 'red'], [' OR MORE!', 'void']], icon: 'bullseye', unit: 'TARGETS',
     dont: c.bomb > 0 ? 'bomb' : null, tip };
+}
+// briefing card icon (stage hook, ENGINE.md "Briefing icons"): the lime hex plate, ~2r across (the HUD default is the old
+// red bullseye). The don't-shoot sticker keeps the HUD's bomb.
+function drawIcon(cx, cy, r) {
+  const H = B.HUD, k = Math.ceil(r) + 2, a = 0.88 * r;
+  H.draw(H.pixImg('rangePlate' + r, 2 * k + 1, 2 * k + 1, (x, y) => {
+    const px = x - k, py = y - k, h = Math.max(Math.abs(py), 0.866 * Math.abs(px) + 0.5 * Math.abs(py));
+    if (h > a + 1.2) return null; if (h > a) return 'void';
+    if (h > a - 1.2) return py < -0.3 * a ? 'lemon' : py > 0.3 * a ? 'green' : 'lime';   // the chamfer: lit top, shaded bottom
+    const d = Math.hypot(px, py) / a;
+    return d < 0.21 ? 'yellow' : d < 0.38 ? 'void' : d < 0.57 ? 'lime' : d < 0.74 ? 'void' : 'lime';
+  }), cx - k, cy - k);
 }
 // title-screen decoration: paddles cycling forever in the back lanes (shootable for fun)
 function decor() {
@@ -341,5 +413,5 @@ function decor() {
   };
 }
 B.Stage.register({ id: 'range', name: 'SHOOTING RANGE', short: 'RANGE', variants: 4, variantNames: VARIANT_NAMES, penalty: -300,
-  buildEnv, config, timeline, makeTarget: sp => new Paddle(sp), points, briefing, decor, pose, LANES });
+  buildEnv, config, timeline, makeTarget: sp => new Paddle(sp), points, briefing, drawIcon, decor, pose, LANES });
 })(window.BLAM);

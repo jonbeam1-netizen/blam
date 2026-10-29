@@ -6,7 +6,7 @@
 window.BLAM = window.BLAM || {};
 (function (B) {
 const R = B.R, I = B.Input, H = B.HUD, S = B.Stage, Tg = B.Targets, Save = B.Save, SFX = B.SFX, UI = B.UI, N = B.Net;
-const BUILD = '0.006';                      // bump on every publish (shown on the title status line)
+const BUILD = '0.007';                      // bump on every publish (shown on the title status line)
 const Q = new URLSearchParams(location.search);
 // ?slow=0.25 (dev/testing): single-player stage clock runs at that rate, so slow tools (screenshot -> click
 // takes seconds) can still shoot a target that is really there. Versus always runs on the wall clock.
@@ -55,7 +55,9 @@ try { for (let i = 0; i < G.skins.length; i++) if (i !== G.skin) G.gun.setSkin(i
 const GUN_AWAY = { briefing: 1, results: 1, final: 1, vsresults: 1 };
 G.gunLayout = () => {
   const base = G.touch && R.frame.portrait ? 'mobile' : 'desktop', n = G.screenName;
-  try { G.gun.setLayout(GUN_AWAY[n] ? base + '-away' : n !== 'play' ? base + '-low' : base); } catch (e) {}   // menus: '-low' (desktop-low = the corner spot)
+  // versus play (landscape): 'desktop-versus' keeps the gun off P2's HUD half (name / counter / ammo capsule)
+  const play = base === 'desktop' && G.run && G.run.versus && B.Guns && B.Guns.LAYOUTS && B.Guns.LAYOUTS['desktop-versus'] ? 'desktop-versus' : base;
+  try { G.gun.setLayout(GUN_AWAY[n] ? base + '-away' : n !== 'play' ? base + '-low' : play); } catch (e) {}   // menus: '-low' (desktop-low = the corner spot)
 };
 I.onLayout(touch => { G.touch = touch; G.gunLayout(); });
 R.resizeHooks.push(() => G.gunLayout());     // rotating a phone swaps the layout
@@ -64,16 +66,38 @@ R.resizeHooks.push(() => G.gunLayout());     // rotating a phone swaps the layou
 // spots: [u, v (feet), plane z, scale, mirror]. Right-hand spots are mirrored (negative x scale) so he faces the
 // card; check pass: 1.25 -> 1.0 / 0.95, so every pose stays inside the frame and clear of the panels
 const DUCK_SPOTS = { title: [0.12, 0.93, 1.2, 1.3, false], brief: [0.885, 0.93, 2.0, 1.0, true], results: [0.9, 0.935, 2.0, 0.95, true] };
+// shot gag keep-in-frame (0.007): the flop (lying flat, the fuming arm shake and the overshoot when he springs back
+// to idle, ~1.3-2.0 s) reached up to 3 % past the game rect edge (title: left, brief / results: right, mini HUD duck:
+// left). From the shot until he has settled (GAG_LEN) the holder eases INWARD by GAG_NUDGE[mode] = [du, dv]
+// (fractions of the game rect) and back. Vertex extents over every frame of the gag at 7 aim directions: the flop
+// now stays inside the rect as far as his resting pose does (see ENGINE.md, Build 0.007).
+const GAG_NUDGE = { title: [0.05, 0], brief: [-0.04, 0], results: [-0.05, 0], mini: [0.013, 0] };
+const GAG_LEN = 2.3, duckBase = new THREE.Vector3(), gagTo = new THREE.Vector3();
+let gagT = 0;
+function gagStart() {                                       // target spot, computed once (camera steady at the shot)
+  const n = GAG_NUDGE[G.duckMode] || [0, 0], s = DUCK_SPOTS[G.duckMode];
+  if (G.duckMode === 'mini') R.screenToCam(0.054 + n[0], 0.978 + n[1], 1.4, gagTo);
+  else if (s) R.screenToWorld(s[0] + n[0], s[1] + n[1], s[2], gagTo); else gagTo.copy(duckBase);
+  gagT = GAG_LEN;
+}
+function gagNudge(dt) {
+  if (gagT <= 0) return;
+  gagT = Math.max(0, gagT - dt);
+  const g = GAG_LEN - gagT, sst = (a, b, x) => { const k = Math.min(1, Math.max(0, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
+  const e = gagT > 0 ? sst(0, 0.18, g) * (1 - sst(GAG_LEN - 0.25, GAG_LEN, g)) : 0;
+  duckHolder.position.lerpVectors(duckBase, gagTo, e);
+}
 G.placeDuck = mode => {
+  gagT = 0;
   G.duckMode = mode; R.steadyCamera();
   if (mode === 'hidden') { duckHolder.visible = false; return; }
   duckHolder.visible = true;
   if (mode === 'mini') {                                                    // mini duck, bottom-left corner of the play HUD
-    R.camera.add(duckHolder); R.screenToCam(0.054, 0.978, 1.4, duckHolder.position);
+    R.camera.add(duckHolder); R.screenToCam(0.054, 0.978, 1.4, duckHolder.position); duckBase.copy(duckHolder.position);
     duckHolder.scale.setScalar(0.19); duckHolder.rotation.set(0.05, 0.3, 0);
   } else {
     const s = DUCK_SPOTS[mode] || DUCK_SPOTS.title;
-    R.scene.add(duckHolder); R.screenToWorld(s[0], s[1], s[2], duckHolder.position);
+    R.scene.add(duckHolder); R.screenToWorld(s[0], s[1], s[2], duckHolder.position); duckBase.copy(duckHolder.position);
     duckHolder.scale.set(s[4] ? -s[3] : s[3], s[3], s[3]); duckHolder.rotation.set(0, s[4] ? -0.3 : 0.3, 0);
   }
 };
@@ -100,7 +124,7 @@ G.duckShot = ray => {
   // duck.js returns true and keeps the intersection in duck.lastHit; the placeholder returns the intersection
   const ix = h.point ? h : G.duck.lastHit, p = ix && ix.point ? _dp.copy(ix.point) : G.duck.group.getWorldPosition(_dp);
   try { G.duck.hit(); } catch (e) {}
-  duckGag = DUCK_GAG; duckBackT = DUCK_GAG + 0.05; SFX.play('duckHit');
+  duckGag = DUCK_GAG; duckBackT = DUCK_GAG + 0.05; gagStart(); SFX.play('duckHit');
   Tg.sparks(p, 6, ['lemon', 'yellow', 'bone'], G.duckMode === 'mini' ? 0.25 : 1.4, G.duckMode === 'mini' ? 0.008 : 0.03);
   return true;
 };
@@ -205,12 +229,16 @@ G.applySettings = () => {
 // =========================================================================================
 // Flow
 // =========================================================================================
+const FX_SCREENS = { results: 1, vsresults: 1, gameover: 1, final: 1 };
 const KEEP_RUN = { play: 1, briefing: 1, results: 1, vsresults: 1, gameover: 1, final: 1 };
 G.go = (name, arg) => {
   const scr = UI.screens[name]; if (!scr) { console.warn('no screen', name); return; }
+  const prev = G.screenName;
   if (G.screen && G.screen.exit) G.screen.exit();
   if (!KEEP_RUN[name] && G.run) { G.run.dispose(); G.run = null; }
   if (name === 'title' || name === 'briefing') { Tg.clearDecals(); }
+  // 0.007: course-clear confetti (2.6 s chips) and a stage's last sparks / smoke must not drift into the next screen
+  if (FX_SCREENS[prev] || name === 'title' || name === 'briefing') { try { Tg.clearChips(); } catch (e) {} }
   if (name !== 'play') G.vsWait = null;
   G.screen = scr; G.screenName = name;
   scr.enter(arg || {});
@@ -319,6 +347,7 @@ function step(dt, draw) {
   const a = I.aim, ax = a.u * 2 - 1, ay = 1 - a.v * 2;
   try { G.gun.setAim(ax, ay); G.gun.update(dt, G.t); } catch (e) { if (!G.gunErr) { G.gunErr = 1; console.error(e); } }
   duckGag = Math.max(0, duckGag - dt);
+  if (duckHolder.visible) gagNudge(dt);
   if (duckBackT > 0) { duckBackT -= dt; if (duckBackT <= 0) try { G.duck.setPose(duckBack); } catch (e) {} }
   try { G.duck.lookAt(ax, ay); G.duck.update(dt, G.t); } catch (e) { if (!G.duckErr) { G.duckErr = 1; console.error(e); } }
   if (G.screen) G.screen.update(dt, G.t);

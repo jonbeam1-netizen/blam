@@ -654,6 +654,9 @@ const LAYOUTS = {
 };
 LAYOUTS['desktop-low'] = Object.assign({}, LAYOUTS.desktop, { x: 0.74, y: -0.38, follow: 0.035, followR: 0.06 });
 LAYOUTS['mobile-low'] = Object.assign({}, LAYOUTS.mobile, { x: 0.74, y: -0.42, follow: 0.035, followR: 0.06 });
+// 0.007 versus play (landscape): the right-hand HUD half holds P2's name, hit counter and ammo capsule, so the gun
+// stands between the centre timer and P2's name label instead of on top of them (a touch smaller)
+LAYOUTS['desktop-versus'] = Object.assign({}, LAYOUTS.desktop, { x: 0.29, y: -0.34, s: 0.6 });
 LAYOUTS['desktop-away'] = Object.assign({}, LAYOUTS['desktop-low'], { y: LAYOUTS['desktop-low'].y - 0.62 });
 LAYOUTS['mobile-away'] = Object.assign({}, LAYOUTS.mobile, { y: LAYOUTS.mobile.y - 0.62 });
 const LKEYS = ['near', 'nearR', 'roll', 'follow', 'followR', 'lift', 'rollX', 'rollY'];

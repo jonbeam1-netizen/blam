@@ -448,11 +448,11 @@ function buildOuter(fr) {
         const y = k ? gy + gh - 10 : gy;
         P(x0 - 2, y, cw + 4, 10, 'void'); P(x0 - 1, y + 1, cw + 2, 8, 'chestnut'); P(x0 - 1, y + 1, cw + 2, 2, 'tan'); P(x0 - 1, y + 7, cw + 2, 2, 'walnut');
       }
-      for (let y = gy + 26; y < gy + gh - 24; y += 44) {                     // bullseye medallions
+      for (let y = gy + 26; y < gy + gh - 24; y += 44) {                     // hex-plate medallions (#50: match the range target)
         const cx = x0 + cw / 2, r = Math.min(7, (cw >> 1) - 2);
         for (let yy = -r - 1; yy <= r + 1; yy++) for (let xx = -r - 1; xx <= r + 1; xx++) {
-          const d = Math.hypot(xx, yy) / r; if (d > 1.15) continue;
-          P(Math.round(cx + xx), y + yy, 1, 1, d > 1 ? 'void' : d < 0.3 ? 'yellow' : d < 0.55 ? 'red' : d < 0.78 ? 'bone' : 'red');
+          const d = Math.max(Math.abs(yy), Math.abs(xx) * 0.866 + Math.abs(yy) * 0.5) / r; if (d > 1.18) continue;
+          P(Math.round(cx + xx), y + yy, 1, 1, d > 1 ? 'void' : d < 0.3 ? 'yellow' : d < 0.5 ? 'void' : d < 0.68 ? 'lime' : d < 0.84 ? 'void' : 'lime');
         }
       }
     }
