@@ -36,6 +36,19 @@
      FAR = the real plate's flat paint (scaled), everything else sunk to a dark tone; NEAR = paper / cardboard /
      crayon, the plate's black rings cut out (tabs hold the middle) so the skull shows through. Shared tells: a
      longer fuse + spark over the top, the skull through the rings, a slight tilt / off size, the wobble.
+     ROUND 2 (Jon 2026-10-29: picks A, C, E; B, D, F PARKED, code kept). New variants a2 / c2 / e2 sit next to a / c / e
+     (round 1 untouched). Far away they pass for a plate at a glance; the tell when you look is the SKULL through ring
+     gaps a bit wider than a real plate's (TRUE holes at both LODs), and everything that is not plate paint (iron,
+     cardboard, tape, arms, mittens, legs, shoes) keeps its TRUE colour far away (flat, a touch brighter).
+     A2 SLOPPY PAINT 2  the bomb really painted as a plate: thick complete bands (ragged brush edges, skips, a missed
+                     patch, pinholes, drips over the bare rings), the two black rings left bare (skull shows), a wobbly hex
+                     border. Skips close up far away, so the far look stays A's. Unmask: the paint flakes off.
+     C2 CARDBOARD RIM  a plate-size cardboard hex RIM (corrugated cut edges, bare edges, a torn liner showing the
+                     flutes) round an OPEN middle; the bomb inside wears A's thin strokes (they fill the hex far away).
+                     Two strips of duct tape from the rim over the inner cut onto the bomb: torn ends, uneven width, one
+                     end lifting, a darker edge, ONE satin band, a faint weave. Unmask: rim flips off, paint flakes.
+     E2 HELD UP 2    an almost full-size plate (apothem 14.2 vs 16), rings cut out wider, held up by thicker stick arms
+                     with big mittens; legs, red shoes; all coloured far away. Unmask: drops it, hands up.
 
    API  (BLAM.Props)
      paddle({ color:'lime', size:1, hang:false, slot:false })   hex target plate on a post (hang: ceiling hanger;
@@ -43,7 +56,8 @@
                                                     instead of the wooden sled + base plate; any prop takes it)
      bomb({ size:1, hang:false, burn:false })       iron ball, skull + crossbones, cap, fuse, spark
                                                     (burn: the fuse is its own mesh so setFuse() can shorten it)
-     decoy({ size:1, hang:false, variant })         a BOMB disguised as a plate (see DECOY); variant 'a'..'f', or a
+     decoy({ size:1, hang:false, variant })         a BOMB disguised as a plate (see DECOY); variant 'a'..'f' / 'a2' /
+                                                    'c2' / 'e2' (any key of Props.DECOY_NAMES), or a
                                                     random letter of Props.DECOY_VARIANTS (Math.random: pass variant
                                                     for versus-safe play). Call wobble(t) every frame. kind 'bomb'
      flipbomb({ size:1, hang:false, color:'lime' }) a burning bomb that flips into a target plate
@@ -63,7 +77,7 @@
        sparkle(t, fast)  flicker the spark (call each frame while it is a live bomb)
        setFlip(f)  flipbomb: f 0 = bomb .. 1 = plate, 0.5 = edge-on; returns true once flipped
        wobble(t)   decoy tell: a nervous wobble of the face (pure function of t)
-       variant     decoys: the letter 'a'..'f'
+       variant     decoys: the variant id 'a'..'f', or round 2 'a2' | 'c2' | 'e2'
        unmask(k)   decoys: k 0 = disguised .. 1 = the bare bomb, the disguise thrown clear (bag blown off, cardboard
                    flipped off, mask / plate dropped, drawing fluttered away, A: paint flaked off). Pure in k, cheap,
                    can go back to 0 (pool reuse). Reads well over ~0.15-0.3 s. It does NOT swell the ball or flare
@@ -73,8 +87,8 @@
        chips       the shatter list [[i, j, k, colourHex, sizeMul]...] used by register()
      }
      Props.warm(which)      build every shared geometry now (call at stage load, not mid-play); which: omitted = the
-                            decoy variants in DECOY_VARIANTS, 'all', or an array of letters (call again after changing them)
-     Props.DECOY_VARIANTS   enabled decoy letters (default ['a']); Props.DECOY_NAMES { a: 'SLOPPY PAINT', ... }
+                            decoy variants in DECOY_VARIANTS, 'all', or an array of ids (call again after changing them)
+     Props.DECOY_VARIANTS   enabled decoy ids (default ['a']); Props.DECOY_NAMES { a: 'SLOPPY PAINT', ..., a2, c2, e2 }
      Props.mat              the shared toon ShaderMaterial (uOut = outline width: world units per unit of view
                             depth, 0.0042 ~ 1 game px; uLight = view-space light, top-left like the duck;
                             iron: uSpotN.xy spot offset, uSpotPx / uRimPx sizes in game px; uLod: see LOOK)
@@ -90,7 +104,8 @@
    explosion for bombs.
    Budget: plate face ~0.5k tris, ball ~14k (round voxels + silhouette hull); arm / base ~0.1-0.2k each. Decoy draw
    calls: A 4 (like a bomb; + 6 flake meshes only while it unmasks), B / C / D / F 5, E 6. Tris: A 15k, B 37k, C-F 22-24k.
-   Review page: decoyviewer.html (all six next to real plates at the far and near stops, unmask, picks).
+   Round 2: A2 4 (+6 flakes while unmasking), 15k tris; C2 5 (+6 flakes while unmasking), 20k; E2 6, 23k.
+   Review page: decoyviewer.html (round 2: plate, A1 A2, C1 C2, E1 E2 at the far and near stops; K: parked B D F).
    Many of one prop at once (crowds of 20+): share prop.face.geometry in an InstancedMesh with
    Props.mat (it is instancing-safe) instead of calling paddle() 20 times.
    ========================================================================================= */
@@ -557,21 +572,62 @@ const STROKES = [
     w: a => 1 + 0.3 * Math.sin(3 * a + 1.1), gaps: [[3.55, 3.95]] },
   { id: 2, cx: 0.3, cy: 0.6, r: a => 2.1 + 0.25 * Math.sin(2 * a + 0.5), w: a => 0.9 + 0.2 * Math.sin(3 * a), gaps: [[2.1, 2.5]] }];
 const DRIPS = [[1, -4.6, -10.6, -13.2], [2, 0.5, -1.1, -4.2]];    // [colour id, x, top, end]: a run down, a blob at the end
-function decoyStroke(x, y, z) {
-  if (z < -1) return 0;                                // painted all over the front, out past the silhouette
-  let best = 9, id = 0;
-  for (const s of STROKES) {
-    const px = x - s.cx, py = y - s.cy, a = angOf(px, py);
-    if (s.gaps.some(g => a >= g[0] && a <= g[1])) continue;
-    const d = Math.abs((s.hex ? sdf.hex(px, py) : len2(px, py)) - s.r(a)) / s.w(a);
-    if (d < best) { best = d; id = s.id; }
-  }
-  for (const [c, dx, y0, y1] of DRIPS) {
-    const ex = Math.abs(x - dx), d = y > y0 ? 9 : y > y1 ? ex : len2(ex, y - y1) / 1.8;
-    if (d < best) { best = d; id = c; }
-  }
-  return best < 2.4 ? id * 64 + best : 0;
+function strokeOf(strokes, drips) {                // -> stroke(x, y, z): colour id * 64 + distance / width (0: none)
+  return (x, y, z) => {
+    if (z < -1) return 0;                              // painted all over the front, out past the silhouette
+    let best = 9, id = 0;
+    for (const s of strokes) {
+      const px = x - s.cx, py = y - s.cy, a = angOf(px, py);
+      if (s.gaps.some(g => a >= g[0] && a <= g[1])) continue;
+      const d = Math.abs((s.hex ? sdf.hex(px, py) : len2(px, py)) - s.r(a)) / s.w(a);
+      if (d < best) { best = d; id = s.id; }
+    }
+    for (const [c, dx, y0, y1] of drips) {
+      const ex = Math.abs(x - dx), d = y > y0 ? 9 : y > y1 ? ex : len2(ex, y - y1) / 1.8;
+      if (d < best) { best = d; id = c; }
+    }
+    return best < 2.4 ? id * 64 + best : 0;
+  };
 }
+const decoyStroke = strokeOf(STROKES, DRIPS);
+
+// ---------- ROUND 2 (Jon's notes on round 1, 2026-10-29): A2, C2, E2, built NEXT TO the round-1 A, C, E ----------
+// GLOBAL: far away a decoy must pass for a plate at a glance; the tell, once you look, is the SKULL through the plate's
+// ring gaps (the gaps a bit WIDER than a real plate's black rings, and TRUE holes at both LODs: nothing fills them far
+// away). Everything that is not plate paint (iron, arms, legs, mittens, shoes, cardboard, tape) keeps its TRUE colours
+// far away (flat, a touch brighter so it survives the dither); only the plate face carries the disguise.
+// A2. A bomb someone really PAINTED to pass for a plate: thick, complete bands brushed on by hand (ragged brush edges,
+// skips along the stroke, a missed patch, pinholes, drips running over the bare rings), the two black rings left
+// unpainted so the iron and the skull show through. Stroke records as A's, but d = SOLID paints at every LOD and d = FARP
+// only far away (the skips / missed patch close up at the far lane, so the far look stays A's: a lime hex, a lime ring,
+// a yellow bull); nothing bleeds into the bare rings, so they stay open far away. Colour ids as A: 1 lime, 2 yellow.
+const SOLID = 0.2, FARP = 1.0;
+const DRIPS_A2 = [[1, -2.7, -8.0, -10.2, 0.75], [1, 4.3, -6.9, -9.4, 0.65], [2, 0.9, -2.6, -4.6, 0.6], [1, -3.4, -13.6, -15.8, 0.8]];
+function strokeA2(x, y, z) {
+  if (z < 1.5) return 0;                               // the front only: it stops short of the silhouette (no lime cap on top)
+  const px = x - 0.3, py = y + 0.2, a = angOf(px, py), r = len2(px, py);
+  const J = (hash3(Math.floor(a * 11), Math.floor(r * 0.7), 5) - 0.5) * 0.55;               // ragged brush edge
+  for (const [c, dx, y0, y1, w] of DRIPS_A2) {                                               // a run, a blob at its end
+    const ex = Math.abs(x - dx) / w;
+    if ((y <= y0 && y > y1 && ex < 1) || len2(ex * w, y - y1) < w * 1.55) return c * 64 + SOLID;
+  }
+  if (r < 2.9 + 0.35 * Math.sin(3 * a + 0.5) + 0.2 * Math.sin(5 * a + 2) + J * 0.6) return 2 * 64 + SOLID;   // the bull, dabbed
+  if (r < 5.9 + 0.35 * Math.sin(2 * a + 1.1) + 0.2 * Math.sin(5 * a) + J) return 0;                         // inner ring: bare
+  const skip = (tri(r * 0.85 + 0.7 * Math.sin(a * 2 + 0.3)) < 0.16 && hash3(Math.floor(a * 4.5), Math.floor(r / 3), 9) < 0.3)
+    || hash3(Math.floor(x), Math.floor(y), Math.floor(z) + 11) < 0.035;                      // skips along the stroke, pinholes
+  if (r < 8.3 + 0.35 * Math.sin(3 * a + 2.2) + 0.2 * Math.sin(7 * a + 0.4) + J) return 64 + (skip ? FARP : SOLID);   // lime ring
+  if (r < 11.3 + 0.4 * Math.sin(2 * a + 0.3) + 0.25 * Math.sin(5 * a + 1.7) + J) return 0;                  // outer ring: bare
+  const hx = 13.3 + 0.45 * Math.sin(3 * a + 1.3) + 0.3 * Math.sin(7 * a + 0.4) + J * 1.4, h = sdf.hex(px, py);
+  const miss = len2((px - 11.6) / 1.5, (py + 4.6) / 2.4) < 1 + 0.25 * Math.sin(a * 9);       // a missed patch, right side
+  if (h < hx) return 64 + (skip || miss ? FARP : SOLID);                                    // the border, to a wobbly hex
+  return h < hx + 1.1 ? 64 + FARP : 0;                                                       // far: the hex fills out a little
+}
+// C2's bomb: A's THIN sloppy strokes for the middle only (a lime ring, a yellow bull, two drips): the cardboard rim is the
+// plate's border. Far away the strokes thicken (uLod.w) and fill the hex inside the rim; the outer gap stays open
+const STROKES_C2 = [
+  { id: 1, cx: -0.3, cy: 0.5, r: a => 7.1 + 0.4 * Math.sin(2 * a + 0.6) + 0.25 * Math.sin(5 * a + 1.9), w: a => 1.45 + 0.35 * Math.sin(3 * a + 0.4), gaps: [[0.9, 1.25]] },
+  { id: 2, cx: 0.1, cy: 0.9, r: a => 1.6 + 0.25 * Math.sin(2 * a + 1.5), w: a => 1.35 + 0.2 * Math.sin(3 * a), gaps: [] }];
+const strokeC2 = strokeOf(STROKES_C2, [[1, -3.9, -6.4, -8.6], [2, 1.1, -0.8, -2.6]]);
 function sparkGeo() {                                  // unlit twinkle star (MAT.glow): big enough to read from the back lanes
   const v = new R.Vox();
   v.bx(-0.048, -0.048, -0.048, 0.048, 0.048, 0.048, PAL.lemon);
@@ -591,7 +647,8 @@ function ballChips(face) {
   return L;
 }
 const skullChip = (x, y, z) => z > 2 && ({ X: 'bone', o: 'void' })[skull1At(x, y)];
-const decoyChip = (x, y, z) => { const s = decoyStroke(x, y, z); return s && s % 64 < 0.8 ? (s >= 128 ? 'yellow' : 'lime') : skullChip(x, y, z); };
+const chipOf = st => (x, y, z) => { const s = st(x, y, z); return s && s % 64 < 0.8 ? (s >= 128 ? 'yellow' : 'lime') : skullChip(x, y, z); };
+const decoyChip = chipOf(decoyStroke);
 
 // ---------- shared geometry cache (built on first use) ----------
 const G = {};
@@ -704,7 +761,9 @@ const REST = {
   d: [[-2.4, 3.4, 17.4], [0.06, 0.22, 0.26]],      // paper plate mask, askew
   e: [[0.3, 1.6, 17.6], [0, 0, 0.07]],            // the small plate held up
   l: [[0, 0, 0], [0, 0, 0]],                      // E's limbs (ball frame)
-  f: [[0.9, -1.0, 16.8], [0.03, -0.06, -0.11]]    // the crayon scrap
+  f: [[0.9, -1.0, 16.8], [0.03, -0.06, -0.11]],   // the crayon scrap
+  c2: [[-0.2, 0.5, 16.3], [0, 0.04, -0.06]],      // round 2: the cardboard rim (plate size), a touch tilted
+  e2: [[0.2, 1.1, 17.6], [0, 0, 0.06]]            // round 2: the almost full-size plate, held up a little
 };
 
 // B. PAPER LUNCH BAG pulled over the bomb: crinkled kraft paper, the top folded shut round the fuse, a crayon plate on the
@@ -850,7 +909,7 @@ function limbsGeo(pose) {
   const near = (x, y, z) => { let d = 1e9, best = null; for (const q of L) { const e = dist(q, Math.abs(x), y, z); if (e < d) { d = e; best = q; } } return [d, best]; };
   const shape = (x, y, z) => near(x, y, z)[0];
   const paint = (x, y, z) => { const q = near(x, y, z)[1];
-    return dcell(x, y, q.e && y < q.a[1] - 0.7 ? 'oxblood' : q.col, FAR_LIMB); };        // shoes: oxblood soles
+    return dcell(x, y, q.e && y < q.a[1] - 0.7 ? 'oxblood' : q.col, q.far || FAR_LIMB); };   // shoes: oxblood soles
   return pieceGeo(REST.l, () => [[[-26, -27, -2, 26, 22, 24], shape, paint]]);
 }
 
@@ -889,14 +948,107 @@ function scrapGeo() {
   return pieceGeo(REST.f, () => [[[-21, -21, -2, 21, 21, 2], shape, paint], tape]);
 }
 
+// ---------- ROUND 2 disguises (see "ROUND 2" above): C2 cardboard rim, E2 plate held up ----------
+// distance to a polyline + the arc length at the nearest point + the polyline's length
+function lineDS(px, py, pts) {
+  let d = 1e9, s = 0, acc = 0;
+  for (let n = 1; n < pts.length; n++) {
+    const [ax, ay] = pts[n - 1], ex = pts[n][0] - ax, ey = pts[n][1] - ay, wx = px - ax, wy = py - ay, L = len2(ex, ey);
+    const h = Math.max(0, Math.min(1, (wx * ex + wy * ey) / (L * L))), e = len2(wx - ex * h, wy - ey * h);
+    if (e < d) { d = e; s = acc + h * L; }
+    acc += L;
+  }
+  return [d, s, acc];
+}
+// a strip of DUCT TAPE (piece frame): a ribbon along the polyline pts in the (rho, z) plane at angle th. Tape-y: torn ends
+// (jagged, not cut), uneven width, the first end lifting off, a darker edge, ONE satin highlight band running along the
+// strip on a slight diagonal (the gun skins' gloss band, baked: the strip is flat, a view-driven band would flick on and
+// off whole), a faint cross-hatch weave (sparse darker threads). Far away it stays silver (flat mist / haze).
+function ductTape(th, seed, pts, box) {
+  const c = Math.cos(th), s = Math.sin(th), L = lineDS(0, 0, pts)[2];
+  const inner = pts.map(([q, z]) => [q, z - 2]);                                 // offset under the strip: normals face out
+  const hw = q => 2.15 + 0.3 * Math.sin(0.55 * q + seed) + 0.15 * Math.sin(1.9 * q + 2 * seed);     // uneven width
+  const tear = (t, e) => 0.4 + 0.9 * hash3(Math.floor(t + 20), e, seed) + 0.45 * tri(t * 1.3 + e);  // torn ends
+  const loc = (x, y, z) => { const rho = x * c + y * s, [d, q] = lineDS(rho, z, pts); return [-x * s + y * c, d, q]; };
+  const shape = (x, y, z) => { const [tau, d, q] = loc(x, y, z);
+    return Math.abs(tau) > hw(q) || q < tear(tau, 1) || q > L - tear(tau, 2) ? 1 : d - 0.7; };
+  const nshape = (x, y, z) => lineD(x * c + y * s, z, inner);
+  const paint = (x, y, z) => {
+    const [tau, , q] = loc(x, y, z), w = hw(q), g = tau - (0.3 * w - 0.13 * (q - 6));
+    if (Math.abs(tau) > w - 0.7) return dcell(x, y, 'steel', 'haze');                       // the darker edge
+    if (g > -0.6 && g < 0.7) return dcell(x, y, 'mist', 'mist', FLATO);                       // ONE satin band
+    const fs = Math.floor(q * 1.05 + 50), ft = Math.floor(tau * 1.05 + 50);
+    if ((fs + ft) % 3 === 0 && (fs - ft + 300) % 3 === 0) return dcell(x, y, 'steel/slate/haze', 'mist');   // weave
+    return dcell(x, y, 'haze', 'mist');
+  };
+  return [box, shape, paint, nshape];
+}
+// C2. CARDBOARD RIM: a plate-size hex RIM cut from a box (scissor-jagged outside, one corner snipped, a wobbly knife-cut
+// round hole inside: it is only the plate's border), 3 cells thick (liner, flutes, liner: corrugation on every cut
+// edge), painted lime in a hurry: bare cardboard at both cut edges, a dry-brush patch, a spot where the top liner tore off
+// and shows the flutes. The middle is OPEN: the bomb inside wears A's thin strokes (strokeC2), so far away the paint fills
+// the hex, up close the rim says cardboard and the skull shows through the open rings. Two strips of duct tape over the
+// outer edge onto the bomb. Cardboard (tan / sand) and tape (silver) keep their colours far away.
+function rimGeo() {
+  const aO = 15.6, cd = [Math.cos(4 * Math.PI / 3), Math.sin(4 * Math.PI / 3)];
+  const out = (u, v) => { const an = angOf(u, v);
+    return Math.max(sdf.hex(u, v) - aO + 0.25 * tri(an * 9.5) + 0.12 * tri(an * 23 + 0.4), u * cd[0] + v * cd[1] - (aO / 0.866 - 3.2)); };
+  const rIn = an => 11.4 + 0.3 * tri(an * 7.3 + 0.2) + 0.2 * Math.sin(3 * an + 1);
+  const peel = (u, v) => len2((u - 3.0) / 3.0, (v + 13.3) / 1.4) < 1 + 0.2 * tri(angOf(u - 3.0, v + 13.3) * 3.1);
+  const shape = (x, y, z) => Math.max(out(x, y), rIn(angOf(x, y)) - len2(x, y), Math.abs(z - 0.5) - 1.5, z > 1 && peel(x, y) ? 1 : -1);
+  const paint = (x, y, z) => {
+    const an = angOf(x, y), dO = -out(x, y), dI = len2(x, y) - rIn(an);
+    if (z < 0) return dcell(x, y, 'tan', 'tan');                                                 // back liner
+    if (z < 1) { const f = Math.floor((x * 0.5 + y * 0.866) / 1.4 + 100) & 1;                    // the flutes
+      return dcell(x, y, f ? 'sand' : 'chestnut', f ? 'sand' : 'tan'); }
+    const bare = dO < 0.7 + 0.6 * tri(an * 5.3 + 0.4) + 0.35 * tri(an * 13.1) || dI < 0.3 + 0.45 * tri(an * 4.1 + 1.3)
+      || hash3(Math.floor(x), Math.floor(y), 4) < 0.05 || len2((x - 9.6) / 2.4, (y - 9.4) / 1.4) < 1 + 0.3 * tri(an * 17);
+    return bare ? dcell(x, y, 'tan', 'tan') : dcell(x, y, 'lime', 'lime', FLATO);
+  };
+  const tape = (th, seed) => ductTape(th, seed, [[15.6, 3.8], [14.2, 2.75], [11.3, 2.75], [10.4, 1.6], [9.0, -3.6], [6.4, -2.3]],
+    [-19, -19, -6, 19, 19, 6]);                                    // lifted end on the rim, over the inner cut, onto the bomb
+  return pieceGeo(REST.c2, () => [[[-21, -21, -2, 21, 21, 3], shape, paint], tape(2.45, 0.7), tape(5.75, 2.1)]);
+}
+// E2. PLATE HELD UP, round 2: an almost full-size tin plate (apothem 14.2, a real one is 16) held up in front of the bomb,
+// its black rings CUT OUT a bit wider than a real plate's (3 thin tabs hold the middle) so the skull peeks through; it
+// does not quite cover the bomb (a sliver of iron under it). Arms, mittens, legs and red shoes keep their colours far away
+function heldPlate2Geo() {
+  const a = 14.2, BD = [[2.8, 'bull'], [5.8, 'hole'], [8.0, 'lime'], [11.0, 'hole']];
+  const shape = (x, y, z) => Math.max(sdf.hex(x, y) - a, Math.abs(z) - 1);
+  const paint = (x, y, z) => {
+    const rc = len2(x, y), ang = angOf(x, y), rim = sdf.hex(x, y) > a - 1;
+    let b = 'border';
+    for (let n = 0; n < BD.length; n++) if (rc < BD[n][0]) {
+      b = BD[n][1]; if (b === 'hole' && tabAt(ang, rc, n, { tabs: 0.9, tabW: 0.75 })) b = 'tab'; break; }
+    if (b === 'hole') return null;                                                    // a true hole at every LOD
+    if (z < 0) return dcell(x, y, rim ? 'steel' : 'slate', rim ? 'steel' : 'slate', FLATO);
+    if (b === 'tab') return dcell(x, y, 'void', 'void', FLATO);
+    if (rim) return dcell(x, y, 'lime', 'lime');                                      // its edge: live toon up close
+    return dcell(x, y, b === 'bull' ? 'yellow' : 'lime', b === 'bull' ? 'yellow' : 'lime', FLATO);
+  };
+  return pieceGeo(REST.e2, () => [[[-18, -18, -2, 18, 18, 2], shape, paint]]);
+}
+// E2's limbs: thicker sticks in a lighter brown, bigger mittens gripping the plate's corners; far colours kept (flat)
+const ARM2 = { col: 'chestnut', far: 'tan' }, MIT2 = { col: 'bone', far: 'bone' }, SHOE2 = { col: 'red', far: 'red' };
+const lim2 = (q, o) => Object.assign(q, o);
+LIMBS.hold2 = [lim2({ a: [13.0, -3.8, 3.5], b: [20.4, -7.6, 10.2], r: 1.2 }, ARM2), lim2({ a: [20.4, -7.6, 10.2], b: [17.6, -0.4, 17.8], r: 1.2 }, ARM2),
+  lim2({ a: [16.6, 1.5, 19.3], r: 2.55 }, MIT2), lim2({ a: [15.0, 3.7, 20.5], r: 1.15 }, MIT2),
+  lim2({ a: [4.6, -13.6, 3.5], b: [6.6, -18.4, 7.6], r: 1.2 }, ARM2), lim2({ a: [6.6, -18.4, 7.6], b: [7.0, -22.2, 7.0], r: 1.2 }, ARM2),
+  lim2({ a: [7.6, -23.6, 8.9], e: [2.6, 1.7, 3.6] }, SHOE2)];
+LIMBS.up2 = [lim2({ a: [13.2, -1.5, 2], b: [20.2, 5, 4], r: 1.2 }, ARM2), lim2({ a: [20.2, 5, 4], b: [19.0, 13.4, 4.6], r: 1.2 }, ARM2),
+  lim2({ a: [18.8, 15.9, 5], r: 2.6 }, MIT2), lim2({ a: [16.7, 18.3, 5.2], r: 1.05 }, MIT2), lim2({ a: [18.9, 19.1, 5.2], r: 1.05 }, MIT2),
+  lim2({ a: [21.1, 17.6, 5.2], r: 1.05 }, MIT2),
+  lim2({ a: [4.6, -13.6, 3.5], b: [9.2, -17.8, 6.6], r: 1.2 }, ARM2), lim2({ a: [9.2, -17.8, 6.6], b: [12.2, -20.4, 6.2], r: 1.2 }, ARM2),
+  lim2({ a: [13.6, -21.4, 7.6], e: [2.6, 1.7, 3.6] }, SHOE2)];
+
 // A. the sloppy-paint decoy unmasking: its strokes come off the ball as FLAKES, 6 curved shell pieces (own meshes, only
-// shown while it unmasks), the ball swaps to the plain bomb under them
-function flakeGeos() {
+// shown while it unmasks), the ball swaps to the plain bomb under them. st: the variant's stroke (A, A2, C2)
+function flakeGeos(st) {
   const B0 = Math.ceil(BR) + 1, maps = Array.from({ length: 6 }, () => new Map()), cen = maps.map(() => [0, 0, 0, 0]);
   for (let i = -B0; i < B0; i++) for (let j = -B0; j < B0; j++) for (let k = -1; k < B0; k++) {
     const x = i + 0.5, y = j + 0.5, z = k + 0.5, r = len3(x, y, z);
     if (r > BR || r < BR - 1.3) continue;
-    const s = decoyStroke(x, y, z); if (!s || s % 64 >= 0.62) continue;
+    const s = st(x, y, z); if (!s || s % 64 >= 0.62) continue;
     const n = Math.floor(angOf(x, y) / (TAU / 6)) % 6;
     maps[n].set(VK(i, j, k), { i, j, k, col: s >= 128 ? 'yellow' : 'lime', flat: true });
     cen[n][0] += x; cen[n][1] += y; cen[n][2] += z; cen[n][3]++;
@@ -914,15 +1066,7 @@ function place(m, dx, dy, dz, rx, ry, rz) {
   m.position.set(p.x + dx, p.y + dy, p.z + dz); m.rotation.set(r.x + rx, r.y + ry, r.z + rz);
 }
 const UNMASK = {
-  a(p, k) {                                                           // the paint flakes off
-    p.face.geometry = k > 0 ? geo('bombF', () => ballGeo(null, true)) : geo('decoyF', () => ballGeo(decoyStroke, true));
-    p.flakes.forEach((m, n) => {
-      m.visible = k > 0;
-      const d = m.userData.dir, q = m.userData.p0;
-      m.position.set(q.x + d[0] * 0.7 * k, q.y + d[1] * 0.7 * k + 0.35 * k - 1.6 * k * k, q.z + 0.5 * k);
-      m.rotation.set(k * (3 + n), k * (2.5 - n * 0.8), k * (n - 2.5) * 1.6); m.scale.setScalar(1 - 0.3 * k);
-    });
-  },
+  a: paintOff,                                                        // the paint flakes off
   b(p, k) {                                                           // the bag puffs up and blows off upward, spinning
     const m = p.dsg[0], puff = 1 + 0.2 * Math.sin(Math.PI * Math.min(1, k / 0.35));
     place(m, 0.7 * k, 2.6 * k, 0.25 * k, 0.5 * k, 0.4 * k, -1.4 * k); m.scale.set(puff, 1 - (puff - 1) * 0.5, puff);
@@ -935,32 +1079,51 @@ const UNMASK = {
     const m = p.dsg[0], y0 = m.userData.p0.y;
     place(m, -0.35 * k, (fl + 0.05 - y0) * Math.pow(k, 1.6), 0.3 * k, -Math.PI / 2 * k, -0.2 * k, 1.8 * k);
   },
-  e(p, k, fl) {                                                       // it drops the plate and throws its hands up
-    const m = p.dsg[0], y0 = m.userData.p0.y;
-    place(m, 0.1 * k, (fl + 0.05 - y0) * Math.pow(k, 1.5), 0.35 * k, -Math.PI / 2 * k, 0, 0.5 * k);
-    p.dsg[1].geometry = geo(k > 0.2 ? 'dsgEup' : 'dsgEhold', () => limbsGeo(k > 0.2 ? 'up' : 'hold'));
-  },
+  e(p, k, fl) { dropPlate(p, k, fl, 'up', 'hold'); },                // it drops the plate and throws its hands up
   f(p, k, fl) {                                                       // the drawing flutters away to the side
     const m = p.dsg[0], y0 = m.userData.p0.y;
     place(m, 1.3 * k + 0.18 * Math.sin(k * 10), 0.5 * Math.sin(Math.PI * k) + (fl + 0.05 - y0) * k * k, 0.25 * k,
       -Math.PI / 2 * k * k, 5 * k, 0.5 * Math.sin(k * 12));
-  }
+  },
+  a2: paintOff,                                                       // round 2: the (thick) paint flakes off
+  c2(p, k, fl) { paintOff(p, k); UNMASK.c(p, k, fl); },               // the tape rips, the rim flips off, the paint flakes
+  e2(p, k, fl) { dropPlate(p, k, fl, 'up2', 'hold2'); }               // drops the plate, hands up
 };
+// painted balls (A, A2, C2): the ball swaps to the bare bomb, the strokes fly off as flakes
+function paintOff(p, k) {
+  p.face.geometry = k > 0 ? p.bareGeo() : p.paintGeo();
+  p.flakes.forEach((m, n) => {
+    m.visible = k > 0;
+    const d = m.userData.dir, q = m.userData.p0;
+    m.position.set(q.x + d[0] * 0.7 * k, q.y + d[1] * 0.7 * k + 0.35 * k - 1.6 * k * k, q.z + 0.5 * k);
+    m.rotation.set(k * (3 + n), k * (2.5 - n * 0.8), k * (n - 2.5) * 1.6); m.scale.setScalar(1 - 0.3 * k);
+  });
+}
+function dropPlate(p, k, fl, up, hold) {                              // E / E2: the plate drops, the limbs swap pose
+  const m = p.dsg[0], y0 = m.userData.p0.y, pose = k > 0.2 ? up : hold;
+  place(m, 0.1 * k, (fl + 0.05 - y0) * Math.pow(k, 1.5), 0.35 * k, -Math.PI / 2 * k, 0, 0.5 * k);
+  p.dsg[1].geometry = geo('dsgE' + pose, () => limbsGeo(pose));
+}
 // variant table: name, disguise pieces [geometry key, builder, rest, hittable]
-const DECOY_NAMES = { a: 'SLOPPY PAINT', b: 'LUNCH BAG', c: 'CARDBOARD', d: 'PAPER PLATE', e: 'HELD UP', f: 'CRAYON' };
+const DECOY_NAMES = { a: 'SLOPPY PAINT', b: 'LUNCH BAG', c: 'CARDBOARD', d: 'PAPER PLATE', e: 'HELD UP', f: 'CRAYON',
+  a2: 'SLOPPY PAINT 2', c2: 'CARDBOARD RIM', e2: 'HELD UP 2' };            // round 2 (a2 / c2 / e2): next to a / c / e
 const DSG = {
   b: [['dsgB', bagGeo, REST.b, true]],
   c: [['dsgC', boxGeo, REST.c, true]],
   d: [['dsgD', maskGeo, REST.d, true]],
   e: [['dsgE', heldPlateGeo, REST.e, true], ['dsgEhold', () => limbsGeo('hold'), REST.l, false]],
-  f: [['dsgF', scrapGeo, REST.f, true]]
+  f: [['dsgF', scrapGeo, REST.f, true]],
+  c2: [['dsgC2', rimGeo, REST.c2, true]],
+  e2: [['dsgE2', heldPlate2Geo, REST.e2, true], ['dsgEhold2', () => limbsGeo('hold2'), REST.l, false]]
 };
+// painted balls: [stroke, geometry key suffix, long fuse]
+const PAINTED = { a: [decoyStroke, '', false], a2: [strokeA2, 'a2', false], c2: [strokeC2, 'c2', true] };
 const DECOY_VARIANTS = ['a'];                                         // enabled variants (B.Props.DECOY_VARIANTS; the game sets it)
 function rayUnlessOff(r, i) { if (!this.userData.off) THREE.Mesh.prototype.raycast.call(this, r, i); }
 function decoyVariant(o) {
   const v = String(o.variant || '').toLowerCase();
-  if (v.length === 1 && DECOY_NAMES[v]) return v;
-  const L = ((B.Props && B.Props.DECOY_VARIANTS) || DECOY_VARIANTS).map(s => String(s).toLowerCase()).filter(s => s.length === 1 && DECOY_NAMES[s]);
+  if (DECOY_NAMES[v]) return v;
+  const L = ((B.Props && B.Props.DECOY_VARIANTS) || DECOY_VARIANTS).map(s => String(s).toLowerCase()).filter(s => DECOY_NAMES[s]);
   return L.length ? L[(Math.random() * L.length) | 0] : 'a';
 }
 
@@ -1042,19 +1205,24 @@ function bomb(o = {}) {
 function decoy(o = {}) {
   const v = decoyVariant(o), p = new Prop(o, 'bomb', true);
   p.decoy = true; p.variant = v; p.mk = 0;
-  if (v === 'a') {                                     // A: the sloppy-paint bomb (unchanged), + its flakes for unmask()
-    p.face = p.addFace(shared(geo('decoyF', () => ballGeo(decoyStroke, true)), mat));
-    p.chips = geo('chipsD', () => ballChips(decoyChip));
+  const pt = PAINTED[v];
+  if (pt) {                                            // A / A2 / C2: a painted ball (C2: long fuse), + its flakes for unmask()
+    const [st, sx, lf] = pt, pk = 'decoyF' + sx, bk = lf ? 'bombL' : 'bombF';
+    p.paintGeo = () => geo(pk, () => ballGeo(st, true, lf)); p.bareGeo = () => geo(bk, () => ballGeo(null, true, lf));
+    p.face = p.addFace(shared(p.paintGeo(), mat));
+    p.chips = geo('chipsD' + sx, () => ballChips(chipOf(st)));
+    if (lf) p.tip = FUSE_TIP_L;
     p.addFuse(false);
-    p.flakes = geo('flakesA', flakeGeos).map(f => {
+    p.flakes = geo('flakes' + (sx || 'A'), () => flakeGeos(st)).map(f => {
       const m = noRay(shared(f.g, mat)); m.position.set(f.p[0], f.p[1], f.p[2]);
       m.userData.p0 = m.position.clone(); m.userData.dir = f.dir; m.visible = false; p.face.add(m); return m;
     });
-    return p;
+  } else {                                             // B / C / D / E / F / E2: a plain bomb, long fuse
+    p.face = p.addFace(shared(geo('bombL', () => ballGeo(null, true, true)), mat));
+    p.chips = geo('chipsB', () => ballChips(skullChip));
+    p.tip = FUSE_TIP_L; p.addFuse(false);
   }
-  p.face = p.addFace(shared(geo('bombL', () => ballGeo(null, true, true)), mat));   // B-F: a plain bomb, long fuse
-  p.chips = geo('chipsB', () => ballChips(skullChip));
-  p.tip = FUSE_TIP_L; p.addFuse(false);
+  if (!DSG[v]) return p;
   p.dsg = DSG[v].map(([key, build, rest, hit]) => {   // the disguise rides on the ball (wobbles / flips / hides with it)
     const m = shared(geo(key, build), mat);
     m.position.set(rest[0][0] * SB, rest[0][1] * SB, rest[0][2] * SB); m.rotation.set(rest[1][0], rest[1][1], rest[1][2]);

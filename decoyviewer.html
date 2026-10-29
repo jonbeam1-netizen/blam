@@ -28,25 +28,36 @@
 <canvas id="view"></canvas>
 <div id="boot">B.L.A.M.<br>DECOY VIEWER</div>
 <div id="panel"><span id="picks">PICKS: none</span><span id="ticks"></span></div>
-<canvas id="mag"></canvas><div id="magcap">BACK ROW x4 (Z hides): real plate | decoy, A-F, the pixels you get at the far stop</div>
+<canvas id="mag"></canvas><div id="magcap">BACK ROW x4 (Z hides): the pixels you get at the far stop</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="js/core/render.js?v=dv1"></script>
-<script src="js/core/props.js?v=dv11"></script>
+<script src="js/core/props.js?v=dv12"></script>
 <script>
 'use strict';
 /* =========================================================================================
    B.L.A.M.  --  DECOY VIEWER (review page for the decoy variants in js/core/props.js)
    The game's own pipeline (core/render.js) and props (core/props.js) in a plain copy of the range room.
-   BACK (on a riser at the far range stop, view depth 15.6 = the FAR pass): every variant next to a real plate.
-   FRONT (the near range stop, depth ~7.6 = the NEAR pass): A B C | real plate | D E F.
-   Keys: 1-6 / A-F spotlight a variant | SPACE unmask it (k 0->1 over 0.3 s, holds, resets after 1 s) | U unmask all
-         W wobble on/off | R reset | C close-up on the spotlit one | L LOD: auto / force far / force near | M dither | P pause
+   ROUND 2 (Jon's picks from round 1: A, C, E; B, D, F parked): every pick BEFORE and AFTER, side by side.
+   BACK (on a riser at the far range stop, view depth 15.6 = the FAR pass): plate A1 A2 | plate C1 C2 | plate E1 E2.
+   FRONT (the near range stop, depth ~7.6 = the NEAR pass): plate A1 A2 C1 C2 E1 E2.
+   K: the PARKED view instead (B, D, F next to plates, both rows; their code is kept in props.js).
+   Keys: 1-6 spotlight A1 A2 C1 C2 E1 E2 (parked: 1-3 = B D F) | A / C / E spotlight that pick, again: flip 1 <-> 2
+         B / D / F: the parked one (switches to the parked view) | SPACE unmask the spotlit one (k 0->1 over 0.3 s,
+         holds, resets after 1 s) | U unmask all | W wobble on/off | R reset | V close-up on the spotlit one
+         L LOD: auto / force far / force near | M dither | P pause | H help
          Z the x4 magnifier of the back row (the real far-pass pixels) under the game, X: magnify the spotlit front one
-   Tick "ship this one" boxes: saved in localStorage ('blam.decoyPicks'), listed as PICKS at the top.
-   Hooks: window.DV.select('b'), DV.unmask('b' | 'all'), DV.setK(k, letter|'all') (freeze a pose), DV.step(n), DV.snap()
+   Tick "ship this one" boxes, one per VERSION (a1 a2 c1 c2 e1 e2; parked view: b d f): saved in localStorage
+   ('blam.decoyPicks'; round-1 picks 'a' / 'c' / 'e' read as a1 / c1 / e1), listed as PICKS at the top.
+   Version -> Props variant: a1 'a', a2 'a2', c1 'c', c2 'c2', e1 'e', e2 'e2' (b 'b', d 'd', f 'f'): a pick ships as
+   Props.DECOY_VARIANTS = [those variants].
+   Hooks: window.DV.select('a2'), DV.unmask('a2' | 'all'), DV.setK(k, ['a2'] | 'all') (freeze a pose), DV.parked(on),
+          DV.step(n), DV.snap()
    ========================================================================================= */
 const B = window.BLAM, R = B.R, P = B.Props, PAL = R.PAL, CSS = R.CSS, MAT = R.MAT;
-const LETTERS = ['a', 'b', 'c', 'd', 'e', 'f'];
+const MAIN = ['a1', 'a2', 'c1', 'c2', 'e1', 'e2'], PARKED = ['b', 'd', 'f'], ALL = MAIN.concat(PARKED);
+const VAR = { a1: 'a', a2: 'a2', c1: 'c', c2: 'c2', e1: 'e', e2: 'e2', b: 'b', d: 'd', f: 'f' };
+const NAME = v => P.DECOY_NAMES[VAR[v]];
+const TAG = v => v.toUpperCase();
 const Z_FAR = -10.6, Z_NEAR = -2.6, RISE = 0.9, SINK = -0.62;
 P.warm('all');
 
@@ -80,45 +91,46 @@ function bakeLight(x, y, z) {
   R.scene.add(room.mesh(MAT.env), glow.mesh(MAT.glow));
 }
 
-// ---------- the props: back row pairs (plate | decoy), front row A B C [plate] D E F ----------
-const items = [];          // { prop, letter|null, row: 'far'|'near', x, y, z, phase }
-function add(prop, letter, row, x, y, z) {
+// ---------- the props ----------
+// MAIN back row: plate v1 v2 | plate v1 v2 | plate v1 v2 (A, C, E); front row: plate A1 A2 C1 C2 E1 E2.
+// PARKED back row: plate B | plate D | plate F; front row: B plate D F.
+const items = [];          // { prop, ver|null, set: 'main'|'parked', row: 'far'|'near', x, y, z, phase }
+function add(prop, ver, set, row, x, y, z) {
   prop.group.position.set(x, y, z); R.scene.add(prop.group);
-  const it = { prop, letter, row, x, y, z, phase: items.length * 1.37 }; items.push(it); return it;
+  if (row === 'near') prop.floor = -(P.FACE_Y + P.PIVOT_Y) - SINK;      // it pops out of the floor: thrown-off bits land ON the floor
+  const it = { prop, ver, set, row, x, y, z, phase: items.length * 1.37 }; items.push(it); return it;
 }
-LETTERS.forEach((l, n) => {
-  const cx = -5.5 + n * 2.2;
-  add(P.paddle(), null, 'far', cx - 0.62, RISE, Z_FAR);
-  add(P.decoy({ variant: l }), l, 'far', cx + 0.62, RISE, Z_FAR);
-});
-['a', 'b', 'c', null, 'd', 'e', 'f'].forEach((l, n) => {
-  const x = (n - 3) * 1.72;
-  const it = add(l ? P.decoy({ variant: l }) : P.paddle(), l, 'near', x, SINK, Z_NEAR);
-  it.prop.floor = -(P.FACE_Y + P.PIVOT_Y) - SINK;          // it pops out of the floor: thrown-off bits land ON the floor
-});
-const byLetter = l => items.filter(it => it.letter === l);
+const mk = v => v ? P.decoy({ variant: VAR[v] }) : P.paddle();
+const FAR_MAIN = [[null, 'a1', 'a2'], [null, 'c1', 'c2'], [null, 'e1', 'e2']];
+FAR_MAIN.forEach((g, n) => g.forEach((v, m) => add(mk(v), v, 'main', 'far', -5.8 + (n * 3 + m) * 1.45, RISE, Z_FAR)));
+[null].concat(MAIN).forEach((v, n) => add(mk(v), v, 'main', 'near', (n - 3) * 1.62, SINK, Z_NEAR));
+PARKED.forEach((v, n) => { const cx = -3.3 + n * 3.3; add(mk(null), null, 'parked', 'far', cx - 0.62, RISE, Z_FAR); add(mk(v), v, 'parked', 'far', cx + 0.62, RISE, Z_FAR); });
+['b', null, 'd', 'f'].forEach((v, n) => add(mk(v), v, 'parked', 'near', (n - 1.5) * 1.9, SINK, Z_NEAR));
+const nearOf = v => items.find(it => it.row === 'near' && it.ver === v);
 function countCalls(obj) { let n = 0; obj.traverseVisible(o => { if (o.isMesh) n++; }); return n; }
-const CALLS = {}; for (const l of LETTERS) CALLS[l] = countCalls(byLetter(l)[0].prop.group);
+const CALLS = {}; for (const v of ALL) CALLS[v] = countCalls(nearOf(v).prop.group);
 CALLS.plate = countCalls(items[0].prop.group);
 
 // ---------- state, picks (localStorage), DOM tick boxes ----------
-const st = { sel: 'b', wobble: true, paused: false, close: false, lod: 0, mode: 1, help: true, mag: true, magNear: false, t: 0, un: {} };   // un[letter] = start time of its unmask
-const PICK_KEY = 'blam.decoyPicks';
+const st = { sel: 'a2', parked: false, wobble: true, paused: false, close: false, lod: 0, mode: 1, help: true, mag: true, magNear: false, t: 0, un: {} };   // un[ver] = start time of its unmask
+const SET = () => st.parked ? PARKED : MAIN;
+const PICK_KEY = 'blam.decoyPicks', OLD = { a: 'a1', c: 'c1', e: 'e1' };
 let picks = [];
-try { picks = JSON.parse(localStorage.getItem(PICK_KEY) || '[]').filter(l => LETTERS.includes(l)); } catch (e) { picks = []; }
+try { picks = JSON.parse(localStorage.getItem(PICK_KEY) || '[]').map(l => OLD[l] || l).filter(l => ALL.includes(l)); } catch (e) { picks = []; }
+picks = [...new Set(picks)];
 const ticks = document.getElementById('ticks'), picksEl = document.getElementById('picks'), labels = {};
 function savePicks() { try { localStorage.setItem(PICK_KEY, JSON.stringify(picks)); } catch (e) {} }
 function showPicks() {
-  picksEl.textContent = 'PICKS: ' + (picks.length ? LETTERS.filter(l => picks.includes(l)).join(', ') : 'none');
-  for (const l of LETTERS) labels[l].classList.toggle('sel', l === st.sel);
+  picksEl.textContent = 'PICKS: ' + (picks.length ? ALL.filter(l => picks.includes(l)).map(TAG).join(', ') : 'none');
+  for (const v of ALL) { labels[v].classList.toggle('sel', v === st.sel); labels[v].style.display = SET().includes(v) ? '' : 'none'; }
 }
-for (const l of LETTERS) {
+for (const v of ALL) {
   const lab = document.createElement('label'), box = document.createElement('input');
-  box.type = 'checkbox'; box.checked = picks.includes(l); box.title = 'ship this one';
-  box.addEventListener('change', () => { picks = picks.filter(p => p !== l); if (box.checked) picks.push(l); savePicks(); showPicks(); box.blur(); });
-  lab.appendChild(box); lab.appendChild(document.createTextNode(l.toUpperCase() + ' ' + P.DECOY_NAMES[l]));
-  lab.addEventListener('click', () => select(l));
-  ticks.appendChild(lab); labels[l] = lab;
+  box.type = 'checkbox'; box.checked = picks.includes(v); box.title = 'ship this one';
+  box.addEventListener('change', () => { picks = picks.filter(p => p !== v); if (box.checked) picks.push(v); savePicks(); showPicks(); box.blur(); });
+  lab.appendChild(box); lab.appendChild(document.createTextNode(TAG(v) + ' ' + NAME(v)));
+  lab.addEventListener('click', () => select(v));
+  ticks.appendChild(lab); labels[v] = lab;
 }
 
 // ---------- HUD (426x240, fillRect only, palette colours, 3x5 font) ----------
@@ -138,50 +150,51 @@ const w3 = (str, sc = 1) => String(str).length * 4 * sc - sc;
 const _v = new THREE.Vector3();
 const px = (x, y, z) => R.toPx(_v.set(x, y, z));
 const LOD_NAMES = ['AUTO', 'FORCE FAR', 'FORCE NEAR'];
+const setName = () => st.parked ? 'PARKED B D F (K: ROUND 2)' : 'ROUND 2: BEFORE 1 / AFTER 2 (K: PARKED)';
 function drawHud() {
   hx.clearRect(0, 0, RW, RH);
   if (!st.close) {
-    // back row: a label over each pair; front row: a label under each decoy
-    LETTERS.forEach((l, n) => {
-      const cx = -5.5 + n * 2.2, [x, y] = px(cx, RISE + 2.45, Z_FAR), s = l.toUpperCase(), on = l === st.sel;
-      text3(s, x - w3(s) / 2, y - 6, on ? 'yellow' : 'mist');
-      const [xp] = px(cx - 0.62, RISE, Z_FAR), [xd] = px(cx + 0.62, RISE, Z_FAR);
-      text3('P', xp - 1, y + 1, 'steel'); text3('D', xd - 1, y + 1, on ? 'yellow' : 'steel');
-    });
-    for (const it of items) if (it.row === 'near') {
-      const [x, y] = px(it.x, SINK + 0.62, Z_NEAR), on = it.letter === st.sel;
-      const s = it.letter ? it.letter.toUpperCase() + ' ' + P.DECOY_NAMES[it.letter] : 'REAL PLATE';
-      text3(s, x - w3(s) / 2, y + 2, on ? 'yellow' : it.letter ? 'mist' : 'lime');
-      if (on) { const [bx0, by0] = px(it.x - 0.8, SINK + 2.4, Z_NEAR), [bx1, by1] = px(it.x + 0.8, SINK + 0.8, Z_NEAR);
-        for (const [a, b, w, h] of [[bx0, by0, 5, 1], [bx0, by0, 1, 5], [bx1 - 4, by0, 5, 1], [bx1, by0, 1, 5], [bx0, by1, 5, 1], [bx0, by1 - 4, 1, 5], [bx1 - 4, by1, 5, 1], [bx1, by1 - 4, 1, 5]]) rect(a, b, w, h, 'yellow'); }
+    for (const it of items) {
+      if (it.set !== (st.parked ? 'parked' : 'main')) continue;
+      const on = it.ver === st.sel, s = it.ver ? TAG(it.ver) : 'P';
+      if (it.row === 'far') { const [x, y] = px(it.x, RISE + 2.45, Z_FAR);
+        text3(s, x - w3(s) / 2, y - 1, on ? 'yellow' : it.ver ? 'mist' : 'steel'); }
+      else {
+        const [x, y] = px(it.x, SINK + 0.62, Z_NEAR), lab = it.ver ? s : 'PLATE';
+        text3(lab, x - w3(lab) / 2, y + 2, on ? 'yellow' : it.ver ? 'mist' : 'lime');
+        if (on) { const [bx0, by0] = px(it.x - 0.74, SINK + 2.4, Z_NEAR), [bx1, by1] = px(it.x + 0.74, SINK + 0.8, Z_NEAR);
+          for (const [a, b, w, h] of [[bx0, by0, 5, 1], [bx0, by0, 1, 5], [bx1 - 4, by0, 5, 1], [bx1, by0, 1, 5], [bx0, by1, 5, 1], [bx0, by1 - 4, 1, 5], [bx1 - 4, by1, 5, 1], [bx1, by1 - 4, 1, 5]]) rect(a, b, w, h, 'yellow'); }
+      }
     }
-    text3('BACK ROW: FAR PASS (DEPTH 15.6)   FRONT ROW: NEAR PASS (DEPTH 7.6)', 4, 20, 'haze');
+    text3('BACK: FAR PASS (DEPTH 15.6)  FRONT: NEAR PASS (7.6)  ' + setName(), 4, 20, 'haze');
   }
-  const l = st.sel, u = st.un[l] != null ? Math.min(1, (st.t - st.un[l]) / 0.3) : 0;
-  text3(l.toUpperCase() + ' ' + P.DECOY_NAMES[l] + '  ' + CALLS[l] + ' DRAW CALLS (PLATE ' + CALLS.plate + ')' + (u > 0 ? '  UNMASK ' + u.toFixed(2) : ''), 4, RH - 18, 'yellow');
+  const v = st.sel, u = st.un[v] != null ? Math.min(1, (st.t - st.un[v]) / 0.3) : 0;
+  text3(TAG(v) + ' ' + NAME(v) + '  ' + CALLS[v] + ' DRAW CALLS (PLATE ' + CALLS.plate + ')' + (u > 0 ? '  UNMASK ' + u.toFixed(2) : ''), 4, RH - 18, 'yellow');
   const right = 'LOD ' + LOD_NAMES[st.lod] + '  DITHER ' + st.mode + (st.wobble ? '' : '  WOBBLE OFF') + (st.paused ? '  PAUSED' : '');
   text3(right, RW - 4 - w3(right), RH - 18, 'bone');
-  if (st.help) text3('1-6/A-F PICK  SPACE UNMASK  U ALL  W WOBBLE  R RESET  C CLOSE-UP  L LOD  M DITHER  Z/X ZOOM  P PAUSE', 4, RH - 9, 'mist');
+  if (st.help) text3('1-6/ACE PICK  K PARKED  SPACE UNMASK  U ALL  W WOBBLE  R RESET  V CLOSE  L LOD  M DITHER  Z/X ZOOM', 4, RH - 9, 'mist');
 }
 
 // ---------- unmask + motion ----------
 const UN_T = 0.3, HOLD_T = 1.0, SWELL = 0.16;
-function select(l) { if (LETTERS.includes(l)) { st.sel = l; showPicks(); placeCamera(); } }
-function unmask(l = st.sel) { for (const x of l === 'all' ? LETTERS : [l]) st.un[x] = st.t; }
-let frozen = null;                                     // DV.setK: { k, letters }
+function showSet() { for (const it of items) it.prop.group.visible = it.set === (st.parked ? 'parked' : 'main'); }
+function parked(on) { st.parked = !!on; if (!SET().includes(st.sel)) st.sel = SET()[0]; showSet(); showPicks(); placeCamera(); }
+function select(v) { if (!ALL.includes(v)) return; if (!SET().includes(v)) parked(PARKED.includes(v)); st.sel = v; showPicks(); placeCamera(); }
+function unmask(v = st.sel) { for (const x of v === 'all' ? SET() : [v]) st.un[x] = st.t; }
+let frozen = null;                                     // DV.setK: { k, vers }
 function kOf(it) {
-  if (frozen && (frozen.letters === 'all' || frozen.letters.includes(it.letter))) return frozen.k;
-  const s = st.un[it.letter]; if (s == null) return 0;
-  const q = st.t - s; if (q > UN_T + HOLD_T) { delete st.un[it.letter]; return 0; }
+  if (frozen && (frozen.vers === 'all' || frozen.vers.includes(it.ver))) return frozen.k;
+  const s = st.un[it.ver]; if (s == null) return 0;
+  const q = st.t - s; if (q > UN_T + HOLD_T) { delete st.un[it.ver]; return 0; }
   return Math.min(1, q / UN_T);
 }
 function update() {
   const t = st.t;
   for (const it of items) {
-    const pr = it.prop, k = it.letter ? kOf(it) : 0;
+    const pr = it.prop, k = it.ver ? kOf(it) : 0;
     const sw = st.wobble ? 1 : 0;
     pr.pivot.rotation.set(0.05 * sw * Math.sin(t * 0.9 + it.phase) * (1 - k), 0.16 * sw * Math.sin(t * 0.6 + it.phase) * (1 - k), 0);
-    if (it.letter) {
+    if (it.ver) {
       if (st.wobble && k === 0) pr.wobble(t + it.phase); else if (k === 0) pr.wobble(0);
       pr.unmask(k);
       pr.pivot.scale.setScalar(1 + SWELL * k * k * k);                      // the range's swell (it does this on the pivot)
@@ -191,7 +204,7 @@ function update() {
 }
 function placeCamera() {
   const c = R.camera;
-  if (st.close) { const it = items.find(i => i.row === 'near' && i.letter === st.sel); c.position.set(it.x, SINK + 1.62, Z_NEAR + 2.7); c.rotation.set(-0.02, 0, 0); }
+  if (st.close) { const it = nearOf(st.sel); c.position.set(it.x, SINK + 1.62, Z_NEAR + 2.7); c.rotation.set(-0.02, 0, 0); }
   else { c.position.copy(R.CAM_POS); c.rotation.set(R.CAM_PITCH, 0, 0); }
 }
 function setLod(m) {
@@ -203,13 +216,15 @@ function reset() { st.un = {}; frozen = null; st.wobble = true; st.close = false
 // ---------- input ----------
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
-  if (k >= '1' && k <= '6') select(LETTERS[+k - 1]);
-  else if (LETTERS.includes(k)) select(k);
+  if (k >= '1' && k <= '9') { const v = SET()[+k - 1]; if (v) select(v); }
+  else if (k === 'a' || k === 'c' || k === 'e') select(st.sel === k + '1' ? k + '2' : st.sel === k + '2' ? k + '1' : k + '2');
+  else if (k === 'b' || k === 'd' || k === 'f') select(k);
   else if (k === ' ') { e.preventDefault(); unmask(); }
+  else if (k === 'k') parked(!st.parked);
   else if (k === 'u') unmask('all');
   else if (k === 'w') st.wobble = !st.wobble;
   else if (k === 'r') reset();
-  else if (k === 'c') { st.close = !st.close; placeCamera(); }
+  else if (k === 'v') { st.close = !st.close; placeCamera(); }
   else if (k === 'l') setLod((st.lod + 1) % 3);
   else if (k === 'm') { st.mode = st.mode % 3 + 1; R.setMode(st.mode); }
   else if (k === 'p') st.paused = !st.paused;
@@ -223,14 +238,15 @@ window.addEventListener('keydown', e => {
 const mag = document.getElementById('mag'), magx = mag.getContext('2d'), magcap = document.getElementById('magcap');
 function crop() {                                        // the back row (or X: the spotlit front one) in game px
   let x0, y0, x1, y1;
-  if (st.magNear) { const it = items.find(i => i.row === 'near' && i.letter === st.sel);
+  if (st.magNear) { const it = nearOf(st.sel);
     [x0, y0] = px(it.x - 0.95, SINK + 2.6, Z_NEAR); [x1, y1] = px(it.x + 0.95, SINK + 0.62, Z_NEAR); }
-  else { [x0, y0] = px(-6.5, RISE + 2.5, Z_FAR); [x1, y1] = px(6.5, RISE + 0.75, Z_FAR); }
+  else { [x0, y0] = px(-6.6, RISE + 2.5, Z_FAR); [x1, y1] = px(6.6, RISE + 0.75, Z_FAR); }
   return [Math.max(0, x0), Math.max(0, y0), Math.min(RW, x1) - Math.max(0, x0), Math.min(RH, y1) - Math.max(0, y0)];
 }
 function drawMag() {
   const on = st.mag && !st.close; mag.style.display = magcap.style.display = on ? 'block' : 'none'; if (!on) return;
-  magcap.textContent = st.magNear ? 'FRONT ' + st.sel.toUpperCase() + ' x4 (X: back row, Z hides)' : 'BACK ROW x4 (X: the spotlit front one, Z hides): real plate | decoy, A-F, the far-stop pixels';
+  magcap.textContent = st.magNear ? 'FRONT ' + TAG(st.sel) + ' x4 (X: back row, Z hides)'
+    : 'BACK ROW x4, far-stop pixels (X: front one, Z hides): ' + (st.parked ? 'P B | P D | P F' : 'P A1 A2 | P C1 C2 | P E1 E2');
   const [gx, gy, gw, gh] = crop(), f = R.frame, s = f.s, Z = 4;
   if (mag.width !== gw * Z || mag.height !== gh * Z) { mag.width = gw * Z; mag.height = gh * Z; }
   const cssW = Math.min(gw * Z, innerWidth * 0.98); mag.style.width = cssW + 'px';
@@ -239,8 +255,8 @@ function drawMag() {
   magx.drawImage(R.view, f.x + gx * s, f.top + gy * s, gw * s, gh * s, 0, 0, gw * Z, gh * Z);
 }
 function tick(dt) { st.t += dt; update(); drawHud(); R.render(); drawMag(); }
-window.DV = { items, st, CALLS, select, unmask, reset, setLod, picks: () => picks.slice(),
-  setK(k, letters = 'all') { frozen = k == null ? null : { k, letters }; tick(0); },
+window.DV = { items, st, CALLS, VAR, select, unmask, reset, setLod, parked: on => { parked(on); tick(0); }, picks: () => picks.slice(),
+  setK(k, vers = 'all') { frozen = k == null ? null : { k, vers }; tick(0); },
   step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) tick(dt); return true; },
   close(on) { st.close = !!on; placeCamera(); tick(0); },
   snap(scale = 3) {                                      // the current 426x240 frame as a PNG data URL
@@ -255,7 +271,7 @@ function loop(now) {
   const dt = Math.min(0.05, Math.max(0.0001, (now - last) / 1000)); last = now;
   tick(st.paused ? 0 : dt);
 }
-showPicks(); placeCamera();
+showSet(); showPicks(); placeCamera();
 document.getElementById('boot').remove();
 requestAnimationFrame(loop);
 </script>
