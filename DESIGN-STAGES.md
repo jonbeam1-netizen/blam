@@ -45,7 +45,8 @@ and the duck heckling from the corner. NO light flicker, NO camera flash, NO fal
 
 ### Stage 4: SKY SHOW (fireworks)
 - **Theme:** a city skyline at night from a rooftop, a river reflecting the lights.
-- **Targets:** rockets shoot up on arcs with a glowing head; shoot the head before it fizzles and it bursts big (points scale with height: high burst = more). Duds that fall back are decoys. At high tiers a "bomb" rocket with a skull trail must not be shot.
+- **Targets:** rockets shoot up on arcs with a glowing head; shoot the head before it fizzles and it bursts big (points scale with height: high burst = more). NO duds (Jon: boring and mean). At high tiers a "bomb" rocket with a black skull trail must not be shot.
+- **Approved 2026-10-29.** Fable's picks: hard shot cap (variants add a magazine version), finale spells B.L.A.M. in the sky on clear, rocket speed builds up from Beginner to fast at Insane, balloon drifts by, duck heckles.
 - **Rule:** make N fireworks explode.
 - **Twist:** chain bursts: hitting one near another sets it off for a combo.
 - **Logo:** spelled out in the sky by the final burst of the stage, and on a water tower on the roof.
