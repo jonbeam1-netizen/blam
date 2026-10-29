@@ -6,7 +6,7 @@
 window.BLAM = window.BLAM || {};
 (function (B) {
 const R = B.R, I = B.Input, H = B.HUD, S = B.Stage, Tg = B.Targets, Save = B.Save, SFX = B.SFX, UI = B.UI, N = B.Net;
-const BUILD = '0.003';                      // bump on every publish (shown on the title status line)
+const BUILD = '0.004';                      // bump on every publish (shown on the title status line)
 const Q = new URLSearchParams(location.search);
 // ?slow=0.25 (dev/testing): single-player stage clock runs at that rate, so slow tools (screenshot -> click
 // takes seconds) can still shoot a target that is really there. Versus always runs on the wall clock.
@@ -165,14 +165,14 @@ G.playFire = (run, u, v, inside, touch) => {
   const ray = G.shoot(u, v), me = run.local;
   ammo.use();
   if (!run.versus) run.me.shots++;
-  const send = (k, tid) => { if (run.versus) N.sendShot({ st: +run.t.toFixed(3), k, tid, a: ammo.infinite ? -1 : ammo.count, ar: ammo.reloading ? 1 : 0 }); };
+  const send = (k, tid, z) => { if (run.versus) N.sendShot({ st: +run.t.toFixed(3), k, tid, z, a: ammo.infinite ? -1 : ammo.count, ar: ammo.reloading ? 1 : 0 }); };
   if (G.duckShot(ray)) { send('duck', -1); return; }                        // shooting the deputy is just for fun
   const p = Tg.pick(ray, run.live) || (touch ? touchPick(run, u, v) : null);
   if (p) {
     const tg = p.target;
     if (tg.kind === 'bomb' || tg.kind === 'bystander') { run.applyPenalty(me, tg.kind, tg.id, p.point); send('bomb', tg.id); return; }
-    if (run.versus) { tg.shatter(p.point, { tint: S.PCOLS[me] }); send('hit', tg.id); }   // optimistic; the host decides who gets it
-    else run.applyHit(me, tg.id, run.t, p.point);
+    if (run.versus) { tg.shatter(p.point, { tint: S.PCOLS[me] }); send('hit', tg.id, p.zone); }   // optimistic; the host decides who gets it
+    else run.applyHit(me, tg.id, run.t, p.point, p.zone);
     return;
   }
   G.envShot(ray); SFX.play('miss'); G.duckReact('angry', 0.8); send('miss', -1);

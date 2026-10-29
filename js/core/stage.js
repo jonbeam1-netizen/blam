@@ -114,10 +114,11 @@ class Run {
   }
   // ---------- scoring ----------
   // apply an awarded hit (single player: immediately; versus: when the host says so)
-  applyHit(by, tid, st, point) {
+  // zone = the hit mesh's userData.zone (e.g. 'skull' / 'ribs'), handed to def.points(sp, lt, zone)
+  applyHit(by, tid, st, point, zone) {
     if (this.taken.has(tid)) return false;
     const sp = this.timeline[tid]; if (!sp) return false;
-    const lt = st - sp.t0, pts = this.def.points(sp, lt), P = this.players[by];
+    const lt = st - sp.t0, pts = this.def.points(sp, lt, zone || undefined), P = this.players[by];
     this.taken.set(tid, by);
     P.hits++; P.score += pts; P.hitAge = 0; P.fastest = Math.min(P.fastest, Math.max(0, lt - (sp.readyAt || 0)));
     const tg = this.byId(tid);
@@ -139,12 +140,12 @@ class Run {
   }
   // ---------- versus adjudication (host only) ----------
   // claims for the same target that arrive within CLAIM_WINDOW are compared by stage-clock time
-  hostClaim(by, tid, st) {
+  hostClaim(by, tid, st, zone) {
     const sp = this.timeline[tid];
     if (!sp || this.taken.has(tid)) return;
     if (st < sp.t0 - 0.25 || st > sp.t1 + 0.4) return;                      // not on screen at that time: ignore
     const c = this.pending.get(tid) || { claims: [], due: this.t + 0.12 };
-    c.claims.push({ by, st }); this.pending.set(tid, c);
+    c.claims.push({ by, st, zone }); this.pending.set(tid, c);
   }
   resolveClaims(force) {
     for (const [tid, c] of this.pending) {
@@ -152,7 +153,7 @@ class Run {
       this.pending.delete(tid);
       c.claims.sort((a, b) => a.st - b.st || a.by - b.by);
       const win = c.claims[0];
-      if (this.applyHit(win.by, tid, win.st, null)) B.Net.broadcastHit(tid, win.by, win.st);
+      if (this.applyHit(win.by, tid, win.st, null, win.zone)) B.Net.broadcastHit(tid, win.by, win.st, win.zone);
     }
   }
   // display-only ammo for the other player in versus (synced by shots / 'am' / snapshots; reloading is theirs)
@@ -186,11 +187,15 @@ class Course {
   constructor(tier, seed) {
     this.tier = tier; this.seed = seed >>> 0; this.index = 0; this.total = 0; this.log = [];
     this.lives = TIERS[tier].lives; this.maxLives = this.lives;
-    // with one stage in the pool, the course repeats it with escalating variants (0..3)
-    const pool = order.slice(), r = mulberry32(this.seed ^ 0x9e3779b9);
+    // every registered stage once (shuffled) before any repeats; when the pool runs dry it refills with every
+    // stage except the one just played (never the same stage twice in a row). One stage: it repeats, variants 0..3.
+    const r = mulberry32(this.seed ^ 0x9e3779b9);
+    let pool = [];
     this.stages = [];
     for (let i = 0; i < 4; i++) {
-      const id = pool.length > 1 ? pool.splice(Math.floor(r() * pool.length), 1)[0] || order[i % order.length] : order[0];
+      const last = this.stages.length ? this.stages[this.stages.length - 1].id : null;
+      if (!pool.length) pool = order.length > 1 ? order.filter(id => id !== last) : order.slice();
+      const id = pool.splice(Math.floor(r() * pool.length), 1)[0];
       this.stages.push({ id, variant: Math.min(i, get(id).variants - 1) });
     }
   }

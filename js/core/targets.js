@@ -59,6 +59,28 @@ function puff(p, n = 40, scale = 1) {
   for (let k = 0; k < 10; k++) spawnChip(p, _w.set(rnd(-2, 2), rnd(1, 4), rnd(-1, 2)), 0.05 * scale, PAL.void, rnd(0.8, 1.4));
 }
 
+// cartoon FLOWER burst (bomb explosion): a hot core, 7-9 petals that end in fat round lobes (yellow inside, an orange /
+// rust rim), thinner lemon stems, a puffy mist smoke ring and soot specks. Mostly in the camera plane, floats, fades.
+function burst(p, scale = 1) {
+  const n = 7 + ((Math.random() * 3) | 0), a0 = Math.random() * 6.283, S = scale;
+  for (let k = 0; k < 8; k++) spawnChip(p, _w.set(rnd(-0.5, 0.5), rnd(-0.4, 0.6), rnd(0.3, 0.9)), rnd(0.22, 0.32) * S, PAL[['lemon', 'bone', 'yellow'][k % 3]], rnd(0.22, 0.34), -0.02);
+  for (let q = 0; q < n; q++) {
+    const a = a0 + q * 6.283 / n + rnd(-0.1, 0.1), ca = Math.cos(a), sa = Math.sin(a);
+    const pet = (f, side, size, col, life) => {
+      const sp = 4.2 * S * f;
+      _w.set((ca - sa * side) * sp, (sa + ca * side) * sp + 0.3 * S, rnd(0.2, 0.8) * S);
+      spawnChip(p, _w, size * S, PAL[col], life, -0.03);
+    };
+    for (let k = 0; k < 9; k++) { const f = rnd(0.72, 1.0); pet(f, rnd(-0.24, 0.24), rnd(0.15, 0.21), f > 0.9 ? (k & 1 ? 'orange' : 'rust') : 'yellow', rnd(0.65, 0.85)); }
+    for (let k = 0; k < 4; k++) pet(rnd(0.25, 0.6), rnd(-0.08, 0.08), rnd(0.1, 0.14), k & 1 ? 'lemon' : 'yellow', rnd(0.45, 0.65));
+  }
+  for (let k = 0; k < 10; k++) {                           // smoke ring puffs, a beat slower
+    const a = k * 0.6283 + rnd(-0.2, 0.2);
+    spawnChip(p, _w.set(Math.cos(a) * 2.6 * S, Math.sin(a) * 2.6 * S + 0.6, -0.4), rnd(0.14, 0.2) * S, PAL[k % 3 ? 'mist' : 'bone'], rnd(0.8, 1.0), -0.06);
+  }
+  for (let k = 0; k < 8; k++) spawnChip(p, _w.set(rnd(-2.2, 2.2), rnd(1, 4), rnd(-1, 2)), 0.05 * S, PAL.void, rnd(0.8, 1.4));
+}
+
 // ---------- bullet-hole decals (hole + rim) ----------
 const DEC_N = 64;
 const decMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: PAL.void, fog: false }), DEC_N);
@@ -99,14 +121,16 @@ class Target {
     const hit = point ? point.clone() : this.group.getWorldPosition(new THREE.Vector3());
     for (const p of this.parts) {
       const sc = _s3.setFromMatrixScale(p.mesh.matrixWorld).x * p.s;
-      for (const [i, j, k, col] of p.list) {
+      for (const [i, j, k, col, mul] of p.list) {
         if (Math.random() > keep) continue;
         _v.set(p.ox + i * p.s, p.oy + j * p.s, p.oz + k * p.s).applyMatrix4(p.mesh.matrixWorld);
         _w.copy(_v).sub(hit); _w.z = 0; if (_w.lengthSq() < 1e-6) _w.set(rnd(-1, 1), 1, 0);
         _w.normalize().multiplyScalar(rnd(1.5, 4.2) * pw);
         _w.x += rnd(-0.5, 0.5); _w.y += rnd(1.2, 3.6); _w.z += rnd(0.6, 2.8);
         const c = opts.tint != null && Math.random() < 0.45 ? opts.tint : col;
-        spawnChip(_v, _w, sc * rnd(0.75, 1.0), c, rnd(1.0, 1.9));
+        const big = mul || 1;                                   // 5th element: size multiplier (rims fly as bigger chunks, a bit slower)
+        if (big > 1.2) _w.multiplyScalar(0.8);
+        spawnChip(_v, _w, sc * rnd(0.75, 1.0) * big, c, rnd(1.0, 1.9));
       }
     }
     this.alive = false; this.shootable = false; this.group.visible = false;
@@ -122,7 +146,7 @@ function pick(ray, targets) {
   for (const t of targets) if (t && t.alive && t.shootable && t.group.visible) for (const m of t.meshes()) if (m.visible) meshes.push(m);
   if (!meshes.length) return null;
   const h = ray.intersectObjects(meshes, false)[0];
-  return h ? { target: h.object.userData.target, point: h.point, distance: h.distance, object: h.object } : null;
+  return h ? { target: h.object.userData.target, point: h.point, distance: h.distance, object: h.object, zone: h.object.userData.zone } : null;
 }
 
 // ---------- Sign: a hanging voxel board with 3x5 lettering (menu buttons) ----------
@@ -195,5 +219,5 @@ class Sign extends Target {
     const sc = 1 + this.hoverT * 0.08; this.pivot.scale.set(sc, sc, sc); void top;
   }
 }
-Object.assign(B, { Targets: { Target, Sign, SIGN_STYLES, pick, spawnChip, updateChips, clearChips, sparks, puff, addDecal, clearDecals, surfaceColor, chipMesh } });
+Object.assign(B, { Targets: { Target, Sign, SIGN_STYLES, pick, spawnChip, updateChips, clearChips, sparks, puff, burst, addDecal, clearDecals, surfaceColor, chipMesh } });
 })(window.BLAM);

@@ -113,7 +113,7 @@ SC.scores.drawPortrait = function (t, L) {
   const rows = [];
   for (const id of S.order) { const d = S.get(id); for (let v = 0; v < d.variants; v++) rows.push([(d.short || 'RANGE') + ' ' + (v + 1), id + ':' + v]); }
   rows.push(['COURSE', 'course']);
-  const n = Math.min(rows.length, 9), w = Math.min(L.W - 6, 206), x0 = Math.round(L.cx - w / 2), y0 = shelf(L) - 2, cw = (w - 50) / 4;
+  const n = Math.min(rows.length, 14), w = Math.min(L.W - 6, 206), x0 = Math.round(L.cx - w / 2), y0 = shelf(L) - 2, cw = (w - 50) / 4;
   H.plate(x0, y0, w, 22 + n * 10);
   ['BEG', 'ADV', 'V.HARD', 'INSANE'].forEach((a, i) => H.text3c(a, x0 + 46 + cw * i + cw / 2, y0 + 7, 'oxblood', 1));
   rows.slice(0, n).forEach(([label, key], r) => {
@@ -169,7 +169,7 @@ SC.briefing.drawPortrait = function (t, L) {
   y = shelf(L) - 4;
   card(x0, y, cw, ch, 'panel');
   H.text7c('SHOOT!', x0 + cw / 2, y + 8, 1, 'gold', 'void', 1);
-  H.bullseyeIcon(x0 + cw / 2, y + 29, 8);
+  if (run.def.drawIcon) run.def.drawIcon(x0 + cw / 2, y + 29, 8, t); else H.bullseyeIcon(x0 + cw / 2, y + 29, 8);
   if (vs) { H.text3c('MOST HITS', x0 + cw / 2, y + 44, 'bone', 1); H.text3c('WINS', x0 + cw / 2, y + 52, 'lemon', 1); }
   else { H.text7c(String(c.quota), x0 + cw / 2, y + 41, 2, 'gold', 'void', 1); H.text3c(b.unit || 'TARGETS', x0 + cw / 2, y + 57, 'bone', 1); }
   const x1 = x0 + cw + 4, r = c.ammo || 'unlimited';
@@ -184,7 +184,9 @@ SC.briefing.drawPortrait = function (t, L) {
   H.text3c('SECONDS', x2 + cw / 2, y + 48, 'lemon', 1, 'void');
   y += ch + 8;
   if (b.dont) {
-    H.sticker(L.cx - 70, y, 140, 22); H.bombIcon(L.cx - 56, y + 11, 7, t); H.redX(L.cx - 56, y + 11, 5);
+    H.sticker(L.cx - 70, y, 140, 22);
+    if (run.def.drawDont) { run.def.drawDont(L.cx - 56, y + 11, 7, t); H.redX(L.cx - 50, y + 16, 3); }
+    else { H.bombIcon(L.cx - 56, y + 11, 7, t); H.redX(L.cx - 56, y + 11, 5); }
     H.text3("DON'T SHOOT!", L.cx - 42, y + 4, 'void', 1); H.text3('LIFE -1', L.cx - 42, y + 12, 'crimson', 1); y += 28;
   }
   if (b.tip && !vs) { H.text3c(b.tip, L.cx, y, 'lemon', 1, 'void'); y += 10; }

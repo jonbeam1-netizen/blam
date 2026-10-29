@@ -65,11 +65,10 @@ function buildEnv() {
   });
   glow.bx(-7, 4.0, -11.95, -3.2, 4.08, -11.9, PAL.pink); glow.bx(3.2, 4.0, -11.95, 7, 4.08, -11.9, PAL.pink);
   glow.bx(-7, 3.86, -11.95, -3.2, 3.9, -11.9, PAL.cyan); glow.bx(3.2, 3.86, -11.95, 7, 3.9, -11.9, PAL.cyan);
-  // lane dividers: low walls with yellow caps and steel posts
+  // lane dividers: low walls with yellow caps (no free-standing posts: a paddle brings its own post and takes it away)
   for (const dx of [-3.6, -1.2, 1.2, 3.6]) {
     room.bx(dx - 0.05, 0, -11.9, dx + 0.05, 0.4, -0.95, PAL.slate);
     room.bx(dx - 0.06, 0.4, -11.9, dx + 0.06, 0.45, -0.95, PAL.yellow);
-    for (let z = -1.0; z > -11.9; z -= 2.6) room.bx(dx - 0.07, 0, z - 0.07, dx + 0.07, 0.75, z + 0.07, PAL.steel);
   }
   // near barrier: wooden planks with a tan cap
   strip(-7, 7, 0, 0.16, -0.85, -0.6, PAL.walnut);
@@ -86,45 +85,9 @@ function buildEnv() {
   return group;
 }
 
-// ---------- paddle models (shared geometry, built once) ----------
-const DS = 0.085, DR = 5.5 * DS;                  // disc voxel, disc radius
-const PIVOT_Y = 0.13, POST_H = 0.95, DISC_Y = POST_H + DR;   // in pivot space
-function discList(bomb) {
-  const list = [];
-  for (let j = -5; j <= 5; j++) for (let i = -5; i <= 5; i++) {
-    const d = Math.hypot(i, j); if (d > 5.45) continue;
-    let c;
-    if (bomb) c = d > 4.5 ? PAL.red : PAL.void;
-    else c = d <= 1.5 ? PAL.yellow : d <= 2.6 ? PAL.red : d <= 3.6 ? PAL.bone : d <= 4.6 ? PAL.red : PAL.bone;
-    list.push([i, j, 0, c], [i, j, -1, bomb ? PAL.void : PAL.walnut]);
-    if (d <= 4.5) list.push([i, j, 1, c], [i, j, -2, bomb ? PAL.slate : PAL.umber]);   // bevelled: thick middle, stepped faces
-  }
-  if (bomb) {                                     // skull on the raised face + fuse stub on top
-    const SK = B.HUD.SKULL;
-    SK.forEach((row, r) => { for (let x = 0; x < row.length; x++) if (row[x] === 'X') { const v = list.find(e => e[0] === x - 3 && e[1] === 2 - r && e[2] === 1); if (v) v[3] = PAL.bone; } });
-    list.push([0, 6, 0, PAL.walnut], [0, 7, 0, PAL.walnut], [1, 7, 0, PAL.chestnut]);
-  }
-  return list;
-}
-let GEO = null;
-function geos() {
-  if (GEO) return GEO;
-  const base = new Vox();
-  base.bx(-0.3, 0, -0.22, 0.3, 0.1, 0.22, PAL.chestnut); base.bx(-0.32, 0.1, -0.24, 0.32, 0.13, 0.24, PAL.tan);
-  base.bx(-0.26, -0.02, -0.25, -0.18, 0.04, 0.25, PAL.void); base.bx(0.18, -0.02, -0.25, 0.26, 0.04, 0.25, PAL.void);
-  base.bx(-0.1, 0.13, -0.08, 0.1, 0.19, 0.08, PAL.slate);                        // hinge block
-  const post = new Vox();
-  post.bx(-0.045, 0, -0.045, 0.045, POST_H + 0.1, 0.045, PAL.steel); post.bx(-0.075, 0, -0.075, 0.075, 0.1, 0.075, PAL.slate);
-  post.bx(-0.06, POST_H - 0.05, -0.2, 0.06, POST_H + 0.08, -0.04, PAL.steel);   // clamp behind the disc
-  const PL = discList(false), BL = discList(true);
-  GEO = { base: base.geo(), post: post.geo(), paddle: new Vox().vox(PL, DS, 0, DISC_Y, 0).geo(), bomb: new Vox().vox(BL, DS, 0, DISC_Y, 0).geo(), PL, BL };
-  const sp = new Vox(); sp.bx(-0.05, 0, -0.05, 0.05, 0.1, 0.05, PAL.lemon); sp.bx(-0.03, 0.1, -0.03, 0.03, 0.16, 0.03, PAL.orange);
-  GEO.spark = sp.geo();
-  const rod = new Vox(); rod.bx(-0.035, -0.95, -0.035, 0.035, 0, 0.035, PAL.steel); rod.bx(-0.12, -0.98, -0.12, 0.12, -0.9, 0.12, PAL.slate);   // ceiling rail hanger (group space, hung upside down)
-  GEO.rod = rod.geo();
-  return GEO;
-}
-const shared = (g, m) => { const x = new THREE.Mesh(g, m); x.userData.sharedGeo = true; return x; };
+// ---------- paddle models: BLAM.Props (core/props.js) builds and shares them ----------
+// (pivot at y 0.13, face centre 1.4175 above it: Props.PIVOT_Y / Props.FACE_Y, unchanged from the slab paddles)
+B.Props.warm();
 
 // ---------- motions (#34) ----------
 // every paddle's pose is a pure function of its local time lt (versus-safe). sp.mo picks the motion:
@@ -206,67 +169,57 @@ const FLIP_T = 0.12;
 class Paddle extends T.Target {
   constructor(sp) {
     super(sp.bomb ? 'bomb' : 'target');
-    const G = geos(); this.sp = sp; this.hang = sp.mo === 'drop';
-    this.pivot = new THREE.Group(); this.pivot.position.y = PIVOT_Y;
-    this.base = shared(G.base, MAT.obj); this.post = shared(G.post, MAT.obj);
-    this.disc = shared(sp.bomb ? G.bomb : G.paddle, MAT.obj);
-    this.pivot.add(this.post, this.disc); this.group.add(this.base, this.pivot);
-    this.part(this.disc, sp.bomb ? G.BL : G.PL, DS, 0, DISC_Y, 0); this.pBomb = this.parts[0];
-    if (sp.flip) {                                                          // the target face it flips to
-      this.disc2 = shared(G.paddle, MAT.obj); this.disc2.visible = false; this.pivot.add(this.disc2);
-      this.disc2.userData.target = this; this.pGood = { mesh: this.disc2, list: G.PL, s: DS, ox: 0, oy: DISC_Y, oz: 0 };
-    }
-    if (sp.bomb) { this.spark = shared(G.spark, MAT.glow); this.pivot.add(this.spark); this.setSpark(DISC_Y + 7.5 * DS); }
-    if (this.hang) {                                                        // hung upside down from a rail, disc art kept upright
-      this.group.rotation.z = Math.PI;
-      for (const d of [this.disc, this.disc2]) if (d) { d.position.y = 2 * DISC_Y; d.rotation.z = Math.PI; }
-      this.rod = shared(G.rod, MAT.obj); this.group.add(this.rod);
-    }
+    this.sp = sp; this.hang = sp.mo === 'drop';
+    const P = B.Props, o = { hang: this.hang };
+    this.prop = sp.flip ? P.flipbomb(o) : sp.decoy ? P.decoy(o) : sp.bomb ? P.bomb(o) : P.paddle(o);
+    this.pivot = this.prop.pivot; this.disc = this.prop.face; this.disc2 = this.prop.face2 || null;
+    this.group.add(this.prop.group);
+    const pp = this.prop.register(this); this.pBomb = pp[0]; this.pGood = pp[1] || null;
     this.step = 0; this.lastLt = 0; this.deadLt = -1; this.P = {}; this.announced = false;
   }
-  setSpark(y) {
-    if (this.hang) { this.spark.position.set(-0.04, 2 * DISC_Y - y, 0); this.spark.rotation.z = Math.PI; }
-    else this.spark.position.set(0.04, y, 0);
-  }
+  // the hanger is built hanging (not a flipped floor paddle): mirror the pivot's x / y turns
+  turn(rx, ry, rz) { const m = this.hang ? -1 : 1; this.pivot.rotation.set(m * rx, m * ry, rz); }
   update(lt) {
-    const P = pose(this.sp, lt, this.P), sp = this.sp; this.lastLt = lt;
+    const P = pose(this.sp, lt, this.P), sp = this.sp, pr = this.prop; this.lastLt = lt;
+    // the carriage (post + base) leaves WITH the paddle: it sinks out of sight (hangers: up into the ceiling) in the
+    // last 0.1 s of its life, which is past the shootable window (70 % of the exit), or at the end of the shot fold
+    const sink = k => this.group.position.y += (this.hang ? 1.2 : -0.5) * E.inCubic(Math.max(0, Math.min(1, k)));
     this.group.position.set(P.x, this.hang ? HANG_Y : P.y, P.z);
     if (!this.alive) {                                                      // shot: the post folds down behind
       if (this.deadLt < 0) this.deadLt = lt;
       const p = Math.min(1, (lt - this.deadLt) / 0.4);
-      this.group.visible = true; this.disc.visible = false; if (this.disc2) this.disc2.visible = false; if (this.spark) this.spark.visible = false;
-      this.pivot.rotation.set(-(Math.PI / 2) * E.inCubic(p), P.ry, P.rz);
+      this.group.visible = true; pr.hide(); sink((p - 0.55) / 0.45);
+      this.turn(-(Math.PI / 2) * E.inCubic(p), P.ry, P.rz);
       return p >= 1 || P.done;
     }
     this.group.visible = P.visible;
-    this.pivot.rotation.set(P.rx, P.ry, P.rz);
+    if (!P.shootable && lt > sp.swing) sink((lt - (lifeOf(sp) - 0.1)) / 0.1);
+    this.turn(P.rx, P.ry, P.rz);
     this.shootable = P.shootable;
     let fuse = 1;
     if (sp.flip) {                                                          // flip bomb: kind is a pure function of lt
-      const f = lt - sp.flip, flipped = f >= FLIP_T / 2;
+      const f = lt - sp.flip, flipped = pr.setFlip(f < 0 ? 0 : f >= FLIP_T ? 1 : f / FLIP_T);
       this.kind = flipped ? 'target' : 'bomb';
-      this.disc.visible = !flipped; this.disc2.visible = flipped;
-      const sx = f < 0 ? 1 : f < FLIP_T / 2 ? 1 - f / (FLIP_T / 2) : f < FLIP_T ? (f - FLIP_T / 2) / (FLIP_T / 2) : 1;
-      (flipped ? this.disc2 : this.disc).scale.x = Math.max(0.06, sx);
       this.parts[0] = flipped ? this.pGood : this.pBomb;
       fuse = Math.max(0, Math.min(1, 1 - lt / sp.flip));
-      if (this.spark) { this.spark.visible = !flipped; this.setSpark(DISC_Y + (5.6 + 1.9 * fuse) * DS); }
+      pr.setFuse(0.12 + 0.88 * fuse);
     }
+    if (sp.decoy) pr.wobble(lt);                                            // the tell: a painted bomb can't keep still
     if (P.step !== this.step) { this.step = P.step; B.SFX.play('targetStep', { step: this.step }); }
     if (!this.announced && P.visible) { this.announced = true; B.SFX.play('targetIn', { u: (R.toPx(this.group.position)[0]) / R.RW }); }
-    if (this.spark && this.kind === 'bomb') { const f = ((lt * (fuse < 0.35 ? 26 : 14)) | 0) % 3; this.spark.visible = f !== 2; this.spark.scale.setScalar(f ? 1 : 1.5); }
+    if (this.kind === 'bomb') pr.sparkle(lt, fuse < 0.35);
     return P.done;
   }
   shatter(point, opts) {
     super.shatter(point, opts);
-    this.group.visible = true; this.disc.visible = false; if (this.disc2) this.disc2.visible = false;   // keep the carriage, it folds away
+    this.group.visible = true; this.prop.hide();                            // keep the carriage, it folds away
     this.deadLt = this.lastLt;
   }
   explode(point) {
-    this.disc.updateMatrixWorld(true);
-    const c = new THREE.Vector3(0, DISC_Y, 0).applyMatrix4(this.disc.matrixWorld);
-    T.puff(c, 46, 1.1);
-    this.shatter(point || c, { power: 1.7, max: 90 });
+    const f = this.parts[0].mesh; f.updateMatrixWorld(true);
+    const c = new THREE.Vector3().setFromMatrixPosition(f.matrixWorld);
+    T.burst(c, 1);
+    this.shatter(point || c, { power: 1.7, max: 60 });
   }
 }
 
@@ -294,6 +247,7 @@ function config(tier, v) {
   c.quota = 8;                                       // placeholder: timeline() derives the real quota
   c.autoReload = false;                              // per-stage option: true = the old automatic reload
   c.flipbomb = (tier | 0) >= 2;                      // flip bombs (#24 optional), Very Hard / Insane only
+  c.decoy = (tier | 0) >= 2;                         // decoys (bombs painted like targets, #35), Very Hard / Insane only
   c.ammo = [
     'unlimited',
     { mag: 6, reloadTime: b.rel, autoReload: c.autoReload },
@@ -345,6 +299,7 @@ function timeline(c, rng) {
       sp.bomb = true; bombs++;
       const flipAt = life - LEAVE - 0.4;                        // real target for its last ~0.4 s on screen
       if (c.flipbomb && flipRoll < 0.45 && flipAt > sp.swing + 0.25) sp.flip = +flipAt.toFixed(3);
+      else if (c.decoy && flipRoll >= 0.8) sp.decoy = true;          // painted like a target: still a bomb (~1 in 5 bombs)
     }
     out.push(sp);
     (mo === 'drop' ? hangFree : floorFree)[lane] = t + life + 0.25;
@@ -378,7 +333,7 @@ function decor() {
     update(t) {
       for (const tg of items) {
         const lt = (t + tg.off) % period, cyc = Math.floor((t + tg.off) / period);
-        if (cyc !== tg.cyc) { tg.cyc = cyc; tg.alive = true; tg.deadLt = -1; tg.disc.visible = true; tg.group.visible = true; }
+        if (cyc !== tg.cyc) { tg.cyc = cyc; tg.alive = true; tg.deadLt = -1; tg.prop.show(); tg.group.visible = true; }
         if (!tg.alive && tg.deadLt >= 0 && lt < tg.deadLt) tg.deadLt = lt;
         tg.update(lt);
       }

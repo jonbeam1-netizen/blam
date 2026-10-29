@@ -336,16 +336,24 @@ UI.screens.tiers = {
 UI.screens.free = {
   enter() {
     const g = G(); g.placeDuck('title'); g.duckPose('idle');
-    const items = [];
+    this.build();
+  },
+  // 6 stage signs per page; with more registered stage variants a PAGE sign (right side) cycles the pages
+  build() {
+    const g = G(), items = [], PER = 6;
     for (const id of S.order) { const d = S.get(id); for (let v = 0; v < d.variants; v++) items.push({ stage: id, variant: v }); }
-    const menuItems = items.slice(0, 6).map((it, i) => ({ text: (S.get(it.stage).short || 'RANGE') + ' ' + (it.variant + 1), sub: (S.get(it.stage).variantNames || [])[it.variant] || '',
+    const pages = Math.max(1, Math.ceil(items.length / PER));
+    g.free.page = Math.max(0, Math.min(pages - 1, g.free.page | 0));
+    const menuItems = items.slice(g.free.page * PER, g.free.page * PER + PER).map((it, i) => ({ text: (S.get(it.stage).short || 'RANGE') + ' ' + (it.variant + 1), sub: (S.get(it.stage).variantNames || [])[it.variant] || '',
       color: 'wood', s: 0.034, u: [0.33, 0.63][i % 2], v: [0.27, 0.5, 0.73][i >> 1], stage: it.stage, variant: it.variant,
       act: () => g.startFree(it.stage, it.variant, g.free.tier) }));
     const T = S.TIERS[g.free.tier];
-    const lastRow = Math.ceil(menuItems.length / 2) >= 3 ? 0.9 : 0.75;
+    const lastRow = pages > 1 || Math.ceil(menuItems.length / 2) >= 3 ? 0.9 : 0.75;   // paged: the bottom row stays put
     menuItems.push({ id: 'tier', text: 'TIER: ' + T.name, keep: true, color: T.sign, s: 0.04, u: 0.33, v: lastRow, act: sign => {
       g.free.tier = (g.free.tier + 1) % 4; const T2 = S.TIERS[g.free.tier]; sign.opts.color = T2.sign; sign.setText('TIER: ' + T2.name); } });
     menuItems.push({ text: 'BACK', color: 'slate', s: 0.04, u: 0.63, v: lastRow, act: () => g.go('title') });
+    if (pages > 1) menuItems.push({ id: 'page', text: 'PAGE ' + (g.free.page + 1) + '/' + pages, sub: 'NEXT >', color: 'blue', s: 0.038, u: 0.885, v: 0.5,
+      act: () => { if (G().screen !== this) return; g.free.page = (g.free.page + 1) % pages; this.menu.dispose(); this.build(); } });
     this.menu = new Menu(menuItems);
   },
   exit() { this.menu.dispose(); },
@@ -376,14 +384,16 @@ UI.screens.scores = {
     if (tall()) return;                                                       // portrait: drawPortrait() has the text
     header('HIGH SCORES', 'LOCAL BESTS ON THIS DEVICE');
     const x0 = 112, y0 = 40, cw = 72;
-    H.plate(x0 - 8, y0 - 4, 312, 152);
-    const ab = ['BEGINNER', 'ADVANCED', 'VERY HARD', 'INSANE'];
-    ab.forEach((n, i) => H.text3c(n, x0 + 92 + i * cw - 30, y0 + 6, 'oxblood', 1));
     const rows = [];
     for (const id of S.order) { const d = S.get(id); for (let v = 0; v < d.variants; v++) rows.push([(d.short || 'RANGE') + ' ' + (v + 1), id + ':' + v]); }
     rows.push(['COURSE', 'course']);
-    rows.slice(0, 9).forEach(([label, key], r) => {
-      const y = y0 + 20 + r * 14;
+    // rows squeeze from 14 px down to 9 px so every stage variant + COURSE fits above the BACK sign (12 rows max)
+    const n = Math.min(rows.length, 12), rh = Math.max(9, Math.min(14, Math.floor(126 / n)));
+    H.plate(x0 - 8, y0 - 4, 312, Math.max(152, 26 + n * rh));
+    const ab = ['BEGINNER', 'ADVANCED', 'VERY HARD', 'INSANE'];
+    ab.forEach((n, i) => H.text3c(n, x0 + 92 + i * cw - 30, y0 + 6, 'oxblood', 1));
+    rows.slice(0, n).forEach(([label, key], r) => {
+      const y = y0 + 20 + r * rh;
       H.rect(x0, y - 3, 296, 1, 'rust');
       H.text3(label, x0 + 4, y + 1, 'umber', 1);
       for (let i = 0; i < 4; i++) { const b = B.Save.best(key, i); H.text3c(b ? String(b) : '-', x0 + 92 + i * cw - 30, y + 1, b ? 'void' : 'chestnut', 1); }
@@ -440,13 +450,15 @@ UI.screens.briefing = {
     H.ruleLine(vs ? [['FIRST HIT ON A TARGET ', 'void'], ['TAKES IT!', 'red']] : b.rule, RW / 2, 16, 2);
     H.redPanel(12, 42, 172, 132);
     H.text7('SHOOT!', 26, 54, 2, 'gold', 'void', 2);
-    H.bullseyeIcon(98, 104, 21);
+    const def = run.def;                                                      // stage icon hooks (ENGINE.md: briefing icons)
+    if (def.drawIcon) def.drawIcon(98, 104, 21, t); else H.bullseyeIcon(98, 104, 21);
     if (vs) { H.text3c('MOST HITS', 98, 136, 'bone', 2); H.text3c('WINS', 98, 150, 'lemon', 2); }
     else { H.text7c(String(c.quota), 98, 132, 3, 'gold', 'void', 2); H.text3c(b.unit + ' OR MORE', 98, 158, 'bone', 1); }
     if (b.dont) {
       H.sticker(12, 182, 108, 30);
       H.text3("DON'T SHOOT!", 18, 186, 'void', 2); H.text3('LIFE -1', 18, 199, 'crimson', 2);
-      H.bombIcon(150, 196, 13, t); H.redX(150, 196, 9);
+      // a stage's own don't-shoot icon (a face) keeps its read: the X moves to its lower-right corner
+      if (def.drawDont) { def.drawDont(150, 196, 13, t); H.redX(161, 205, 5); } else { H.bombIcon(150, 196, 13, t); H.redX(150, 196, 9); }
     } else if (b.tip) H.text3(b.tip, 14, 186, 'lemon', 1, 'void');
     shotsPillar(194, 42, c.ammo); timePillar(262, 42, c.time);
     H.text3(this.a.label || '', 194, 182, 'yellow', 1, 'void');

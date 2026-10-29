@@ -30,12 +30,23 @@
      gameOver, continue, courseClear, newRecord
      vsJoin, vsLeave, vsWin, vsLose, vsTaken (the other player took a target first)
      skin        : gun skin changed (key 4 / settings)
+     ricochet    : the title marquee board was shot (spark burst + bulb flicker; opts.u)
+   ALLEY (stage 2):
+     bystanderIn : a bystander steps out (opts.u, opts.who = 'cook' | 'kid' | 'lady'); crooks send targetIn
+     pigeon      : a pigeon takes off (opts.u)
+   BONEYARD (stage 3):
+     skullThrow  : a skeleton throws its skull at the camera (opts.u)
+     skullBonk   : a thrown skull nobody shot bonks the screen (with a small camera shake)
+     boneRattle  : a skeleton rattles as it climbs out of the heap (opts.u)
+     bombFlip    : a bomb skull's candle went out and it flipped into a shootable skull (opts.u)
+     batFlap     : a bat flies across (opts.u = 0 from the left, 1 from the right)
 */
 window.BLAM = window.BLAM || {};
 (function (B) {
 const EVENTS = ['shot', 'hit', 'miss', 'reload', 'reloadDone', 'empty', 'bomb', 'bystander', 'lifeLost', 'stageStart',
   'stageClear', 'stageFail', 'quota', 'tick', 'countdown', 'go', 'menuShoot', 'menuHover', 'duckHit', 'duckHappy', 'duckAngry',
-  'targetIn', 'targetStep', 'gameOver', 'continue', 'courseClear', 'newRecord', 'vsJoin', 'vsLeave', 'vsWin', 'vsLose', 'vsTaken', 'skin'];
+  'targetIn', 'targetStep', 'gameOver', 'continue', 'courseClear', 'newRecord', 'vsJoin', 'vsLeave', 'vsWin', 'vsLose', 'vsTaken', 'skin',
+  'ricochet', 'bystanderIn', 'pigeon', 'skullThrow', 'skullBonk', 'boneRattle', 'bombFlip', 'batFlap'];
 const log = [];
 B.SFX = B.SFX || {
   EVENTS,

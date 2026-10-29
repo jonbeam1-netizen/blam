@@ -100,7 +100,7 @@ function hostRecv(from, m) {
       P.shots++;
       if (from !== run.local) P.ammo = run.remoteAmmo(m.a, m.ar);
       const tid = m.tid | 0, st = +m.st || 0;
-      if (m.k === 'hit') run.hostClaim(from, tid, st);
+      if (m.k === 'hit') run.hostClaim(from, tid, st, zoneOf(m.z));
       else if (m.k === 'bomb') { if (from !== run.local) run.applyPenalty(from, 'bomb', tid); bcast({ t: 'pen', by: from, tid }); }
       else bcast({ t: 'miss', by: from, st });
       bcastSnap(run);
@@ -108,7 +108,9 @@ function hostRecv(from, m) {
     }
   }
 }
-N.broadcastHit = (tid, by, st) => { bcast({ t: 'hit', tid, by, st }); const r = G().run; if (r) bcastSnap(r); };
+// a hit zone ('skull' / 'ribs' ...) travels as a short word, anything else is dropped
+const zoneOf = z => (typeof z === 'string' && /^[a-z0-9_]{1,16}$/i.test(z)) ? z : undefined;
+N.broadcastHit = (tid, by, st, z) => { bcast({ t: 'hit', tid, by, st, z }); const r = G().run; if (r) bcastSnap(r); };
 N.setLobby = patch => { Object.assign(N.lobby, patch); bcast({ t: 'lobby', lobby: N.lobby, players: N.players }); touch(); };
 N.start = () => {
   if (!N.isHost || !N.players[1] || !N.conn || !N.conn.open) { setStatus('WAITING FOR A FRIEND...'); return; }
@@ -158,7 +160,7 @@ function clientRecv(m) {
     case 'lobby': if (m.lobby) N.lobby = m.lobby; if (m.players) N.players = m.players; touch(); break;
     case 'full': setStatus('THAT GAME IS FULL'); cleanup(); N.state = 'idle'; touch(); break;
     case 'start': G().startVersus(Object.assign({ local: 1 }, m)); break;
-    case 'hit': if (vs) run.applyHit(m.by | 0, m.tid | 0, +m.st || 0, null); break;
+    case 'hit': if (vs) run.applyHit(m.by | 0, m.tid | 0, +m.st || 0, null, zoneOf(m.z)); break;
     case 'pen': if (vs && m.by !== run.local) { run.taken.set(m.tid | 0, -1); const tg = run.byId(m.tid | 0); if (tg && tg.alive) { if (tg.explode) tg.explode(); else tg.shatter(); } } break;
     case 'sc': if (vs) run.applySnapshot(m.p); break;
     case 'end': if (vs) { run.applySnapshot(m.p); run.end('time'); G().vsFinish(run); } break;

@@ -23,7 +23,10 @@ The render pipeline, palette, fonts and the voxel builder are lifted from `lookt
 | `js/core/fallback.js` | placeholder box gun + box duck behind the same API as `guns.js` / `duck.js` |
 | `js/core/ui.js` | `BLAM.UI`: title marquee, `Menu` of shootable signs, DOM `prompt`, all screens, `UI.tall()` |
 | `js/core/portrait.js` | tall-phone layouts: `drawPortrait(t, L)` for every text screen, drawn on the outer canvas (see "Check pass 0.002") |
-| `js/stages/range.js` | Stage 1, the shooting range |
+| `js/core/props.js` | `BLAM.Props`: shared toon-voxel gallery props (bullseye paddle, iron bomb, decoy, flip bomb), one shared toon material; API at the top of the file (see "Props" below) |
+| `js/stages/range.js` | Stage 1, the shooting range (paddles, bombs, decoys, flip bombs from `BLAM.Props`) |
+| `js/stages/alley.js` | Stage 2, THE ALLEY: cardboard crooks pop out of cover, bystanders (`kind 'bystander'`) walk through hands up; occluders block bullets |
+| `js/stages/boneyard.js` | Stage 3, BONEYARD: skeletons rise from a bone heap, skull 300 / ribs 100 hit zones, bomb skulls, flip bombs, thrown skulls, bats |
 | `js/net.js` | `BLAM.Net`: versus (lobby, join code, adjudication messages, timeouts, offline fallback) |
 | `js/main.js` | `BLAM.G`: boot, mounting gun + duck, game flow (course / free play / versus), the loop, keys, **build stamp** |
 | `js/guns.js`, `js/duck.js` | owned by the art agent; used through `BLAM.Guns` / `BLAM.Duck` if present |
@@ -36,7 +39,8 @@ URL params: `?seed=N` fixes every stage seed (repeatable runs), `?go=free|settin
 
 `title` (shootable signs PLAY / VERSUS / FREE PLAY / SETTINGS / HIGH SCORES, background paddles you can shoot)
 -> `tiers` -> course of 4 stages: `briefing` -> `play` -> `results` -> ... -> `final`; zero hearts -> `gameover` (CONTINUE refills hearts, retries the stage that ended the run, score resets).
-`free` (any stage variant at any tier) -> `briefing` -> `play` -> `results` -> `free`.
+The course deals every registered stage once (seeded shuffle) before repeating one; slot 4 is never the stage of slot 3 (with 3 stages: e.g. `range:0 alley:1 boneyard:2 alley:2`; the variant is `min(slot, variants - 1)`).
+`free` (any stage variant at any tier; 6 stage signs per page, a blue `PAGE n/m  NEXT >` sign on the right cycles pages when there are more) -> `briefing` -> `play` -> `results` -> `free`.
 `lobby` -> `briefing` (versus, timed) -> `play` -> `vsresults` -> `lobby`.
 Hearts: Beginner 5, Advanced 4, Very Hard 3, Insane 3. A failed quota (time out / timeline done / ammo spent) or a bomb/bystander costs one.
 
@@ -53,8 +57,10 @@ BLAM.Stage.register({
   config(tier, variant) -> cfg,                   // rules (fields below); pure
   timeline(cfg, rng) -> spawns[],                 // every spawn, sorted by t0, from the seeded rng ONLY (may finalise cfg.quota/ammo)
   makeTarget(spawn, run) -> Target,               // a BLAM.Targets.Target subclass
-  points(spawn, lt) -> int,                       // score for hitting this spawn at local time lt; pure
+  points(spawn, lt, zone) -> int,                 // score for hitting this spawn at local time lt (zone: see "Hit zones"); pure
   briefing(cfg) -> { rule: [[text, colour]...], icon: 'bullseye', unit: 'TARGETS', dont: 'bomb'|null, tip },
+  drawIcon?(cx, cy, r, t),                        // optional: briefing "SHOOT!" card icon (default HUD.bullseyeIcon)
+  drawDont?(cx, cy, r, t),                        // optional: don't-shoot sticker icon (default HUD.bombIcon)
   decor?() -> { targets, update(t) }              // optional: title-screen background toys
 });
 ```
@@ -68,9 +74,22 @@ The range derives `quota` from the REAL targets its timeline produced (share per
 
 Determinism: `Run` seeds `mulberry32(hash(stage|tier|variant) ^ seed)`; `run.timelineHash` lets you compare two machines.
 
+**Hit zones (scoring by the part that was hit).** Set `mesh.userData.zone = 'skull'` (any short word, `[a-z0-9_]{1,16}`) on a target's hittable meshes. `Targets.pick` returns it as `p.zone`; solo, `main.js` calls `run.applyHit(me, tid, run.t, point, zone)`; versus, the shot message carries `z`, the host stores it with the claim, the winning claim's zone goes to `applyHit` and out in `hit.z`, so both tabs score the same. `applyHit` calls `def.points(sp, lt, zone)`; `zone` is `undefined` when nothing was set (or a touch-slop pick), so a stage needs a fallback (Boneyard: flat 200).
+
+**Briefing icons.** `ui.js` (landscape card) and `portrait.js` call `def.drawIcon(cx, cy, r, t)` instead of the bullseye and `def.drawDont(cx, cy, r, t)` instead of the bomb when the stage provides them (draw with `BLAM.HUD.sprite` / `pixImg`, centred on `cx, cy`, about `2r` across; r is 21 / 13 landscape, 8 / 7 portrait). With a custom `drawDont`, the red X shrinks and moves to the icon's lower-right corner so the face still reads. ALLEY: crook head / cook head; BONEYARD: bone skull / dark bomb skull with a lit candle.
+
+**Blocking bullets.** `Targets.pick` raycasts only target meshes, so scenery does not stop a shot by itself. A stage can make cover solid by overriding a target mesh's `raycast(raycaster, intersects)`: call `THREE.Mesh.prototype.raycast.call(this, ...)` and drop the hits that lie behind an occluder (ALLEY `occRaycast`: a crook peeking behind a bystander or a dumpster can only be hit on his exposed part; BONEYARD `heapRaycast`: the part of a skeleton still under the bone heap can't be hit).
+
+**Decoy targets (range, Very Hard / Insane).** `sp.decoy`: a bomb painted like a target (`BLAM.Props.decoy`, kind `'bomb'`, ~1 in 5 bombs). Its tell is a nervous wobble (`prop.wobble(lt)`, pure). Shooting it is a bomb hit (life -1); never counted toward the quota.
+
+### Props (`BLAM.Props`, `js/core/props.js`)
+
+Shared toon-voxel props in the gallery look; full API in the file's top comment. `paddle({color, size, hang, slot})`, `bomb({size, hang, burn})`, `decoy({size, hang})`, `flipbomb({size, hang, color})` return a prop `{ kind, group, pivot, base, arm, face, face2?, spark, fuse, register(target), show(), hide(), setFuse(f), sparkle(t, fast), setFlip(f), wobble(t), chips }`. Rotate `pivot` to swing; call `prop.register(this)` in the Target constructor (registers the face as the shatter part). `Props.warm()` builds every shared geometry at stage load; `Props.mat`, `Props.cspec`, `Props.SCHEMES`, `Props.Geo` / `Props.sdf` for new props in the same style. `Target.shatter()` honours a 5th chip element (size multiplier) and `Targets.burst(p, scale)` is the cartoon bomb explosion.
+
 ### Events emitted to BLAM.SFX
 
-`shot, hit {pts, step}, miss, reload {time}, reloadDone, empty, bomb, bystander, lifeLost, stageStart, stageClear, stageFail, quota, tick {n}, countdown {n}, go, menuShoot, menuHover, duckHit, duckHappy, duckAngry, targetIn {u}, targetStep {step}, gameOver, continue, courseClear, newRecord, vsJoin, vsLeave, vsWin, vsLose, vsTaken, skin`.
+`shot, hit {pts, step}, miss, reload {time}, reloadDone, empty, bomb, bystander, lifeLost, stageStart, stageClear, stageFail, quota, tick {n}, countdown {n}, go, menuShoot, menuHover, duckHit, duckHappy, duckAngry, targetIn {u}, targetStep {step}, gameOver, continue, courseClear, newRecord, vsJoin, vsLeave, vsWin, vsLose, vsTaken, skin, ricochet {u}`;
+ALLEY: `bystanderIn {u, who}, pigeon {u}`; BONEYARD: `skullThrow {u}, skullBonk, boneRattle {u}, bombFlip {u}, batFlap {u}`.
 Full descriptions at the top of `js/core/audio.js`. A sound agent replaces `BLAM.SFX.play` (same signature).
 
 ### Versus message protocol (PeerJS, JSON, host-relay star with one guest)
@@ -83,9 +102,9 @@ Code `BLAM-XXXX` (alphabet `ABCDEFGHJKMNPQRSTUVWXYZ23456789`), peer id `blam-xxx
 | H->G | `{t:'welcome', you:1, players, lobby}` | accepted (`{t:'full'}` if a guest is already in) |
 | H->G | `{t:'lobby', lobby:{stage, variant, tier}, players}` | host changed tier/stage |
 | H->G | `{t:'start', seed, stage, variant, tier, names}` | both build the same `Run`; versus briefing lasts 5.5 s from receipt, then 3.2 s countdown |
-| both->H | `{t:'shot', st, k:'hit'/'miss'/'bomb'/'duck', tid, a (ammo, -1 = inf), ar (reloading)}` | every local shot (host feeds its own through the same path) |
+| both->H | `{t:'shot', st, k:'hit'/'miss'/'bomb'/'duck', tid, z (hit zone or absent), a (ammo, -1 = inf), ar (reloading)}` | every local shot (host feeds its own through the same path) |
 | G->H | `{t:'am', a, ar}` | ammo / reload status only (a reload started or finished). NOT a shot: no stats, no adjudication; host updates the guest's display ammo and sends `sc` (the host's own reload just sends `sc`) |
-| H->G | `{t:'hit', tid, by, st}` | target `tid` awarded to player `by` |
+| H->G | `{t:'hit', tid, by, st, z}` | target `tid` awarded to player `by` (`z` = the winning claim's hit zone, scored on both sides) |
 | H->G | `{t:'miss', by, st}` / `{t:'pen', by, tid}` | a miss / a bomb hit (explode it, hearts come with `sc`) |
 | H->G | `{t:'sc', p:[[hits, shots, score, lives, fastest, ammo, reloading] x2]}` | authoritative tallies after every shot |
 | H->G | `{t:'end', p}` | final tallies; guest shows results (or after 5 s with its own copy) |
@@ -178,5 +197,17 @@ Stationary motions sit at a random depth stop `k` (points by stop as before). Sh
 - `duck.hit()` = fall straight back (1.6 s) then back to resting pose. `setPose('shot')` stays fuming.
 
 ## New files (stubs, build 0.003)
-- `js/core/props.js`: shared prop builders (paddle, bomb, decoy, flipbomb, posts) for the props art pass; stages should use `BLAM.Props` once it exists.
-- `js/stages/alley.js`, `js/stages/boneyard.js`: next stages. Stages self-register with `BLAM.Stage.register`; the course picks from the registry and free play lists every registered stage/variant (note: free play currently shows only the first 6 items and needs paging).
+- `js/core/props.js`: shared prop builders (paddle, bomb, decoy, flipbomb, posts) for the props art pass; stages should use `BLAM.Props` once it exists. (Filled in 0.004, see "Props".)
+- `js/stages/alley.js`, `js/stages/boneyard.js`: next stages. Stages self-register with `BLAM.Stage.register`; the course picks from the registry and free play lists every registered stage/variant (paged since 0.004).
+
+## Build 0.004
+
+Stage 2 ALLEY, stage 3 BONEYARD and the props art pass (`props.js`, `targets.js`, `range.js`), then an integration pass. Proof captures: `review/phase3/int/` (stage agents: `review/phase3/alley/`, `boneyard/`, `props/`).
+
+- **Hit-zone scoring through the engine** ("Hit zones" above): `Targets.pick` returns `zone`; `Run.applyHit(by, tid, st, point, zone)` -> `def.points(sp, lt, zone)`; `hostClaim(by, tid, st, zone)` keeps the zone per claim and the winner's zone is applied and broadcast; `net.js` carries `z` in `shot` / `hit` (sanitised to a short word). Boneyard's `zoneProxy` / `LAST_ZONE` workaround and its versus flat-200 rule are gone: versus scores skull 300 / ribs 100 on both tabs.
+- **Briefing icon hooks** `def.drawIcon` / `def.drawDont` in `ui.js` and `portrait.js`; Alley's `H.bullseyeIcon` / `H.bombIcon` monkey-patch (`wrapIcons`) became hooks; Boneyard draws a bone skull / a dark bomb skull with a flickering candle. A custom don't-shoot icon gets a small corner X.
+- **Course** with 3 stages: the old picker took `order[0]` (range) for every slot once the pool was down to one stage, so a course could play RANGE twice and skip a stage. Now every stage plays once before any repeat and never twice in a row (2000 seeds: all three stages in slots 1-3, 0 back-to-back repeats).
+- **High scores**: the table showed only the first 9 rows (BONES 3 and COURSE were cut off). Rows now squeeze from 14 to 11 px to fit up to 12 (landscape); portrait shows up to 14.
+- **SFX events** added to `audio.js` (`ricochet`, Alley `bystanderIn` / `pigeon`, Boneyard `skullThrow` / `skullBonk` / `boneRattle` / `bombFlip` / `batFlap`).
+- **"Unexpected end of input" x6** seen by the props agent: not from the game. The browser pane's console log is kept per tab across reloads, so six old `Uncaught SyntaxError` entries from one earlier page load kept showing in that tab; every game script parses (all 19 checked) and fresh loads log no errors. Testing tip: a tab's console history survives navigation; use a fresh tab (or a marker log) before judging errors.
+- Files: `js/core/targets.js`, `js/core/stage.js`, `js/core/ui.js`, `js/core/portrait.js`, `js/core/audio.js`, `js/net.js`, `js/main.js`, `js/stages/alley.js`, `js/stages/boneyard.js`, `index.html`, this file.
