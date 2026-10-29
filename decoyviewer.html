@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#05050c">
+<link rel="icon" href="data:,">
+<title>B.L.A.M. Decoy Viewer</title>
+<style>
+  html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#05050c;color:#f4f4f0;
+    color-scheme:only light;touch-action:none;overscroll-behavior:none;-webkit-user-select:none;user-select:none;}
+  #view{position:fixed;left:0;top:0;display:block;outline:none;}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;
+    font:bold 14px/1.6 monospace;letter-spacing:3px;color:#ffe040;background:#05050c;}
+  #panel{position:fixed;left:50%;top:0;transform:translateX(-50%);display:flex;gap:14px;align-items:center;flex-wrap:wrap;
+    justify-content:center;padding:5px 12px;background:rgba(11,11,26,0.82);border:1px solid #3f4880;border-top:0;
+    font:bold 12px/1.4 monospace;letter-spacing:1px;color:#c8d0e8;z-index:2;max-width:96vw;}
+  #panel label{cursor:pointer;white-space:nowrap;}
+  #panel label.sel{color:#ffe040;}
+  #panel input{accent-color:#7ae830;vertical-align:-2px;margin:0 3px 0 0;cursor:pointer;}
+  #picks{color:#7ae830;min-width:110px;}
+  #mag{position:fixed;left:50%;bottom:4px;transform:translateX(-50%);image-rendering:pixelated;border:1px solid #3f4880;
+    background:#05050c;z-index:2;max-width:98vw;}
+  #magcap{position:fixed;left:50%;transform:translateX(-50%);font:bold 11px monospace;letter-spacing:1px;color:#8c9ccc;z-index:2;}
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="boot">B.L.A.M.<br>DECOY VIEWER</div>
+<div id="panel"><span id="picks">PICKS: none</span><span id="ticks"></span></div>
+<canvas id="mag"></canvas><div id="magcap">BACK ROW x4 (Z hides): real plate | decoy, A-F, the pixels you get at the far stop</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/core/render.js?v=dv1"></script>
+<script src="js/core/props.js?v=dv11"></script>
+<script>
+'use strict';
+/* =========================================================================================
+   B.L.A.M.  --  DECOY VIEWER (review page for the decoy variants in js/core/props.js)
+   The game's own pipeline (core/render.js) and props (core/props.js) in a plain copy of the range room.
+   BACK (on a riser at the far range stop, view depth 15.6 = the FAR pass): every variant next to a real plate.
+   FRONT (the near range stop, depth ~7.6 = the NEAR pass): A B C | real plate | D E F.
+   Keys: 1-6 / A-F spotlight a variant | SPACE unmask it (k 0->1 over 0.3 s, holds, resets after 1 s) | U unmask all
+         W wobble on/off | R reset | C close-up on the spotlit one | L LOD: auto / force far / force near | M dither | P pause
+         Z the x4 magnifier of the back row (the real far-pass pixels) under the game, X: magnify the spotlit front one
+   Tick "ship this one" boxes: saved in localStorage ('blam.decoyPicks'), listed as PICKS at the top.
+   Hooks: window.DV.select('b'), DV.unmask('b' | 'all'), DV.setK(k, letter|'all') (freeze a pose), DV.step(n), DV.snap()
+   ========================================================================================= */
+const B = window.BLAM, R = B.R, P = B.Props, PAL = R.PAL, CSS = R.CSS, MAT = R.MAT;
+const LETTERS = ['a', 'b', 'c', 'd', 'e', 'f'];
+const Z_FAR = -10.6, Z_NEAR = -2.6, RISE = 0.9, SINK = -0.62;
+P.warm('all');
+
+// ---------- the room (a plain copy of the range's: navy floor, back wall, side walls, ceiling fixtures) + a riser ----------
+const FIXTURES = [1.0, -3.5, -8.0];
+function bakeLight(x, y, z) {
+  let L = 0.58;
+  for (const fz of FIXTURES) { const dz = z - fz; L += 0.9 * Math.exp(-(dz * dz * 0.22 + x * x * 0.010 + (5 - y) * (5 - y) * 0.035)); }
+  if (z < -11.5) L += 0.4 * Math.exp(-(y - 2.6) * (y - 2.6) * 0.12 - x * x * 0.012);
+  return Math.min(L, 1.3);
+}
+{
+  const room = new R.Vox(); room.bake = bakeLight; const glow = new R.Vox();
+  const strip = (x0, x1, y0, y1, z0, z1, col, mask) => { for (let x = x0; x < x1 - 1e-6; x += 1) room.bx(x, y0, z0, Math.min(x + 1, x1), y1, z1, col, null, mask); };
+  for (let x = -7; x < 7; x++) for (let z = -12; z < 6; z++) room.bx(x, -0.2, z, x + 1, 0, z + 1, PAL.navy, null, 4);
+  for (let x = -7; x < 7; x++) for (let y = 0; y < 5; y++) room.bx(x, y, -12.2, x + 1, y + 1, -12, y < 1 ? PAL.indigo : PAL.navy, null, 16);
+  for (const rx of [-6.5, -5, 5, 6.5]) room.bx(rx - 0.08, 1, -12.05, rx + 0.08, 4.9, -11.92, PAL.slate);
+  strip(-7, 7, 0, 0.3, -12, -11.85, PAL.walnut);
+  for (const sx of [-1, 1]) {
+    const mask = sx < 0 ? 1 : 2, wx = sx * 7;
+    for (let z = -12; z < 6; z++) for (let y = 0; y < 5; y++) room.bx(sx < 0 ? wx - 0.2 : wx, y, z, sx < 0 ? wx : wx + 0.2, y + 1, z + 1, y < 1 ? PAL.walnut : PAL.navy, null, mask);
+    for (let z = -11; z < 6; z += 2) room.bx(wx - 0.08, 1, z - 0.08, wx + 0.08, 4.9, z + 0.08, PAL.slate);
+    room.bx(wx - 0.06, 1.0, -12, wx + 0.06, 1.12, 6, PAL.chestnut);
+  }
+  for (let x = -7; x < 7; x++) for (let z = -12; z < 6; z++) room.bx(x, 5, z, x + 1, 5.2, z + 1, PAL.midnight, null, 8);
+  for (let z = -11; z < 6; z += 2) strip(-7, 7, 4.78, 5, z - 0.12, z + 0.12, PAL.navy);
+  for (const fz of FIXTURES) { strip(-5, 5, 4.6, 4.78, fz - 0.32, fz + 0.32, PAL.slate); glow.bx(-4.8, 4.56, fz - 0.2, 4.8, 4.6, fz + 0.2, PAL.lemon); }
+  // the riser the back row stands on (its top at RISE, front edge just in front of the far stop)
+  strip(-7, 7, 0, RISE, Z_FAR - 1.2, Z_FAR + 0.55, PAL.walnut, 4 | 16);
+  strip(-7, 7, RISE - 0.04, RISE, Z_FAR + 0.55, Z_FAR + 0.6, PAL.tan, 4 | 16);
+  R.scene.add(room.mesh(MAT.env), glow.mesh(MAT.glow));
+}
+
+// ---------- the props: back row pairs (plate | decoy), front row A B C [plate] D E F ----------
+const items = [];          // { prop, letter|null, row: 'far'|'near', x, y, z, phase }
+function add(prop, letter, row, x, y, z) {
+  prop.group.position.set(x, y, z); R.scene.add(prop.group);
+  const it = { prop, letter, row, x, y, z, phase: items.length * 1.37 }; items.push(it); return it;
+}
+LETTERS.forEach((l, n) => {
+  const cx = -5.5 + n * 2.2;
+  add(P.paddle(), null, 'far', cx - 0.62, RISE, Z_FAR);
+  add(P.decoy({ variant: l }), l, 'far', cx + 0.62, RISE, Z_FAR);
+});
+['a', 'b', 'c', null, 'd', 'e', 'f'].forEach((l, n) => {
+  const x = (n - 3) * 1.72;
+  const it = add(l ? P.decoy({ variant: l }) : P.paddle(), l, 'near', x, SINK, Z_NEAR);
+  it.prop.floor = -(P.FACE_Y + P.PIVOT_Y) - SINK;          // it pops out of the floor: thrown-off bits land ON the floor
+});
+const byLetter = l => items.filter(it => it.letter === l);
+function countCalls(obj) { let n = 0; obj.traverseVisible(o => { if (o.isMesh) n++; }); return n; }
+const CALLS = {}; for (const l of LETTERS) CALLS[l] = countCalls(byLetter(l)[0].prop.group);
+CALLS.plate = countCalls(items[0].prop.group);
+
+// ---------- state, picks (localStorage), DOM tick boxes ----------
+const st = { sel: 'b', wobble: true, paused: false, close: false, lod: 0, mode: 1, help: true, mag: true, magNear: false, t: 0, un: {} };   // un[letter] = start time of its unmask
+const PICK_KEY = 'blam.decoyPicks';
+let picks = [];
+try { picks = JSON.parse(localStorage.getItem(PICK_KEY) || '[]').filter(l => LETTERS.includes(l)); } catch (e) { picks = []; }
+const ticks = document.getElementById('ticks'), picksEl = document.getElementById('picks'), labels = {};
+function savePicks() { try { localStorage.setItem(PICK_KEY, JSON.stringify(picks)); } catch (e) {} }
+function showPicks() {
+  picksEl.textContent = 'PICKS: ' + (picks.length ? LETTERS.filter(l => picks.includes(l)).join(', ') : 'none');
+  for (const l of LETTERS) labels[l].classList.toggle('sel', l === st.sel);
+}
+for (const l of LETTERS) {
+  const lab = document.createElement('label'), box = document.createElement('input');
+  box.type = 'checkbox'; box.checked = picks.includes(l); box.title = 'ship this one';
+  box.addEventListener('change', () => { picks = picks.filter(p => p !== l); if (box.checked) picks.push(l); savePicks(); showPicks(); box.blur(); });
+  lab.appendChild(box); lab.appendChild(document.createTextNode(l.toUpperCase() + ' ' + P.DECOY_NAMES[l]));
+  lab.addEventListener('click', () => select(l));
+  ticks.appendChild(lab); labels[l] = lab;
+}
+
+// ---------- HUD (426x240, fillRect only, palette colours, 3x5 font) ----------
+const hx = R.hx, RW = R.RW, RH = R.RH;
+const rect = (x, y, w, h, col) => { hx.fillStyle = CSS[col] || col; hx.fillRect(Math.round(x), Math.round(y), w, h); };
+const OUT8 = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]];
+function text3(str, x, y, col, sc = 1, outline = 'void') {
+  str = String(str).toUpperCase();
+  const pass = (ox, oy, c) => { let cx = x;
+    for (const ch of str) { const g = R.F3[ch] || R.F3[' '];
+      for (let r = 0; r < 5; r++) { const row = +g[r]; for (let k = 0; k < 3; k++) if ((row >> (2 - k)) & 1) rect(cx + k * sc + ox, y + r * sc + oy, sc, sc, c); }
+      cx += 4 * sc; } };
+  if (outline) for (const [ox, oy] of OUT8) pass(ox, oy, outline);
+  pass(0, 0, col);
+}
+const w3 = (str, sc = 1) => String(str).length * 4 * sc - sc;
+const _v = new THREE.Vector3();
+const px = (x, y, z) => R.toPx(_v.set(x, y, z));
+const LOD_NAMES = ['AUTO', 'FORCE FAR', 'FORCE NEAR'];
+function drawHud() {
+  hx.clearRect(0, 0, RW, RH);
+  if (!st.close) {
+    // back row: a label over each pair; front row: a label under each decoy
+    LETTERS.forEach((l, n) => {
+      const cx = -5.5 + n * 2.2, [x, y] = px(cx, RISE + 2.45, Z_FAR), s = l.toUpperCase(), on = l === st.sel;
+      text3(s, x - w3(s) / 2, y - 6, on ? 'yellow' : 'mist');
+      const [xp] = px(cx - 0.62, RISE, Z_FAR), [xd] = px(cx + 0.62, RISE, Z_FAR);
+      text3('P', xp - 1, y + 1, 'steel'); text3('D', xd - 1, y + 1, on ? 'yellow' : 'steel');
+    });
+    for (const it of items) if (it.row === 'near') {
+      const [x, y] = px(it.x, SINK + 0.62, Z_NEAR), on = it.letter === st.sel;
+      const s = it.letter ? it.letter.toUpperCase() + ' ' + P.DECOY_NAMES[it.letter] : 'REAL PLATE';
+      text3(s, x - w3(s) / 2, y + 2, on ? 'yellow' : it.letter ? 'mist' : 'lime');
+      if (on) { const [bx0, by0] = px(it.x - 0.8, SINK + 2.4, Z_NEAR), [bx1, by1] = px(it.x + 0.8, SINK + 0.8, Z_NEAR);
+        for (const [a, b, w, h] of [[bx0, by0, 5, 1], [bx0, by0, 1, 5], [bx1 - 4, by0, 5, 1], [bx1, by0, 1, 5], [bx0, by1, 5, 1], [bx0, by1 - 4, 1, 5], [bx1 - 4, by1, 5, 1], [bx1, by1 - 4, 1, 5]]) rect(a, b, w, h, 'yellow'); }
+    }
+    text3('BACK ROW: FAR PASS (DEPTH 15.6)   FRONT ROW: NEAR PASS (DEPTH 7.6)', 4, 20, 'haze');
+  }
+  const l = st.sel, u = st.un[l] != null ? Math.min(1, (st.t - st.un[l]) / 0.3) : 0;
+  text3(l.toUpperCase() + ' ' + P.DECOY_NAMES[l] + '  ' + CALLS[l] + ' DRAW CALLS (PLATE ' + CALLS.plate + ')' + (u > 0 ? '  UNMASK ' + u.toFixed(2) : ''), 4, RH - 18, 'yellow');
+  const right = 'LOD ' + LOD_NAMES[st.lod] + '  DITHER ' + st.mode + (st.wobble ? '' : '  WOBBLE OFF') + (st.paused ? '  PAUSED' : '');
+  text3(right, RW - 4 - w3(right), RH - 18, 'bone');
+  if (st.help) text3('1-6/A-F PICK  SPACE UNMASK  U ALL  W WOBBLE  R RESET  C CLOSE-UP  L LOD  M DITHER  Z/X ZOOM  P PAUSE', 4, RH - 9, 'mist');
+}
+
+// ---------- unmask + motion ----------
+const UN_T = 0.3, HOLD_T = 1.0, SWELL = 0.16;
+function select(l) { if (LETTERS.includes(l)) { st.sel = l; showPicks(); placeCamera(); } }
+function unmask(l = st.sel) { for (const x of l === 'all' ? LETTERS : [l]) st.un[x] = st.t; }
+let frozen = null;                                     // DV.setK: { k, letters }
+function kOf(it) {
+  if (frozen && (frozen.letters === 'all' || frozen.letters.includes(it.letter))) return frozen.k;
+  const s = st.un[it.letter]; if (s == null) return 0;
+  const q = st.t - s; if (q > UN_T + HOLD_T) { delete st.un[it.letter]; return 0; }
+  return Math.min(1, q / UN_T);
+}
+function update() {
+  const t = st.t;
+  for (const it of items) {
+    const pr = it.prop, k = it.letter ? kOf(it) : 0;
+    const sw = st.wobble ? 1 : 0;
+    pr.pivot.rotation.set(0.05 * sw * Math.sin(t * 0.9 + it.phase) * (1 - k), 0.16 * sw * Math.sin(t * 0.6 + it.phase) * (1 - k), 0);
+    if (it.letter) {
+      if (st.wobble && k === 0) pr.wobble(t + it.phase); else if (k === 0) pr.wobble(0);
+      pr.unmask(k);
+      pr.pivot.scale.setScalar(1 + SWELL * k * k * k);                      // the range's swell (it does this on the pivot)
+      pr.sparkle(t, k > 0); if (k > 0) pr.spark.scale.multiplyScalar(1.3 + 1.1 * k);
+    }
+  }
+}
+function placeCamera() {
+  const c = R.camera;
+  if (st.close) { const it = items.find(i => i.row === 'near' && i.letter === st.sel); c.position.set(it.x, SINK + 1.62, Z_NEAR + 2.7); c.rotation.set(-0.02, 0, 0); }
+  else { c.position.copy(R.CAM_POS); c.rotation.set(R.CAM_PITCH, 0, 0); }
+}
+function setLod(m) {
+  st.lod = m; const u = P.mat.uniforms.uLod.value;
+  if (m === 0) { u.x = 9.9; u.y = 11.0; } else if (m === 1) { u.x = 0.01; u.y = 0.02; } else { u.x = 900; u.y = 901; }
+}
+function reset() { st.un = {}; frozen = null; st.wobble = true; st.close = false; setLod(0); placeCamera(); }
+
+// ---------- input ----------
+window.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k >= '1' && k <= '6') select(LETTERS[+k - 1]);
+  else if (LETTERS.includes(k)) select(k);
+  else if (k === ' ') { e.preventDefault(); unmask(); }
+  else if (k === 'u') unmask('all');
+  else if (k === 'w') st.wobble = !st.wobble;
+  else if (k === 'r') reset();
+  else if (k === 'c') { st.close = !st.close; placeCamera(); }
+  else if (k === 'l') setLod((st.lod + 1) % 3);
+  else if (k === 'm') { st.mode = st.mode % 3 + 1; R.setMode(st.mode); }
+  else if (k === 'p') st.paused = !st.paused;
+  else if (k === 'h') st.help = !st.help;
+  else if (k === 'z') st.mag = !st.mag;
+  else if (k === 'x') st.magNear = !st.magNear;
+});
+
+// ---------- loop + hooks ----------
+// the magnifier: the back row's game pixels, cropped straight out of the frame just rendered, x4 (never smoothed)
+const mag = document.getElementById('mag'), magx = mag.getContext('2d'), magcap = document.getElementById('magcap');
+function crop() {                                        // the back row (or X: the spotlit front one) in game px
+  let x0, y0, x1, y1;
+  if (st.magNear) { const it = items.find(i => i.row === 'near' && i.letter === st.sel);
+    [x0, y0] = px(it.x - 0.95, SINK + 2.6, Z_NEAR); [x1, y1] = px(it.x + 0.95, SINK + 0.62, Z_NEAR); }
+  else { [x0, y0] = px(-6.5, RISE + 2.5, Z_FAR); [x1, y1] = px(6.5, RISE + 0.75, Z_FAR); }
+  return [Math.max(0, x0), Math.max(0, y0), Math.min(RW, x1) - Math.max(0, x0), Math.min(RH, y1) - Math.max(0, y0)];
+}
+function drawMag() {
+  const on = st.mag && !st.close; mag.style.display = magcap.style.display = on ? 'block' : 'none'; if (!on) return;
+  magcap.textContent = st.magNear ? 'FRONT ' + st.sel.toUpperCase() + ' x4 (X: back row, Z hides)' : 'BACK ROW x4 (X: the spotlit front one, Z hides): real plate | decoy, A-F, the far-stop pixels';
+  const [gx, gy, gw, gh] = crop(), f = R.frame, s = f.s, Z = 4;
+  if (mag.width !== gw * Z || mag.height !== gh * Z) { mag.width = gw * Z; mag.height = gh * Z; }
+  const cssW = Math.min(gw * Z, innerWidth * 0.98); mag.style.width = cssW + 'px';
+  magcap.style.bottom = (8 + cssW * gh / gw) + 'px';
+  magx.imageSmoothingEnabled = false;
+  magx.drawImage(R.view, f.x + gx * s, f.top + gy * s, gw * s, gh * s, 0, 0, gw * Z, gh * Z);
+}
+function tick(dt) { st.t += dt; update(); drawHud(); R.render(); drawMag(); }
+window.DV = { items, st, CALLS, select, unmask, reset, setLod, picks: () => picks.slice(),
+  setK(k, letters = 'all') { frozen = k == null ? null : { k, letters }; tick(0); },
+  step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) tick(dt); return true; },
+  close(on) { st.close = !!on; placeCamera(); tick(0); },
+  snap(scale = 3) {                                      // the current 426x240 frame as a PNG data URL
+    tick(0);
+    const c = document.createElement('canvas'), g = c.getContext('2d'), f = R.frame; c.width = RW * scale; c.height = RH * scale;
+    g.imageSmoothingEnabled = false; g.drawImage(R.view, f.x, f.top, f.w, f.h, 0, 0, RW * scale, RH * scale);
+    return c.toDataURL('image/png');
+  } };
+let last = performance.now();
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, Math.max(0.0001, (now - last) / 1000)); last = now;
+  tick(st.paused ? 0 : dt);
+}
+showPicks(); placeCamera();
+document.getElementById('boot').remove();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

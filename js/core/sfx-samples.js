@@ -7,6 +7,7 @@
    audio.js decides WHICH events use samples (its SAMPLES paragraph); this file only loads and plays them:
      has(set) -> bool             play(set, { gain, pan, rate, delay, out }) -> handle { g, end, stop(fade) } | null
    The files are loudness-balanced against each other: play them at unity, audio.js applies one SAMPLE_GAIN.
+   Every buffer starts with a 4 ms gain ramp from 0 (FADE_IN), so a file can never click in.
    Round robin: a shuffle bag per set, never the same file twice in a row (also across a bag refill).
    Debug: BLAM.SFX.samples = { ready, sets: { name: count }, missing: [sets that fall back to synth] }. */
 window.BLAM = window.BLAM || {};
@@ -14,6 +15,7 @@ window.BLAM = window.BLAM || {};
 const SFX = B.SFX; if (!SFX || !SFX.registerSampler) return;
 const BASE = 'assets/sfx/';
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const FADE_IN = 0.004;                            // every sample ramps up from 0 over this (seconds)
 const info = { ready: false, sets: {}, missing: [] };
 SFX.samples = info;
 let manifest = null, bytes = null, decoding = null;
@@ -84,7 +86,9 @@ function play(set, o) {
   const out = o.out || M.sfx, rate = o.rate > 0 ? o.rate : 1, buf = list[pick(set, list.length)];
   const t = c.currentTime + 0.004 + Math.max(0, +o.delay || 0);
   const src = c.createBufferSource(), g = c.createGain();
-  src.buffer = buf; src.playbackRate.value = rate; g.gain.value = o.gain != null ? o.gain : 1;
+  src.buffer = buf; src.playbackRate.value = rate;
+  const gain = o.gain != null ? o.gain : 1;       // 4 ms fade-in: no click if a file starts off zero, the attack stays crisp
+  g.gain.value = 0; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + FADE_IN);
   src.connect(g);
   let pan = null;
   if (c.createStereoPanner) { pan = c.createStereoPanner(); pan.pan.value = clamp(+o.pan || 0, -1, 1); g.connect(pan).connect(out); }

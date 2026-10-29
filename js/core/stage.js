@@ -59,7 +59,7 @@ class Run {
     this.timelineHash = hashStr(JSON.stringify(this.timeline)).toString(16);
     this.versus = !!o.versus; this.local = o.local | 0;
     this.t = -COUNTDOWN; this.state = 'count'; this.endReason = ''; this.endT = 0;
-    this.live = []; this.next = 0; this.events = []; this.taken = new Map(); this.pending = new Map();
+    this.live = []; this.next = 0; this.events = []; this.taken = new Map(); this.pending = new Map(); this.deferred = [];
     const n = this.versus ? 2 : 1, names = o.names || ['P1', 'P2'];
     this.players = [];
     for (let i = 0; i < n; i++) {
@@ -121,6 +121,7 @@ class Run {
       const tg = this.def.makeTarget(sp, this); tg.id = sp.id; tg.spawn = sp;
       R.scene.add(tg.group); this.live.push(tg);
     }
+    this.fireDeferred();
     this.updateTargets();
     if (B.Net && this.versus && B.Net.isHost) this.resolveClaims();
     const left = Math.ceil(this.timeLeft);
@@ -143,6 +144,7 @@ class Run {
   byId(id) { return this.live.find(t => t.id === id) || null; }
   end(why) {
     if (this.state === 'end') return;
+    if (this.deferred.length) { this.fireDeferred(true); if (this.state === 'end') return; }   // a bang in the air lands now
     this.state = 'end'; this.endReason = why; this.endT = 0; this.endAt = Math.max(0, this.t);
     const p = this.me;
     this.cleared = this.versus ? false : p.hits >= this.cfg.quota && p.lives > 0;
@@ -164,8 +166,27 @@ class Run {
     if (!this.versus && !this.practice && !this.quotaMet && P.hits >= this.cfg.quota) { this.quotaMet = true; B.SFX.play('quota'); this.events.push({ type: 'quota' }); }
     return true;
   }
-  // a bomb / bystander was shot by player `by`
+  // a bomb / bystander was shot by player `by`.
+  // BUILD-UP hook (range decoys): a target with arm(point, st) -> stage time of its bang (or <= now for none) is taken
+  // at once and keeps its build-up; the life, the points, the event, the sounds and tg.explode() land at that time
+  // (this.deferred, fired before the targets update; end() fires any still pending). A second shooter in the build-up
+  // gets the same bang time.
   applyPenalty(by, kind, tid, point) {
+    const tg = tid != null ? this.byId(tid) : null;
+    if (tg && tg.alive && tg.arm) {
+      const at = tg.arm(point || null, this.t);
+      if (at > this.t) { this.taken.set(tid, -1); this.deferred.push({ at, by, kind, tid, point }); return; }
+    }
+    this.penaltyNow(by, kind, tid, point);
+  }
+  fireDeferred(all) {
+    for (let i = 0; i < this.deferred.length; i++) {
+      const d = this.deferred[i];
+      if (!all && this.t < d.at) continue;
+      this.deferred.splice(i--, 1); this.penaltyNow(d.by, d.kind, d.tid, d.point);
+    }
+  }
+  penaltyNow(by, kind, tid, point) {
     const P = this.players[by];
     P.bombs++; P.streak = 0;
     // practice: the bomb still blows (sound, burst) but costs no life and no points

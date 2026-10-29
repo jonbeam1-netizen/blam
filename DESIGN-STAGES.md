@@ -66,6 +66,27 @@ and the duck heckling from the corner. NO light flicker, NO camera flash, NO fal
 - **STOP! GO!** (Jon, 2026-10-29, PARKED): STOP (red) / GO (green) octagon paddles as the hook. Fable's crossing-guard reading (KEEP, Jon is thinking on it): guard duck flips the paddles; GO = ducks waddle across as bystanders, STOP = crooks dart across as targets; high tiers flip fast and fake flips. Jon found it a little creepy/gruesome as-is; alternatives: school bus, race starter lights, something else. Decide later. Ref: `review/refs/ideas/stop-go-paddles.webp`.
 - **SOCCER BALL** (Jon, 2026-10-29, refined): shots knock a soccer ball around the screen; light hex panels are safe, dark panels are bomb spots. Shoot it into a goal past a goalie duck. Several balls at once at high tiers. Goalie flinch idea dropped for now (Jon: focus on shooting the ball). Also wanted: a HEXAGONAL BOMB target in the catalogue.
 
+- **RANGE-MECHANIC TRANSFERS** (Fable pitch, Jon saved them 2026-10-29, candidates for after BEE HIVE; all reuse the hex plate / decoy / flip / hidden-bomb / pattern catalogue):
+  - **CONVEYOR**: hex plates ride belts at different speeds and heights; rows form as plates bunch up; decoys ride along; hidden bombs behind plates on the back belt.
+  - **GALLERY WHEELS**: spinning drums with plates on the rim; each plate shows for a moment per pass; a plate can flip to a decoy between passes.
+  - **CARD TABLE**: plates lie face down like cards and flip up a row at a time; the decoy tell gets a split second to read.
+  - **SHELF STACK**: plates stacked in columns on shelves, cleared top down; a hidden bomb in the stack makes only the part above it safe.
+  - **WINDOWS**: a tenement front with blinds that snap up on a plate, a decoy or a bomb (Elevators pacing, range catalogue).
+
+## 4. Decoy redesign brief (#67, Jon 2026-10-29)
+Goal: a bomb disguised as a target that FOOLS you at a glance (corner of the eye while shooting) but is OBVIOUSLY a bomb once you look, and silly: cheap paint, cardboard, paper. Build several variants in the look test; Jon picks one or MORE (several can ship together, mixed at random). The current decoy (thin sloppy plate strokes on the bomb, wobble tell) STAYS as variant A in case he prefers it.
+Rules: fuse sticks out the top on every variant. The plate's black rings are see-through on a decoy so the skull peeks through. Same hex silhouette and colours as a real plate from range.
+Variant ideas to build (Opus high, props.js, no gating by tier):
+- A. Current sloppy-paint decoy (kept).
+- B. PAPER LUNCH BAG over the bomb (Jon's idea): brown bag with a hex plate drawn on in crayon/marker, fuse poking out the folded top, bag crinkled, bottom edge shows the bomb's black sphere.
+- C. CARDBOARD CUTOUT: a hex cut from a box, taped to the bomb with visible tape strips, corrugated edge showing, rings cut out as holes (skull through the holes).
+- D. PAPER PLATE MASK: a plate painted on a paper plate, held on with an elastic string round the bomb like a party mask, slightly askew.
+- E. PLATE HELD UP: the bomb hides behind a real plate held by two stick arms, arms and feet visible below, plate too small to cover it.
+- F. CRAYON DRAWING on a scrap of cardboard, lopsided hex, wrong number of rings, 'TARGET' written on it.
+Tells common to all: fuse on top, skull through the rings, slightly off size or tilt.
+ON HIT (Jon 2026-10-29): a decoy does NOT explode instantly. Short build-up first (~0.25-0.35 s, BRIEF but telling, Jon): the disguise falls away (bag/cardboard/plate blows or drops off), the bare bomb stands there with the fuse flaring and sparking, a quick swell, THEN it explodes. The player must see 'that was a decoy' before the bang. Life loss happens at the explosion. Flip behaviour (#67): decoys can flip to a real target and targets to a decoy at all tiers.
+- **Range, built 2026-10-29** (range.js, see ENGINE.md "Range rework 2026-10-29"): the on-hit build-up is in (0.3 s: freeze, `prop.unmask(k)` over 0.16 s, swell + flaring fuse, then the bang; `bombReveal` at the shot, boom + LIFE -1 at the bang). Flips both ways: flip bombs (bomb -> plate) and TURNCOATS (plate -> bomb after a wobble + fuse-tick telegraph). No tier gates: decoys, flip bombs, turncoats, hidden bombs and pattern rows (columns of 4-5 shot front first, rows of 3-5 in step) at every tier. Insane now has fewer targets (about 23 spawns, 15 real) and a 37 % bomb share. The range spawns decoys with `P.decoy(o)` only; the variant pick is props.js's.
+
 ## 3. Open questions for Jon
 1. Approve Alley, Boneyard, Sky Show as the next three, in that order?
 2. Fake-surrender criminal: fun or unfair?

@@ -27,7 +27,7 @@
    B.L.A.M.  --  GUN + DEPUTY DUCK VIEWER (review page for js/guns.js and js/duck.js)
    Same pipeline as looktest.html: scene -> 426x240 target -> palette snap + Bayer dither -> NEAREST letterbox blit.
    Keys: 1/2/3 dither mode | 4 next gun skin | click fire | R reload | E empty | M mobile layout
-         Q idle  W happy  A angry  S shot  D present  Z cheer  X sad  H scared  J relief | click the duck = hit()
+         Q idle  W happy  A angry  S shot  D present  Z cheer  X sad  H scared  J relief  L laugh | click the duck = hit()
          K hover test (setHover driven by the real crosshair hit test) | C duck close-up | arrows turn the duck | F fps | G help
    ========================================================================================= */
 if (!window.THREE) { document.getElementById('boot').textContent = 'COULD NOT LOAD THREE.JS'; throw new Error('three.js missing'); }
@@ -227,7 +227,7 @@ const duck = BLAM.Duck ? BLAM.Duck.create(THREE, {}) : null;
 const duckRoot = new THREE.Group(); scene.add(duckRoot);
 if (duck) duckRoot.add(duck.group);
 const DUCK_SPOTS = [{ x: -1.3, z: 1.0, s: 1.35 }, { x: -0.95, z: 0.75, s: 2.05 }];
-const POSE_KEYS = { q: 'idle', w: 'happy', a: 'angry', s: 'shot', d: 'present', z: 'cheer', x: 'sad', h: 'scared', j: 'relief' };
+const POSE_KEYS = { q: 'idle', w: 'happy', a: 'angry', s: 'shot', d: 'present', z: 'cheer', x: 'sad', h: 'scared', j: 'relief', l: 'laugh' };
 const st = { hoverTest: false, hovered: false, mode: 1, fps: 60, showFps: true, help: true, mobile: false, empty: false, pose: 'idle', spot: 0, yaw: 0.42, mouseIn: false, crossHot: 0, u: 0.62, v: 0.45 };
 function placeDuck() { const p = DUCK_SPOTS[st.spot]; duckRoot.position.set(p.x, 0, p.z); duckRoot.scale.setScalar(p.s); duckRoot.rotation.y = st.yaw; }
 placeDuck();
@@ -264,7 +264,7 @@ function drawHud(dt) {
   }
   if (st.help) {
     text3('4 SKIN  CLICK FIRE  R RELOAD  E EMPTY  M MOBILE  1-3 DITHER', 4, RH - 24, 'bone');
-    text3('Q IDLE W HAPPY A ANGRY S SHOT D PRESENT Z CHEER X SAD H SCARED J RELIEF', 4, RH - 16, 'bone');
+    text3('Q IDLE W HAPPY A ANGRY S SHOT D PRESENT Z CHEER X SAD H SCARED J RELIEF L LAUGH', 4, RH - 16, 'bone');
     text3('K HOVER TEST (' + (st.hoverTest ? 'ON' : 'OFF') + ')  C ZOOM  ARROWS TURN  G HELP', 4, RH - 8, 'bone');
   }
   if (st.mouseIn) {

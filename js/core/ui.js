@@ -526,10 +526,16 @@ UI.screens.play = {
   update(dt, t) {
     const run = this.run, g = G();
     run.update(run.versus ? dt : dt * (g.slow || 1));                       // ?slow= (testing) slows a solo stage
-    if (this.menu) { this.menu.paint(); this.menu.update(dt, t); this.heckle(dt, run); }
+    if (this.menu) { this.menu.paint(); this.menu.update(dt, t); }
+    // Deputy Duck in play: a hit = a silent happy hop; a bomb = his scared face (hands up) for 1 s, silent, straight back
+    // to rest (no relief); a bystander = nothing. Angry only ever follows shooting him (main.js duckShot); the laugh
+    // on every 3rd miss is main.js playFire's.
     for (const e of run.events) {
       if (e.type === 'hit' && e.by === run.local) g.duckReact('happy', 0.6);
-      else if ((e.type === 'bomb' || e.type === 'bystander') && e.by === run.local) { g.duckReact('angry', 1.1); g.shakeIt(0.35); this.pop = { text: run.practice ? 'BOMB!' : 'LIFE -1', t: 0, rows: 'red' }; }
+      else if ((e.type === 'bomb' || e.type === 'bystander') && e.by === run.local) {
+        if (e.type === 'bomb') { SFX.duckQuiet(1.3); g.duckReact('scared', 1.0); }
+        g.shakeIt(0.35); this.pop = { text: run.practice ? 'BOMB!' : 'LIFE -1', t: 0, rows: 'red' };
+      }
       else if (e.type === 'quota') this.pop = { text: 'QUOTA!', t: 0, rows: 'lime' };
     }
     run.events.length = 0;
@@ -551,14 +557,6 @@ UI.screens.play = {
     if (this.pop && ((this.pop.t * 10) | 0) % 2 === 0) H.text7c(this.pop.text, RW / 2, 40, 2, this.pop.rows, 'void', 2);
     if (run.versus && run.me.lives <= 0 && run.state === 'play') H.text3c('OUT OF LIVES - WATCH THE REST!', RW / 2, 40, 'red', 1, 'void');
     if (run.practice && run.state === 'play' && !tall()) H.text3c(G().touch ? 'PRACTICE' : 'ESC TO FINISH', RW / 2, 4, 'mist', 1, 'void');
-  },
-  // practice: Deputy Duck heckles from the floor now and then (idle -> a short pose -> idle); duckReact skips his gag
-  heckle(dt, run) {
-    if (run.state !== 'play') return;
-    this.hk = (this.hk == null ? 6 : this.hk) - dt;
-    if (this.hk > 0) return;
-    this.hk = 5 + Math.random() * 5;
-    G().duckReact(['happy', 'angry', 'cheer', 'present'][(Math.random() * 4) | 0], 1.2);
   },
   fire(u, v, inside, touch) { G().playFire(this.run, u, v, inside, touch); }
 };

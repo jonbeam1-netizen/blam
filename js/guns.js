@@ -630,9 +630,9 @@ class Cable {
 }
 
 // ---------- 8. THE GUN OBJECT ----------
-const SKINS = [
-  { id: 'justifier', name: 'HOT ROD', desc: 'Long blue enforcer with a pump front grip, chrome muzzle, flame decals and a lucky 7.' },
+const SKINS = [   // order = the GUN sign cycle; index 0 is the default (AQUA PRO since 0.009, #63)
   { id: 'guncon', name: 'AQUA PRO', desc: 'Hefty two-tone pistol: aqua frame, navy slide with serrations, yellow racing stripe.' },
+  { id: 'justifier', name: 'HOT ROD', desc: 'Long blue enforcer with a pump front grip, chrome muzzle, flame decals and a lucky 7.' },
   { id: 'zapper', name: 'RAY-85', desc: 'Retro ray gun in cream and orange: long ringed barrel, ribbed vent block, charge meter.' },
   { id: 'revolver', name: 'CANDY SIX', desc: 'Candy-green toy six-shooter with a swing-out cylinder and an orange safety tip.' }];
 const BUILDERS = { justifier: buildHotRod, guncon: buildAquaPro, zapper: buildRay85, revolver: buildCandySix };

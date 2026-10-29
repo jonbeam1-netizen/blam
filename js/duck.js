@@ -6,7 +6,7 @@
    Same "toy plastic" material as js/guns.js (palette toon tones + gloss highlight + void outline);
    output alpha 1.0 = the "object" dither class.  Faces +z, feet on y = 0, about 1.0 unit tall.
    API: BLAM.Duck.create(THREE, opts) -> duck  (see the bottom of this file)
-     poses idle happy angry shot present cheer sad + hover overlays scared relief; duck.setHover(bool) every frame
+     poses idle happy angry shot present cheer sad + 'laugh' (1.2 s miss taunt, then back to rest) + hover overlays scared relief; duck.setHover(bool) every frame
      (edge-triggered); duck.lookAt(ndcX, ndcY) turns the head toward that screen point (uses the camera that drew him).
    ========================================================================================= */
 (function () {
@@ -272,12 +272,14 @@ function buildDuck(THREE, mat) {
 
 // ---------- 6. POSES: every frame a pose writes target values for a set of channels; channels ease toward them ----------
 // 'scared' / 'relief' are the hover overlays (see setHover); 'relief' ends in the screen's resting pose (st.rest)
-const POSES = ['idle', 'happy', 'angry', 'shot', 'present', 'cheer', 'sad', 'scared', 'relief'];
+// 'laugh' is a one-shot taunt (the player missed): plays 1.2 s, then back to st.rest; it never becomes the rest pose
+const POSES = ['idle', 'happy', 'angry', 'shot', 'present', 'cheer', 'sad', 'scared', 'relief', 'laugh'];
 const OVERLAY = { scared: 1, relief: 1 };
 const NEUTRAL = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, sq: 1, hx: 0, hy: 0, hz: 0, jaw: 0, lid: 0, happy: 0, brow: 0, bOn: 0, by: 0,
   aLx: 0, aLy: 0, aLz: -0.24, aRx: 0, aRy: 0, aRz: 0.24, aLs: 1, aRs: 1, aRo: 0, px: 0, py: 0, pc: 0, pupil: 1, hatY: 0, hatRx: -0.24, hatRz: 0.07,
   flush: 0, feet: 0, fL: 0, fR: 0, steam: 0, sweat: 0, nb: 0 };
 const RATE = { x: 40, y: 26, rx: 20, ry: 12, rz: 16, sq: 24, jaw: 28, lid: 36, flush: 5, hatY: 20, pupil: 20, feet: 30, fL: 40, fR: 40, aLs: 24, aRs: 24, aRo: 24, nb: 1e3, sweat: 1e3 };
+const LAUGH_P = 2 / 6.5;                                                 // one belly-slap cycle = two HAs
 const mix = (a, b, k) => a + (b - a) * k;
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -418,6 +420,25 @@ function poseTargets(T, st, dt) {
       if (pt >= 1.5) { st.pose = st.rest; st.pt = 0; st.pop = 0; st.beat = null; st.beatNext = 2.5 + Math.random() * 2; }
       break;
     }
+    case 'laugh': {    // the player MISSED: eyes squeezed ^ ^, bill clacking HA-HA-HA, belly bob, points at you, slaps his belly; 1.2 s
+      const a = sstep(0, 0.12, pt) * (1 - sstep(1.0, 1.2, pt)), env = sstep(0.1, 0.22, pt) * (1 - sstep(0.9, 1.15, pt));
+      const u = pt - 0.15, ph = u * 6.5, hr = u > 0 ? Math.max(0, Math.sin(ph * 2 * Math.PI)) : 0, hk = hr * env;   // 6.5 "HA"s a second
+      const sl = u > 0 ? (0.5 + 0.5 * Math.cos(Math.PI * (ph + 0.05))) * env : 0;     // belly slap on every other HA (leads: the arm eases in ~50 ms)
+      T.fast = 1; T.nb = 1; T.happy = pt < 1.1 ? 1 : 0;
+      T.sq = 1 + 0.06 * Math.max(0, a - env) - 0.1 * hk; T.y = 0.9 * hk; T.rx = -0.05 * a - 0.03 * hk; T.rz = Math.sin(pt * 8) * 0.04 * env;
+      lookHead(T, st, 0.4); T.hx += -0.1 * a - 0.04 * hk; T.hz += Math.sin(ph * Math.PI) * 0.07 * env;    // head tipped back a touch, wobbling
+      T.jaw = a * mix(0.36, 0.22 + 0.2 * hr, env);                                // "HA" on every pulse, never wider than 'happy' (0.42)
+      // finger at the player: arm level, swung forward to ~55 deg off the camera line so the hand clears his silhouette
+      // (a point straight down the lens vanishes into his yellow body at 60 px); jabs with every HA (right-arm sign)
+      const pZ = mix(0.24, 1.5 + 0.12 * hk, a), pY = (clamp(st.lside * st.camYaw + 0.95, 0.45, 1.3) - Math.PI / 2) * a;
+      const sX = mix(0, mix(-0.3, -0.58, sl), a), sZ = mix(-0.24, mix(0.05, 0.6, sl), a);                               // hand onto the belly (left-arm sign)
+      if (st.lside > 0) { T.aRz = pZ; T.aRy = pY; T.aRs = 1 + 0.1 * a; T.aLx = sX; T.aLz = sZ; }
+      else { T.aLz = -pZ; T.aLy = -pY; T.aLs = 1 + 0.1 * a; T.aRx = sX; T.aRz = -sZ; }
+      T.hatY = 0.4 * a + 1.3 * hk; T.hatRx = -0.24 - 0.1 * hk; T.hatRz = 0.07 + Math.sin(pt * 9) * 0.08 * env;
+      T.sweat = pt > 0.35 && pt < 0.95 ? 4 : 0;                                   // tears of laughter squirting off his temples
+      if (pt >= 1.2) { st.pose = st.rest; st.pt = 0; st.pop = 0; st.beat = null; st.beatNext = 2.5 + Math.random() * 2; }
+      break;
+    }
   }
 }
 
@@ -462,7 +483,7 @@ function create(THREE, opts) {
   const st = { pose: 'idle', after: 'idle', rest: 'idle', pt: 0, t: 0, dir: 1, blinkT: 2.2, blink: 0,
     look: { nx: 0, ny: 0, yaw: 0, pitch: 0 }, lk: { yaw: 0, pitch: 0 }, camYaw: 0, hover: false, hoverT0: 0,
     beat: null, beatI: 0, bt: 0, lastBt: 0, beatNext: 3 + Math.random() * 2, lastRt: 0, sweatAcc: 0, sighWave: 0, flick: 0, glint: 0,
-    pop: 0, flushLine: 0, steamAcc: 0, lastP: 0, lastSigh: 0, tearT: 1.2, stars: 0, starsOn: 0, confetti: 0, sighPuff: 0, tear: 0, mirror: 1 };
+    lside: 1, pop: 0, flushLine: 0, steamAcc: 0, lastP: 0, lastSigh: 0, tearT: 1.2, stars: 0, starsOn: 0, confetti: 0, sighPuff: 0, tear: 0, mirror: 1 };
   // where is the crosshair, seen from his head?  NDC -> a point on the camera ray, a bit in front of him -> duck-space yaw/pitch.
   // Works for any holder transform, including the mirrored (negative x scale) right-hand spots and the camera-child mini duck.
   function computeLook() {
@@ -567,6 +588,11 @@ function create(THREE, opts) {
     if (POSES.indexOf(name) < 0) return;
     if (o && o.dir) st.dir = o.dir < 0 ? -1 : 1;
     if (name === 'shot') { if (st.pose !== 'shot') { st.after = 'angry'; enter('shot'); } return; }
+    if (name === 'laugh') {                                                   // one-shot taunt: leaves st.rest alone, returns to it by itself
+      if (st.pose === 'shot' || (st.hover && st.pose === 'scared')) return;   // never cuts the hit gag; stays scared under the crosshair
+      if (st.pose === 'laugh') { if (st.pt > 0.5) st.pt -= Math.floor((st.pt - 0.2) / LAUGH_P) * LAUGH_P; return; }   // missed again: keep laughing, same rhythm
+      enter('laugh'); st.lside = st.camYaw > 0.1 ? -1 : 1; return;            // point with the far-side arm (it swings out clear of his body), slap with the near one
+    }
     if (!OVERLAY[name]) { st.rest = name; if (st.hover && st.pose === 'scared') return; }
     if (name === st.pose) return;
     enter(name);

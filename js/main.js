@@ -6,7 +6,7 @@
 window.BLAM = window.BLAM || {};
 (function (B) {
 const R = B.R, I = B.Input, H = B.HUD, S = B.Stage, Tg = B.Targets, Save = B.Save, SFX = B.SFX, UI = B.UI, N = B.Net;
-const BUILD = '0.008';                      // bump on every publish (shown on the title status line)
+const BUILD = '0.010';                      // bump on every publish (shown on the title status line)
 const Q = new URLSearchParams(location.search);
 // ?slow=0.25 (dev/testing): single-player stage clock runs at that rate, so slow tools (screenshot -> click
 // takes seconds) can still shoot a target that is really there. Versus always runs on the wall clock.
@@ -113,10 +113,13 @@ G.duckPose = (pose, after, dur) => {
   try { G.duck.setPose(pose); } catch (e) {}
   duckGag = 0; duckBack = after || pose; duckBackT = after ? (dur || 1) : 0;
 };
+// A reaction pose for dur s, then back to duckBack. Only the laugh has a voice (duckHeckle); a hit's happy hop and the
+// bomb's scared face are silent (audio.js's pose watcher is hushed for that one: SFX.duckQuiet). An unknown pose
+// name (an older duck.js without 'laugh') is ignored by setPose, so nothing breaks.
 G.duckReact = (pose, dur = 0.7) => {
   if (duckGag > 0) return;                                                  // still flat on his back: let him finish
   try { G.duck.setPose(pose); } catch (e) {}
-  if (pose === 'happy') SFX.play('duckHappy'); else if (pose === 'angry') SFX.play('duckAngry');
+  if (pose === 'laugh') SFX.play('duckHeckle');
   duckBackT = dur;
 };
 const _dp = new THREE.Vector3();
@@ -217,7 +220,10 @@ G.playFire = (run, u, v, inside, touch) => {
   }
   run.me.streak = 0;
   if (run.practice && G.duckShot(ray)) return;
-  G.envShot(ray); SFX.play('miss'); G.duckReact('angry', 0.8); send('miss', -1);
+  // every 3rd miss of the run (a new Run per stage resets it) Deputy Duck laughs at you; the other misses leave him be
+  G.envShot(ray); SFX.play('miss'); run.duckMisses = (run.duckMisses | 0) + 1;
+  if (run.duckMisses % 3 === 0) G.duckReact('laugh', 1.3);
+  send('miss', -1);
 };
 G.hudState = run => ({
   versus: run.versus, portrait: R.frame.portrait, players: run.versus ? run.players : [run.me],

@@ -25,9 +25,10 @@
      menuShoot   : a menu sign was shot
      menuHover   : the mouse moved onto a menu sign
      duckHit     : Deputy Duck was shot
-     duckHappy / duckAngry : his reactions
-     targetIn    : a target swings in (opts.u)
-     targetStep  : a range paddle scoots forward
+     duckHappy / duckAngry : his reactions (no longer sent during play: a hit is a silent hop, angry only follows duckHit)
+     duckHeckle  : his LAUGH (main.js duckReact('laugh'), every 3rd miss in a run; the menus' ta-da 'present' too)
+     targetIn    : a target swings in (opts.u)            } silent off the play screen (the title-range paddles)
+     targetStep  : a range paddle scoots forward          }
      gameOver, continue, courseClear, newRecord
      vsJoin, vsLeave, vsWin, vsLose, vsTaken (the other player took a target first)
      skin        : gun skin changed (key 4 / settings)
@@ -47,23 +48,26 @@
      chain       : a chain burst (opts.n link number, opts.u)
      finale      : the B.L.A.M. finale launches
    Internal (the router plays these itself): duckScared, duckRelief, duckHeckle, duckCheer, duckSad (Deputy Duck's
-   pose changes, watched on BLAM.G.duck.pose), the title-menu chiptune and a quiet ambience bed per stage.
+   pose changes, watched on BLAM.G.duck.pose; duckQuiet(s) mutes the scared / relief ones for s seconds, used by the
+   bomb's silent scared face), the title-menu chiptune and a quiet ambience bed per stage.
 
    SAMPLES: js/core/sfx-samples.js loads assets/sfx/manifest.json + wavs (decoded on the first unlock) and registers
    itself via registerSampler(). The ROUTE table below sends these events to sample sets; any set that is absent or
    not decoded yet falls back to the synth recipe. The files are pre-balanced against each other, so the per-event MIX
-   trims do not apply to them; one SAMPLE_GAIN sets the whole sample layer against the synth events.
-     shot      -> shot.<skin> (skin = hotrod | aquapro | ray85 | candysix from the gun), +-3 % pitch; cuts a playing reload
+   trims do not apply to them; one SAMPLE_GAIN sets the whole sample layer against the synth events (SHOT_GAIN on top
+   for the gun shots only, +3 dB). Every sample fades in over 4 ms (no click at the start of a buffer).
+     shot      -> shot.<skin> (skin = aquapro | hotrod | ray85 | candysix from the gun), +-3 % pitch; cuts a playing reload
      reload    -> reload.<skin> (reloadDone is then silent)
      hit       -> hitBreak (+-3 %) + hitDing 12 ms later, +1 semitone per consecutive hit (cap +7; reset on miss / stageStart)
      miss      -> synth miss + a ricochet sample at a random pan in [-0.8, 0.8]; ricochet (title marquee) -> the sample
      bomb      -> bomb (synth off), straight to the master bus while the sfx bus ducks ~4 dB for 0.3 s
-     duck*     -> the set of the same name (+-5 %); one duck line at a time (a new one cuts the last, 30 ms fade)
+     duck*     -> the set of the same name (+-5 %); one duck line at a time (a new one cuts the last, 60 ms fade)
    Voice limits for samples: 4 shots, 4 hits, 1 reload, 2 bombs, 1 duck. render() is offline and synth-only (no samples).
 
    API (all calls are safe before the first click: they no-op until the AudioContext exists):
      play(name, opts)          setVolume(0..1) / volume      setMusicVolume(0..1) / musicVolume
-     muted (get/set), toggleMute()  (key M also toggles)     music(on)   duck(pose)   ready (bool)
+     muted (get/set), toggleMute()  (key M also toggles)     music(on)   duck(pose)   duckQuiet(secs)   ready (bool)
+     SAMPLE_GAIN / SHOT_GAIN (get/set, live: for tuning by ear from the console)
      render(name, opts, secs) -> Promise<AudioBuffer> (offline, through the same mixer)   measure(buffer)
      samples (debug: { ready, sets, missing }, from sfx-samples.js)   registerSampler(s)   _mix (the live mixer)
    Settings live in BLAM.Save.settings: sfxVolume (0.35), musicVolume (0.35), muted (false), music (true).
@@ -130,8 +134,9 @@ function applyVolume() {
 }
 
 // ---------- SAMPLES: recorded files for the core events (loaded by sfx-samples.js) ----------
-const SAMPLE_GAIN = 0.9;        // the whole sample layer against the synth events (match by ear)
-const SKIN_KEYS = ['hotrod', 'aquapro', 'ray85', 'candysix'];
+let SAMPLE_GAIN = 0.9;          // the whole sample layer against the synth events (match by ear)
+let SHOT_GAIN = 1.41;           // the gun shots only, on top of SAMPLE_GAIN (+3 dB, #56)
+const SKIN_KEYS = ['aquapro', 'hotrod', 'ray85', 'candysix'];   // guns.js SKINS order (the index fallback)
 const SKIN_IDS = { justifier: 'hotrod', guncon: 'aquapro', zapper: 'ray85', revolver: 'candysix' };   // guns.js SKINS ids
 const DUCK_SETS = ['duckScared', 'duckRelief', 'duckHeckle', 'duckCheer', 'duckSad', 'duckHappy', 'duckAngry', 'duckHit'];
 const SAMPLE_SETS = [].concat(SKIN_KEYS.map(k => 'shot.' + k), SKIN_KEYS.map(k => 'reload.' + k), ['hitBreak', 'hitDing', 'ricochet', 'bomb'], DUCK_SETS);
@@ -152,7 +157,7 @@ const hasSet = set => !!(sampler && sampler.has(set));
 function sample(group, set, name, pri, o) {
   if (!hasSet(set)) return null;
   const now = ctx.currentTime, L = live[group] = (live[group] || []).filter(h => h.end > now);
-  for (let i = 0; i <= L.length - SAMPLE_MAX[group]; i++) L[i].stop(group === 'duck' ? 0.03 : 0.015);   // newest wins
+  for (let i = 0; i <= L.length - SAMPLE_MAX[group]; i++) L[i].stop(group === 'duck' ? 0.06 : 0.015);   // newest wins
   const h = sampler.play(set, { gain: SAMPLE_GAIN * (o.gain != null ? o.gain : 1), pan: o.pan, rate: o.rate, delay: o.delay, out: o.out });
   if (!h) return null;
   h.name = name; h.pri = pri; L.push(h); active.push(h);   // counted in status / MAX_VOICES like a synth voice
@@ -163,7 +168,7 @@ function stopGroup(group, fade) { (live[group] || []).forEach(h => h.stop(fade))
 const ROUTE = {
   shot(o, def, f, d) {
     stopGroup('reload', 0.015);
-    return !!sample('shot', 'shot.' + skinKey(), 'shot', def.pri, { gain: f, delay: d, pan: panOf(o, def), rate: jit(0.03) });
+    return !!sample('shot', 'shot.' + skinKey(), 'shot', def.pri, { gain: f * SHOT_GAIN, delay: d, pan: panOf(o, def), rate: jit(0.03) });
   },
   reload(o, def, f, d) { return !!sample('reload', 'reload.' + skinKey(), 'reload', def.pri, { gain: f, delay: d, pan: panOf(o, def) }); },
   reloadDone() { return hasSet('reload.' + skinKey()); },          // muted: the reload sample already has the clack
@@ -189,8 +194,8 @@ const ROUTE = {
 DUCK_SETS.forEach(n => {
   ROUTE[n] = (o, def, f, d) => {
     if (!hasSet(n)) return false;
-    const now = ctx.currentTime;  // one duck line at a time: cut any synth duck line too
-    active.forEach(x => { if (!x.stop && x.end > now && /^duck/.test(x.name)) steal(x, now); });
+    const now = ctx.currentTime;  // one duck line at a time: cut any synth duck line too (gently: ~60 ms)
+    active.forEach(x => { if (!x.stop && x.end > now && /^duck/.test(x.name)) steal(x, now, 0.02); });
     return !!sample('duck', n, n, def.pri, { gain: f, delay: d, pan: panOf(o, def), rate: jit(0.05) });
   };
 });
@@ -254,15 +259,17 @@ function voice(name, o, c, mix, offline, pre = 0) {
   }
   return len;
 }
-function steal(rec, now) {
-  try { rec.g.gain.cancelScheduledValues(now); rec.g.gain.setTargetAtTime(0, now, 0.012); } catch (e) {}
+function steal(rec, now, tau = 0.012) {
+  try { rec.g.gain.cancelScheduledValues(now); rec.g.gain.setTargetAtTime(0, now, tau); } catch (e) {}
   rec.end = now;                // drop it from the counts
 }
 function curStage() { try { return (B.G && B.G.run && B.G.run.stage) || ''; } catch (e) { return ''; } }
 
 // ---------- the public object ----------
 const SFX = {
-  EVENTS, log, debug: false, mix: MIX, SAMPLE_SETS, SAMPLE_GAIN,
+  EVENTS, log, debug: false, mix: MIX, SAMPLE_SETS,
+  get SAMPLE_GAIN() { return SAMPLE_GAIN; }, set SAMPLE_GAIN(x) { if (isFinite(+x)) SAMPLE_GAIN = +x; },
+  get SHOT_GAIN() { return SHOT_GAIN; }, set SHOT_GAIN(x) { if (isFinite(+x)) SHOT_GAIN = +x; },
   get ready() { return !!(ctx && unlocked); },
   get ctx() { return ctx; },
   get _mix() { return M; },
@@ -285,15 +292,18 @@ const SFX = {
     try {
       hooks(name, opts || {});
       if (!ctx || !unlocked || SFX.muted) return;
+      if (PLAY_ONLY[name] && !(B.G && B.G.screenName === 'play')) return;   // the title-range paddles are silent (#64)
       voice(name, opts || {}, ctx, M, false);
     } catch (e) { if (SFX.debug) console.warn('SFX', name, e); }
   },
-  // Deputy Duck's voice: 'scared' | 'relief' | 'present' (heckle) | 'cheer' | 'sad' | 'happy' | 'angry' | 'hit'.
+  // Deputy Duck's voice: 'scared' | 'relief' | 'present' / 'laugh' (heckle) | 'cheer' | 'sad' | 'happy' | 'angry' | 'hit'.
   // Calling it from outside turns off the built-in pose watcher (so nothing plays twice).
   duck(pose, auto) {
     if (!auto) duckAuto = false;
     const n = DUCK_POSES[pose]; if (n) SFX.play(n);
   },
+  // the pose watcher skips scared / relief quacks for the next secs (the bomb's silent scared face, #61)
+  duckQuiet(secs = 1) { duckQuietUntil = Math.max(duckQuietUntil, performance.now() + Math.max(0, +secs || 0) * 1000); },
   // offline render through a fresh copy of the mixer at the current volume (for tests / the sound report)
   render(name, opts, secs = 2, sr = 44100, pre = 0) {
     if (!OAC) return Promise.reject(new Error('no OfflineAudioContext'));
@@ -320,10 +330,13 @@ const SFX = {
 B.SFX = SFX;
 
 // ---------- event hooks: ambience beds follow the stage ----------
-let bed = null, bedId = '', music = null, duckAuto = true, lastPose = '';
-const DUCK_POSES = { scared: 'duckScared', relief: 'duckRelief', present: 'duckHeckle', cheer: 'duckCheer', sad: 'duckSad',
-  happy: 'duckHappy', angry: 'duckAngry', hit: 'duckHit', shot: 'duckHit' };
-const DUCK_WATCH = { scared: 1, relief: 1, present: 1, cheer: 1, sad: 1 };   // happy / angry / shot already arrive as events
+let bed = null, bedId = '', music = null, duckAuto = true, lastPose = '', duckQuietUntil = 0;
+const DUCK_POSES = { scared: 'duckScared', relief: 'duckRelief', present: 'duckHeckle', laugh: 'duckHeckle', cheer: 'duckCheer',
+  sad: 'duckSad', happy: 'duckHappy', angry: 'duckAngry', hit: 'duckHit', shot: 'duckHit' };
+// poses the watcher voices itself; happy / angry / shot / laugh are main.js's business (laugh plays duckHeckle there)
+const DUCK_WATCH = { scared: 1, relief: 1, present: 1, cheer: 1, sad: 1 };
+const DUCK_HUSH = { scared: 1, relief: 1 };                 // what duckQuiet() silences
+const PLAY_ONLY = { targetIn: 1, targetStep: 1 };          // muted whenever the play screen is not up (#64)
 function hooks(name) {
   if (name === 'hit') { dingStep = Math.min(hitStreak, 7); hitStreak++; }   // the ding's streak pitch (samples)
   else if (name === 'miss' || name === 'stageStart') hitStreak = 0;
@@ -355,7 +368,8 @@ function watch() {
     const d = G && G.duck, pose = d && d.pose;
     if (pose && pose !== lastPose) {
       const vis = !d.group || d.group.visible !== false;
-      if (duckAuto && vis && lastPose && DUCK_WATCH[pose]) SFX.duck(pose, true);
+      const hush = DUCK_HUSH[pose] && performance.now() < duckQuietUntil;
+      if (duckAuto && vis && lastPose && DUCK_WATCH[pose] && !hush) SFX.duck(pose, true);
       lastPose = pose;
     }
   } catch (e) { if (SFX.debug) console.warn('SFX watch', e); }
