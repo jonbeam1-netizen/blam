@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#05050c">
+<link rel="icon" href="data:,">
+<title>B.L.A.M. Look Test</title>
+<style>
+  /* Page chrome: a black stage, no scroll/zoom/selection, no OS cursor over the game.
+     Colours are hard-coded so nothing depends on the OS light/dark theme. */
+  html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#05050c;color:#f4f4f0;
+    color-scheme:only light;touch-action:none;overscroll-behavior:none;-webkit-user-select:none;user-select:none;
+    -webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;}
+  #view{position:fixed;left:0;top:0;display:block;cursor:none;touch-action:none;outline:none;}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;
+    font:bold 14px/1.6 monospace;letter-spacing:3px;color:#ffe040;background:#05050c;}
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="boot">B.L.A.M.<br>LOADING...</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+'use strict';
+/* =========================================================================================
+   B.L.A.M. ("Blast like a maniac!")  --  PHASE ONE LOOK TEST (style proof, not the game)
+   Pipeline:  3D scene -> 426x240 render target -> palette snap + Bayer dither (+ HUD composite)
+              -> NEAREST blit into a letterboxed 16:9 frame.  See STYLE.md for the rules.
+   ========================================================================================= */
+if (!window.THREE) { document.getElementById('boot').textContent = 'COULD NOT LOAD THREE.JS'; throw new Error('three.js missing'); }
+
+// ---------- 1. CONFIG ----------
+const RW = 426, RH = 240;                         // internal resolution: every pixel lives on this grid
+const FOV = 50, ASPECT = RW / RH;                 // vertical FOV in degrees, fixed 16:9-ish frame
+const TAN_H = Math.tan(FOV * Math.PI / 360);
+const IS_TOUCH = (window.matchMedia && matchMedia("(pointer: coarse)").matches) || navigator.maxTouchPoints > 0;   // initial layout guess; real input type wins later
+const CAM_POS = new THREE.Vector3(0, 1.9, 5), CAM_PITCH = -0.08;
+
+// ---------- 2. PALETTE "BLAM-34" (the post pass snaps every scene pixel to one of these) ----------
+const PAL = {
+  void:0x0b0b1a, midnight:0x1a1c3a, navy:0x2b2f5c, slate:0x3f4880, steel:0x5a6aa8, haze:0x8c9ccc, mist:0xc8d0e8, bone:0xf4f4f0,
+  indigo:0x3a1a6a, umber:0x2e1c1c, walnut:0x4e2e24, chestnut:0x7a4a2c, tan:0xa8703a, sand:0xd4a060,
+  oxblood:0x5c0f24, crimson:0xa01830, red:0xe82838, coral:0xff6a5a,
+  plum:0x6a0f5a, magenta:0xc0187a, pink:0xff3aa0, bubblegum:0xff9ad0,
+  rust:0xc84a10, orange:0xff7a1a, amber:0xffb020, yellow:0xffe040, lemon:0xfff8a0,
+  deepblue:0x0a2a8a, blue:0x1a5aff, cyan:0x20d0ff, ice:0xa0f4ff,
+  forest:0x0a4a2a, green:0x1a9a3a, lime:0x7ae830
+};
+const PAL_LIST = Object.values(PAL);
+const CSS = {}; for (const k in PAL) CSS[k] = '#' + PAL[k].toString(16).padStart(6, '0');
+
+// ---------- 3. PIXEL FONTS (hand-made bitmaps, no font files) ----------
+// 3x5 HUD font: 5 rows per glyph, each row one octal digit (4 = left pixel, 2 = middle, 1 = right)
+const F3 = {A:'25755',B:'65656',C:'34443',D:'65556',E:'74647',F:'74644',G:'34553',H:'55755',I:'72227',J:'11152',
+  K:'55655',L:'44447',M:'57755',N:'65555',O:'25552',P:'65644',Q:'25563',R:'65655',S:'34216',T:'72222',U:'55557',
+  V:'55552',W:'55775',X:'55255',Y:'55222',Z:'71247','0':'75557','1':'26227','2':'61247','3':'61216','4':'55711',
+  '5':'74616','6':'34652','7':'71222','8':'25252','9':'25316','!':'22202','.':'00002',':':'02020','-':'00700',
+  '/':'11244','?':'61202','+':'02720',' ':'00000','<':'12421','>':'42124','(':'12221',')':'42224',',':'00012'};
+// Bold 7-row display font (title marquee + HIT!): w = width, r = row bitmasks (MSB = left)
+const F7 = {B:{w:6,r:[62,51,51,62,51,51,62]}, L:{w:6,r:[48,48,48,48,48,63,63]}, A:{w:6,r:[30,51,51,63,51,51,51]},
+  M:{w:7,r:[99,119,127,107,99,99,99]}, H:{w:6,r:[51,51,51,63,51,51,51]}, I:{w:6,r:[63,12,12,12,12,12,63]},
+  T:{w:6,r:[63,63,12,12,12,12,12]}, '!':{w:2,r:[3,3,3,3,3,0,3]}, '.':{w:2,r:[0,0,0,0,0,3,3]}};
+// Lay out a string in the bold font: returns pixel list [x, y, charIndex] and total width
+function bold(str) {
+  const px = []; let cx = 0;
+  [...str].forEach((ch, ci) => { const g = F7[ch]; if (!g) { cx += 4; return; }
+    for (let y = 0; y < 7; y++) for (let x = 0; x < g.w; x++) if ((g.r[y] >> (g.w - 1 - x)) & 1) px.push([cx + x, y, ci]);
+    cx += g.w + 1; });
+  return { px, w: cx - 1 };
+}
+// 3x5 text as pixel list (used for voxel lettering in the scene)
+function small(str) {
+  const px = []; let cx = 0;
+  for (const ch of str) { const g = F3[ch] || F3[' '];
+    for (let y = 0; y < 5; y++) { const row = +g[y]; for (let x = 0; x < 3; x++) if ((row >> (2 - x)) & 1) px.push([cx + x, y]); }
+    cx += 4; }
+  return { px, w: cx - 1 };
+}
+
+// ---------- 4. VOXEL BUILDER: many boxes -> ONE BufferGeometry with vertex colours (1 draw call) ----------
+// Face table: normal + 4 corners (unit cube -1..1), counter-clockwise seen from outside.
+const FACES = [
+  [1,0,0, [1,-1,1, 1,-1,-1, 1,1,-1, 1,1,1]], [-1,0,0, [-1,-1,-1, -1,-1,1, -1,1,1, -1,1,-1]],
+  [0,1,0, [-1,1,1, 1,1,1, 1,1,-1, -1,1,-1]], [0,-1,0, [-1,-1,-1, 1,-1,-1, 1,-1,1, -1,-1,1]],
+  [0,0,1, [-1,-1,1, 1,-1,1, 1,1,1, -1,1,1]], [0,0,-1, [1,-1,-1, -1,-1,-1, -1,1,-1, 1,1,-1]]];
+const _c = new THREE.Color(), _v = new THREE.Vector3(), _n = new THREE.Vector3();
+class Vox {
+  constructor() { this.p = []; this.n = []; this.c = []; this.i = []; this.vc = 0; this.bake = null; this.shade = null; }
+  // box centred at (x,y,z), size (w,h,d); m = optional Matrix4; mask = which faces to emit (bit k = FACES[k])
+  box(x, y, z, w, h, d, col, m, mask = 63) {
+    _c.set(col);
+    for (let f = 0; f < 6; f++) {
+      if (!((mask >> f) & 1)) continue;
+      const F = FACES[f], q = F[3];
+      _n.set(F[0], F[1], F[2]); if (m) _n.transformDirection(m);
+      for (let k = 0; k < 12; k += 3) {
+        _v.set(x + q[k] * w / 2, y + q[k + 1] * h / 2, z + q[k + 2] * d / 2); if (m) _v.applyMatrix4(m);
+        const L = (this.bake ? this.bake(_v.x, _v.y, _v.z) : 1) * (this.shade ? this.shade[f] : 1);   // baked light / face shade
+        this.p.push(_v.x, _v.y, _v.z); this.n.push(_n.x, _n.y, _n.z); this.c.push(_c.r * L, _c.g * L, _c.b * L);
+      }
+      const v = this.vc; this.i.push(v, v + 1, v + 2, v, v + 2, v + 3); this.vc += 4;
+    }
+    return this;
+  }
+  // box from min/max corners
+  bx(x0, y0, z0, x1, y1, z1, col, m, mask) { return this.box((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, x1 - x0, y1 - y0, z1 - z0, col, m, mask); }
+  // voxel list [[i,j,k,col]...] on a grid of size s (+ offset); faces between neighbours are culled
+  vox(list, s, ox = 0, oy = 0, oz = 0, m) {
+    const S = new Set(list.map(v => v[0] + ',' + v[1] + ',' + v[2]));
+    for (const [i, j, k, col] of list) {
+      let mask = 0;
+      for (let f = 0; f < 6; f++) { const F = FACES[f]; if (!S.has((i + F[0]) + ',' + (j + F[1]) + ',' + (k + F[2]))) mask |= 1 << f; }
+      if (mask) this.box(ox + i * s, oy + j * s, oz + k * s, s, s, s, col, m, mask);
+    }
+    return this;
+  }
+  geo() {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(this.n, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
+    g.setIndex(this.i); g.computeBoundingSphere(); return g;
+  }
+  mesh(mat) { return new THREE.Mesh(this.geo(), mat); }
+}
+
+// Materials. Output ALPHA is a "dither class" read by the post pass:
+//   0.5 = environment (lit gradients, fog -> dithered in mode 1),  1.0 = object (flat colours kept clean in mode 1).
+// Env uses transparent+NoBlending so the 0.5 alpha is written straight into the render target.
+const MAT_ENV  = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.5, blending: THREE.NoBlending });
+const MAT_OBJ  = new THREE.MeshLambertMaterial({ vertexColors: true });
+const MAT_GLOW = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });   // unlit: light panels, neon, bulbs
+const easeOutBack = t => { const c = 1.9; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); };
+const easeInOut = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+const rnd = (a, b) => a + Math.random() * (b - a);
+
+// ---------- 5. RENDERER + PIXEL PIPELINE ----------
+const view = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ canvas: view, antialias: false, alpha: false, powerPreference: 'high-performance' });
+renderer.setPixelRatio(1);              // we size the drawing buffer in device pixels ourselves
+renderer.autoClear = false;
+const RT_OPTS = { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, format: THREE.RGBAFormat, generateMipmaps: false, stencilBuffer: false };
+const rtScene = new THREE.WebGLRenderTarget(RW, RH, RT_OPTS);                                    // pass 1: 3D scene
+const rtPost  = new THREE.WebGLRenderTarget(RW, RH, Object.assign({ depthBuffer: false }, RT_OPTS)); // pass 2: palette/dither
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(PAL.midnight, 13, 32);
+const camera = new THREE.PerspectiveCamera(FOV, ASPECT, 0.05, 60);
+camera.position.copy(CAM_POS); camera.rotation.x = CAM_PITCH;
+scene.add(camera);                      // gun + marquee are children of the camera
+
+// HUD: a 2D canvas on the same 426x240 grid; composited AFTER quantisation, so it is never dithered
+const hud = document.createElement('canvas'); hud.width = RW; hud.height = RH;
+const hx = hud.getContext('2d'); hx.imageSmoothingEnabled = false;
+const hudTex = new THREE.CanvasTexture(hud);
+hudTex.minFilter = hudTex.magFilter = THREE.NearestFilter; hudTex.generateMipmaps = false;
+
+// Post pass: snap to palette with ordered (Bayer 4x4) dither. Modes: 1 = lighting/gradients only, 2 = everything, 3 = none
+const MODE_NAMES = ['', 'LIGHT DITHER', 'FULL DITHER', 'FLAT SNAP'];
+const QUAD_VS = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+const postMat = new THREE.ShaderMaterial({
+  uniforms: { tScene: { value: rtScene.texture }, tHud: { value: hudTex },
+              pal: { value: PAL_LIST.map(h => new THREE.Color(h)) }, mode: { value: 1 }, boost: { value: 0 } },
+  vertexShader: QUAD_VS,
+  fragmentShader: `
+    #define NP ${PAL_LIST.length}
+    uniform sampler2D tScene; uniform sampler2D tHud; uniform vec3 pal[NP]; uniform int mode; uniform float boost;
+    varying vec2 vUv;
+    float b2(vec2 a){ a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
+    float bayer4(vec2 a){ return b2(0.5 * a) * 0.25 + b2(a); }            // 0..15/16
+    vec3 nearest(vec3 c){
+      vec3 best = pal[0]; float bd = 1e9;
+      for (int i = 0; i < NP; i++){
+        vec3 d = (c - pal[i]) * vec3(0.95, 1.25, 0.8);                      // rough perceptual weights
+        float e = dot(d, d); if (e < bd){ bd = e; best = pal[i]; } }
+      return best; }
+    void main(){
+      vec4 s = texture2D(tScene, vUv);
+      float env = step(s.a, 0.75);                                          // 1 = environment, 0 = object
+      float th = bayer4(gl_FragCoord.xy) - 0.46875;                         // centred threshold
+      float spread = mode == 1 ? mix(0.045, 0.17, env) : (mode == 2 ? mix(0.19, 0.23, env) : 0.0);
+      vec3 o = nearest(clamp(s.rgb * (1.0 + boost) + th * spread, 0.0, 1.0));   // boost = muzzle-flash lift
+      vec4 h = texture2D(tHud, vUv);
+      gl_FragColor = vec4(h.a > 0.5 ? h.rgb : o, 1.0);
+    }`,
+  depthTest: false, depthWrite: false
+});
+const blitMat = new THREE.ShaderMaterial({
+  uniforms: { t: { value: rtPost.texture } }, vertexShader: QUAD_VS,
+  fragmentShader: 'uniform sampler2D t; varying vec2 vUv; void main(){ gl_FragColor = texture2D(t, vUv); }',
+  depthTest: false, depthWrite: false
+});
+const orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const postScene = new THREE.Scene(), blitScene = new THREE.Scene();
+[[postScene, postMat], [blitScene, blitMat]].forEach(([s, m]) => {
+  const q = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), m); q.frustumCulled = false; s.add(q); });
+
+// Letterbox: fit the 16:9 frame into the window, integer scale when it costs < 20% of the size
+const frame = { x: 0, y: 0, w: RW, h: RH, W: RW, H: RH, dpr: 1, cssX: 0, cssY: 0, cssW: RW, cssH: RH };
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const cw = window.innerWidth, ch = window.innerHeight;
+  const W = Math.max(1, Math.round(cw * dpr)), H = Math.max(1, Math.round(ch * dpr));
+  view.style.width = cw + 'px'; view.style.height = ch + 'px';
+  renderer.setSize(W, H, false);
+  let s = Math.min(W / RW, H / RH);
+  if (s >= 2 && Math.floor(s) / s > 0.8) s = Math.floor(s);
+  const w = Math.round(RW * s), h = Math.round(RH * s);
+  Object.assign(frame, { W, H, dpr, w, h, x: Math.floor((W - w) / 2), y: Math.floor((H - h) / 2) });
+  frame.cssX = frame.x / dpr; frame.cssY = (H - frame.y - h) / dpr; frame.cssW = w / dpr; frame.cssH = h / dpr;
+}
+window.addEventListener('resize', resize);
+if (window.visualViewport) visualViewport.addEventListener('resize', resize);
+resize();
+
+function renderFrame() {
+  renderer.setRenderTarget(rtScene);                     // 1) scene at 426x240 (clear alpha 0.5 = environment)
+  renderer.setClearColor(PAL.midnight, 0.5); renderer.clear(); renderer.render(scene, camera);
+  hudTex.needsUpdate = true;                             // 2) palette + dither + HUD, still 426x240
+  renderer.setRenderTarget(rtPost); renderer.render(postScene, orthoCam);
+  renderer.setRenderTarget(null);                        // 3) nearest-neighbour blit into the letterbox
+  renderer.setViewport(0, 0, frame.W, frame.H); renderer.setClearColor(0x05050c, 1); renderer.clear();
+  renderer.setViewport(frame.x, frame.y, frame.w, frame.h); renderer.render(blitScene, orthoCam);
+}
+
+// Flat arcade lighting: ambient + key from front-top-right + soft top fill.
+// Tuned so a face pointing at the camera lands exactly on its authored palette colour (0.42 + 0.66*0.89 ~ 1.0).
+scene.add(new THREE.AmbientLight(0xffffff, 0.42));
+const keyLight = new THREE.DirectionalLight(0xffffff, 0.66); keyLight.position.set(0.30, 0.35, 0.89); scene.add(keyLight);
+const topLight = new THREE.DirectionalLight(0xffffff, 0.28); topLight.position.set(0, 1, 0); scene.add(topLight);
+
+// ---------- 6. THE RANGE: static environment = one lit mesh (env class) + one unlit glow mesh ----------
+const FIXTURES = [1.0, -3.5, -8.0];               // z of the ceiling light bars
+function bakeLight(x, y, z) {                     // baked light pools -> smooth vertex-colour gradients for the dither
+  let L = 0.58;
+  for (const fz of FIXTURES) { const dz = z - fz; L += 0.9 * Math.exp(-(dz * dz * 0.22 + x * x * 0.010 + (5 - y) * (5 - y) * 0.035)); }
+  if (z < -11.5) L += 0.4 * Math.exp(-(y - 2.6) * (y - 2.6) * 0.12 - x * x * 0.012);   // wash on the back wall
+  return Math.min(L, 1.3);
+}
+const room = new Vox(); room.bake = bakeLight;
+const glow = new Vox();
+// x-strips split into 1-unit pieces so baked light can vary along them
+function strip(x0, x1, y0, y1, z0, z1, col, mask) { for (let x = x0; x < x1 - 1e-6; x += 1) room.bx(x, y0, z0, Math.min(x + 1, x1), y1, z1, col, null, mask); }
+
+// floor: navy concrete tiles (top faces only)
+for (let x = -7; x < 7; x++) for (let z = -12; z < 6; z++) room.bx(x, -0.2, z, x + 1, 0, z + 1, PAL.navy, null, 4);
+// back wall (z=-12): navy tiles, slate ribs, walnut skirting
+for (let x = -7; x < 7; x++) for (let y = 0; y < 5; y++) room.bx(x, y, -12.2, x + 1, y + 1, -12, y < 1 ? PAL.indigo : PAL.navy, null, 16);
+for (let x = -6.5; x < 7; x += 1.5) room.bx(x - 0.08, 1, -12.05, x + 0.08, 4.9, -11.92, PAL.slate);
+strip(-7, 7, 0, 0.3, -12, -11.85, PAL.walnut);
+// side walls: walnut wainscot below 1.2, navy above, slate ribs
+for (const sx of [-1, 1]) {
+  const mask = sx < 0 ? 1 : 2, wx = sx * 7;
+  for (let z = -12; z < 6; z++) for (let y = 0; y < 5; y++) {
+    const col = y < 1 ? PAL.walnut : PAL.navy;
+    room.bx(sx < 0 ? wx - 0.2 : wx, y, z, sx < 0 ? wx : wx + 0.2, y + 1, z + 1, col, null, mask);
+  }
+  for (let z = -11; z < 6; z += 2) room.bx(wx - 0.08, 1, z - 0.08, wx + 0.08, 4.9, z + 0.08, PAL.slate);
+  room.bx(wx - 0.06, 1.0, -12, wx + 0.06, 1.12, 6, PAL.chestnut);                  // chair rail
+}
+// trolley slots in the side walls (where the swinging targets enter)
+room.bx(-7.05, 4.25, -5.95, -6.92, 4.95, -5.05, PAL.void); room.bx(6.92, 4.25, -6.95, 7.05, 4.95, -6.05, PAL.void);
+// ceiling: midnight tiles + navy beams
+for (let x = -7; x < 7; x++) for (let z = -12; z < 6; z++) room.bx(x, 5, z, x + 1, 5.2, z + 1, PAL.midnight, null, 8);
+for (let z = -11; z < 6; z += 2) strip(-7, 7, 4.78, 5, z - 0.12, z + 0.12, PAL.navy);
+// light fixtures: slate housings (lit) + lemon panels (unlit glow)
+for (const fz of FIXTURES) {
+  strip(-5, 5, 4.6, 4.78, fz - 0.32, fz + 0.32, PAL.slate);
+  glow.bx(-4.8, 4.56, fz - 0.2, 4.8, 4.6, fz + 0.2, PAL.lemon);
+}
+// trolley rails for the swinging targets
+for (const rz of [-5.5, -6.5]) room.bx(-7, 4.62, rz - 0.05, 7, 4.72, rz + 0.05, PAL.steel);
+// neon stripes on the back wall + lane numbers (unlit, so they stay pure palette colours)
+glow.bx(-7, 3.62, -11.95, 7, 3.72, -11.9, PAL.pink);
+glow.bx(-7, 3.42, -11.95, 7, 3.48, -11.9, PAL.cyan);
+[-5, -1.5, 1.5, 5].forEach((lx, i) => {
+  const t = small(String(i + 1)), s = 0.12;
+  for (const [px, py] of t.px) glow.box(lx + (px - 1) * s, 4.45 - py * s, -11.9, s, s, 0.04, PAL.lemon);
+});
+// lane dividers (low walls with yellow caps and steel posts) at x = -3, 0, 3
+for (const dx of [-3, 0, 3]) {
+  room.bx(dx - 0.05, 0, -11.9, dx + 0.05, 0.4, -0.95, PAL.slate);
+  room.bx(dx - 0.06, 0.4, -11.9, dx + 0.06, 0.45, -0.95, PAL.yellow);
+  for (let z = -1.0; z > -11.9; z -= 2.6) room.bx(dx - 0.07, 0, z - 0.07, dx + 0.07, 0.75, z + 0.07, PAL.steel);
+}
+// near barrier (row 1): wooden planks with a tan cap
+strip(-7, 7, 0, 0.16, -0.85, -0.6, PAL.walnut);
+strip(-7, 7, 0.16, 0.32, -0.85, -0.6, PAL.chestnut);
+strip(-7, 7, 0.32, 0.47, -0.85, -0.6, PAL.walnut);
+strip(-7, 7, 0.47, 0.52, -0.9, -0.55, PAL.tan);
+// far stage (row 3): candy-striped front, walnut top, plank lip
+for (let x = -7; x < 7; x += 0.5) room.bx(x, 0, -9.25, x + 0.5, 1.4, -9.2, (Math.round(x * 2) & 1) ? PAL.plum : PAL.indigo, null, 16);
+for (let x = -7; x < 7; x++) room.bx(x, 1.3, -10.8, x + 1, 1.4, -9.2, PAL.walnut, null, 4);
+strip(-7, 7, 1.4, 1.98, -9.32, -9.12, PAL.chestnut);
+strip(-7, 7, 1.98, 2.04, -9.36, -9.08, PAL.tan);
+// foreground counter (shooter's bench): tan/chestnut planks, crimson back rail, brass front edge
+[3.5, 3.65, 3.8].forEach((z, i) => strip(-7, 7, 0.95, 1.05, z, z + 0.15, i & 1 ? PAL.chestnut : PAL.tan, 4));
+strip(-7, 7, 1.05, 1.12, 3.43, 3.52, PAL.crimson);
+strip(-7, 7, 0.9, 1.06, 3.95, 4.04, PAL.amber);
+
+const roomMesh = room.mesh(MAT_ENV); roomMesh.userData.kind = 'room'; scene.add(roomMesh);
+const glowMesh = glow.mesh(MAT_GLOW); scene.add(glowMesh);
+
+// ---------- 7. PARTICLES: voxel chips (one InstancedMesh) + bullet-hole decals ----------
+const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s3 = new THREE.Vector3();
+const ZERO_M = new THREE.Matrix4().makeScale(0, 0, 0);
+const CHIP_N = 700;
+const chipMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial(), CHIP_N);
+chipMesh.frustumCulled = false; scene.add(chipMesh);
+const chipD = [];
+for (let i = 0; i < CHIP_N; i++) {
+  chipD.push({ life: 0, max: 1, p: new THREE.Vector3(), v: new THREE.Vector3(), r: new THREE.Vector3(), w: new THREE.Vector3(), s: 0, g: 1 });
+  chipMesh.setMatrixAt(i, ZERO_M); chipMesh.setColorAt(i, _c.set(0xffffff));
+}
+let chipNext = 0;
+function spawnChip(p, v, size, col, life, grav = 1) {        // grav < 0 = rising puff (steam)
+  const i = chipNext; chipNext = (chipNext + 1) % CHIP_N; const d = chipD[i];
+  d.p.copy(p); d.v.copy(v); d.s = size; d.life = d.max = life; d.g = grav;
+  d.r.set(rnd(0, 6), rnd(0, 6), rnd(0, 6)); d.w.set(rnd(-12, 12), rnd(-12, 12), rnd(-12, 12));
+  if (grav < 0) d.w.set(0, 0, 0), d.r.set(0, 0, 0);          // steam stays axis-aligned (reads as pixels)
+  chipMesh.setColorAt(i, _c.set(col)); chipMesh.instanceColor.needsUpdate = true;
+}
+function updateChips(dt) {
+  for (let i = 0; i < CHIP_N; i++) {
+    const d = chipD[i]; if (d.life <= 0) continue;
+    d.life -= dt;
+    if (d.life <= 0) { chipMesh.setMatrixAt(i, ZERO_M); continue; }
+    d.v.y -= 9.8 * d.g * dt; d.p.addScaledVector(d.v, dt);
+    if (d.g > 0 && d.p.y < d.s * 0.5) { d.p.y = d.s * 0.5; d.v.y *= -0.35; d.v.x *= 0.6; d.v.z *= 0.6; d.w.multiplyScalar(0.6); }
+    if (d.g < 0) d.v.multiplyScalar(1 - 2.5 * dt);
+    d.r.addScaledVector(d.w, dt);
+    const k = Math.min(1, d.life / 0.35) * d.s;
+    chipMesh.setMatrixAt(i, _m4.compose(d.p, _q.setFromEuler(_e.set(d.r.x, d.r.y, d.r.z)), _s3.set(k, k, k)));
+  }
+  chipMesh.instanceMatrix.needsUpdate = true;
+}
+const DEC_N = 48;
+const decMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: PAL.void, fog: false }), DEC_N);
+decMesh.frustumCulled = false; for (let i = 0; i < DEC_N; i++) decMesh.setMatrixAt(i, ZERO_M); scene.add(decMesh);
+let decNext = 0; const _zAxis = new THREE.Vector3(0, 0, 1);
+function addDecal(p, n) {                                      // size grows with distance so a hole stays ~4-5 px
+  const sz = 0.04 + p.distanceTo(camera.position) * 0.014;
+  _q.setFromUnitVectors(_zAxis, n);
+  decMesh.setMatrixAt(decNext, _m4.compose(_v.copy(p).addScaledVector(n, 0.012), _q, _s3.set(sz, sz, 0.02)));
+  decNext = (decNext + 1) % DEC_N; decMesh.instanceMatrix.needsUpdate = true;
+}
+
+// ---------- 8. TARGETS: voxel bullseye paddles that pop up or swing in from the sides, forever ----------
+function bullseye() {                                          // 11x11 disc: yellow bull, red/bone rings, walnut back
+  const list = [];
+  for (let j = -5; j <= 5; j++) for (let i = -5; i <= 5; i++) {
+    const d = Math.hypot(i, j); if (d > 5.45) continue;
+    list.push([i, j, 0, d <= 1.5 ? PAL.yellow : d <= 2.6 ? PAL.red : d <= 3.6 ? PAL.bone : d <= 4.6 ? PAL.red : PAL.bone]);
+    list.push([i, j, -1, PAL.walnut]);
+  }
+  return list;
+}
+const BULL = bullseye();
+const TARGET_DEFS = [
+  { kind: 'pop',   x: -1.3, z: -1.15, y: 0,    post: 0.72, s: 0.105 },     // near row, behind the plank barrier
+  { kind: 'pop',   x:  1.5, z: -1.15, y: 0,    post: 0.72, s: 0.105 },
+  { kind: 'swing', x: -3.6, z: -5.5,  y: 4.62, post: 1.42, s: 0.11, from: -1 },   // mid row, trolleys from the walls
+  { kind: 'swing', x:  2.3, z: -6.5,  y: 4.62, post: 1.42, s: 0.11, from: 1 },
+  { kind: 'pop',   x: -0.5, z: -9.75, y: 1.4,  post: 0.7,  s: 0.12 },      // far row, on the stage
+  { kind: 'pop',   x:  5.4, z: -9.75, y: 1.4,  post: 0.7,  s: 0.12 },
+];
+const DOWN = -0.6;                                             // pop targets lean back while hidden
+const targets = TARGET_DEFS.map((def, idx) => {
+  const s = def.s, R = 5.5 * s, b = new Vox();
+  const cy = def.kind === 'pop' ? def.post + R : -(def.post + R);
+  b.vox(BULL, s, 0, cy, 0);
+  if (def.kind === 'pop') {
+    b.bx(-0.06, 0, -0.2, 0.06, def.post + 0.1, -0.08, PAL.steel);          // post
+    b.bx(-0.18, 0, -0.26, 0.18, 0.08, 0.02, PAL.void);                      // hinge block
+  } else {
+    b.bx(-0.035, -def.post - 0.05, -0.1, 0.035, 0, -0.03, PAL.steel);       // hanging rod
+    b.bx(-0.16, -0.04, -0.16, 0.16, 0.1, 0.06, PAL.slate);                  // trolley
+  }
+  const mesh = b.mesh(MAT_OBJ); mesh.userData = { kind: 'target', idx };
+  const group = new THREE.Group(); group.position.set(def.x, def.y, def.z);
+  const pivot = new THREE.Group(); group.add(pivot); pivot.add(mesh); scene.add(group);
+  const t = { def, group, pivot, mesh, R, cy, sink: def.post + 2 * R + 0.3, state: 'wait', timer: rnd(0.2, 2.2), p: 0, theta: 0, omega: 0, vx: 0, tx: 0 };
+  resetTarget(t);
+  return t;
+});
+function resetTarget(t) {
+  t.group.visible = true; t.p = 0;
+  if (t.def.kind === 'pop') { t.pivot.rotation.x = DOWN; t.group.position.y = t.def.y - t.sink; }
+  else { t.tx = t.def.x + t.def.from * 9; t.group.position.x = t.tx; t.theta = t.omega = t.vx = 0; }
+}
+const easeOutCubic = x => 1 - Math.pow(1 - x, 3), easeInCubic = x => x * x * x;
+function updateTarget(t, dt) {
+  const d = t.def; t.timer -= dt;
+  if (t.state === 'wait' && t.timer <= 0) { t.state = 'in'; t.p = 0; }
+  else if (t.state === 'hold' && t.timer <= 0) { t.state = 'out'; t.p = 0; }
+  else if (t.state === 'dead' && t.timer <= 0) { resetTarget(t); t.state = 'wait'; t.timer = rnd(0.4, 1.6); }
+  const dur = d.kind === 'pop' ? (t.state === 'in' ? 0.34 : 0.26) : (t.state === 'in' ? 1.05 : 0.9);
+  if (t.state === 'in' || t.state === 'out') {
+    t.p = Math.min(1, t.p + dt / dur);
+    if (t.p >= 1) { if (t.state === 'in') { t.state = 'hold'; t.timer = rnd(1.3, 2.8); } else { t.state = 'wait'; t.timer = rnd(0.3, 1.8); } }
+  }
+  if (d.kind === 'pop') {                                       // rises out of a slot below the floor/stage, flipping upright
+    const k = t.state === 'in' ? easeOutBack(t.p) : t.state === 'out' ? 1 - easeInCubic(t.p) : t.state === 'wait' ? 0 : 1;
+    t.group.position.y = d.y - t.sink * (1 - k);
+    t.pivot.rotation.x = DOWN * (1 - k) + (t.state === 'hold' ? Math.sin(t.timer * 9) * 0.03 * Math.min(1, t.timer) : 0);
+  } else {                                                      // trolley slides in from the wall; rod swings as a pendulum
+    const x0 = d.x + d.from * 9;
+    let nx = t.tx;
+    if (t.state === 'in') nx = x0 + (d.x - x0) * easeOutCubic(t.p);
+    else if (t.state === 'out') nx = d.x + (x0 - d.x) * easeInCubic(t.p);
+    else if (t.state === 'hold') nx = d.x;
+    const vx = (nx - t.tx) / Math.max(dt, 1e-4), ax = (vx - t.vx) / Math.max(dt, 1e-4);
+    t.tx = nx; t.vx = vx; t.group.position.x = nx;
+    const L = d.post + t.R;
+    t.omega += (-(9.8 / L) * Math.sin(t.theta) - (Math.max(-40, Math.min(40, ax)) / L) * Math.cos(t.theta) - 1.3 * t.omega) * dt;
+    t.theta += t.omega * dt; t.pivot.rotation.z = t.theta;
+  }
+}
+function shootable(t) { return t.group.visible && (t.state === 'in' || t.state === 'hold' || t.state === 'out'); }
+function shatter(t, hit) {
+  t.mesh.updateMatrixWorld(true);
+  const s = t.def.s;
+  for (const [i, j, k, col] of BULL) {
+    if (k < 0 && Math.random() < 0.75) continue;               // all of the face, some of the back
+    _v.set(i * s, t.cy + j * s, k * s).applyMatrix4(t.mesh.matrixWorld);
+    const dir = _v.clone().sub(hit); dir.z = 0; dir.normalize().multiplyScalar(rnd(1.5, 4.2));
+    spawnChip(_v, dir.add(_s3.set(rnd(-0.5, 0.5), rnd(1.2, 3.6), rnd(0.6, 2.8))), s * rnd(0.75, 1.0), col, rnd(1.1, 2.0));
+  }
+  t.state = 'dead'; t.timer = rnd(0.8, 1.6); t.group.visible = false;
+}
+
+// ---------- 9. DEPUTY DUCK: a flat tin gallery duck, extruded from pixel art, with animated parts ----------
+// Facing right. Y body, A amber shade, O bill, H hat, D hat band, S star, W stand.
+const DUCK_ART = [
+  '...........HHHH.......',
+  '..........HHSHHH......',
+  '..........HSSSHH......',
+  '..........DSDSDD......',
+  '........HHHHHHHHHH....',
+  '.........YYYYYYYY.....',
+  '........YYYYYYYYYY....',
+  '........YYYYYYYYYYY...',
+  '........YYYYYYYYYYYOOO',
+  '........YYYYYYYYYYOOOO',
+  '.........YYYYYYYYY....',
+  '..........YYYYYYY.....',
+  'A..........YYYYY......',
+  'YA.......YYYYYYYY.....',
+  'YYA...YYYYYYYYYYYY....',
+  'YYYYYYYYYYYYYYYYYYY...',
+  '.YYYYYYYYYYYYYYYYYY...',
+  '..YYYYYYYYYYYYYYYYY...',
+  '...AYYYYYYYYYYYYYYY...',
+  '.....AAYYYYYYYYYYYA...',
+  '........AAAAAAAAA.....',
+  '..........WWWW........',
+  '........WWWWWWWW......'];
+const DUCK_KEY = { Y: PAL.yellow, A: PAL.amber, O: PAL.orange, H: PAL.chestnut, D: PAL.walnut, S: PAL.yellow, W: PAL.walnut,
+  B: PAL.mist, b: PAL.haze, w: PAL.bone, k: PAL.void, r: PAL.red, m: PAL.oxblood };
+const WING_ART = ['..AAAAA.', 'AAYYYYYA', '.AYYYYA.', '..AAAA..'];          // at col 5,row 14
+const LBILL_ART = ['OOO', 'OO.'];                                            // at col 18,row 10
+const DV = 0.05;                                                             // duck voxel size
+// rows of art -> voxel list relative to pivot (pc,pr) in art-grid coords; mesh is placed at the pivot
+function duckPart(rows, c0, r0, k0, layers, pc, pr, extra) {
+  const list = [];
+  rows.forEach((row, j) => { for (let i = 0; i < row.length; i++) { const ch = row[i]; if (ch === '.') continue;
+    for (let k = 0; k < layers; k++) list.push([c0 + i - pc, pr - (r0 + j), k0 + k, DUCK_KEY[ch]]); } });
+  if (extra) for (const e of extra) list.push([e[0] - pc, pr - e[1], e[2], e[3]]);
+  const m = new Vox().vox(list, DV).mesh(MAT_OBJ);
+  m.position.set((pc - 11) * DV, (22.5 - pr) * DV, 0); m.userData.kind = 'duck';
+  return m;
+}
+// dark outline backing: silhouette (body + bill + wing) dilated by one voxel, one layer behind; mouth shows when bill opens
+const duckBack = new Map();
+function markSil(rows, c0, r0) { rows.forEach((row, j) => { for (let i = 0; i < row.length; i++) if (row[i] !== '.')
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) duckBack.set((c0 + i + dx) + ',' + (r0 + j + dy), PAL.void); }); }
+markSil(DUCK_ART, 0, 0); markSil(WING_ART, 5, 14); markSil(LBILL_ART, 18, 10);
+for (const key of ['18,10', '19,10', '18,11', '19,11']) duckBack.set(key, PAL.oxblood);
+const bodyExtra = [];
+duckBack.forEach((col, key) => { const [c, r] = key.split(',').map(Number); bodyExtra.push([c, r, -1, col]); });
+[[15, 15], [14, 16], [16, 16], [15, 17]].forEach(([c, r]) => bodyExtra.push([c, r, 2, PAL.mist]));   // sheriff badge
+bodyExtra.push([15, 16, 2, PAL.haze]);
+
+const duckRoot = new THREE.Group(); duckRoot.position.set(-2.9, 0.95, -0.2); duckRoot.rotation.y = 0.32; scene.add(duckRoot);
+const duckBody = new THREE.Group(); duckRoot.add(duckBody);
+const duckMain = duckPart(DUCK_ART, 0, 0, 0, 2, 11, 22.5, bodyExtra);
+const duckWing = duckPart(WING_ART, 5, 14, 2, 1, 12.5, 14.5);
+const duckBill = duckPart(LBILL_ART, 18, 10, 0, 2, 17.5, 9.5);
+const eyeOpen = duckPart(['wwk', 'wwk'], 13, 6, 2, 1, 11, 22.5);
+const eyeShut = duckPart(['kkk'], 13, 7, 2, 1, 11, 22.5);
+const eyeHappy = duckPart(['.k.', 'k.k'], 13, 6, 2, 1, 11, 22.5);
+const brows = duckPart(['rr..', '..rr'], 12, 5, 3, 1, 11, 22.5);
+duckBody.add(duckMain, duckWing, duckBill, eyeOpen, eyeShut, eyeHappy, brows);
+// plinth with a little plaque
+{
+  const b = new Vox();
+  b.bx(-0.7, -0.95, -0.4, 0.7, -0.08, 0.4, PAL.chestnut);
+  b.bx(-0.78, -0.08, -0.46, 0.78, 0, 0.46, PAL.tan);
+  b.bx(-0.78, -0.95, -0.46, 0.78, -0.85, 0.46, PAL.walnut);
+  b.bx(-0.55, -0.64, 0.4, 0.55, -0.3, 0.43, PAL.walnut);
+  const t = small('DEPUTY'), s = 0.038;
+  for (const [px, py] of t.px) b.box((px - t.w / 2 + 0.5) * s, -0.375 - py * s, 0.445, s, s, 0.03, PAL.bone);
+  const plinth = b.mesh(MAT_OBJ); plinth.userData.kind = 'duck'; duckRoot.add(plinth);
+}
+const duck = { t: 0, angry: 0, happy: 0, blinkT: 2, blink: 0, puffT: 0, sy: 1 };
+const HOP = 0.62;
+function duckReact(kind) {
+  if (kind === 'miss') { duck.angry = 1.15; duck.happy = 0; }
+  else if (duck.angry < 0.3) { duck.happy = HOP; duck.angry = 0; }
+}
+function updateDuck(dt) {
+  duck.t += dt; const T = duck.t;
+  duck.blinkT -= dt; if (duck.blinkT <= 0) { duck.blink = 0.13; duck.blinkT = rnd(2.0, 4.5); }
+  duck.blink = Math.max(0, duck.blink - dt);
+  const A = duck.angry = Math.max(0, duck.angry - dt), H = duck.happy = Math.max(0, duck.happy - dt);
+  let x = 0, y = Math.sin(T * 2.4) * 0.025, rz = Math.sin(T * 1.2) * 0.045, sy = 1;
+  let wing = Math.sin(T * 2.4) * 0.1, bill = 0;
+  if (A > 0) {                                                   // ANGRY: shake, wings up, bill open, brows, steam
+    x = Math.sin(T * 70) * 0.025; y = Math.abs(Math.sin(T * 13)) * 0.05; rz = -0.07;
+    wing = -0.9 + Math.sin(T * 28) * 0.3; bill = -0.7 + Math.sin(T * 22) * 0.12;   // wing raised behind the head
+    duck.puffT -= dt;
+    if (duck.puffT <= 0) {
+      duck.puffT = 0.09;
+      duckMain.localToWorld(_v.set(2 * DV + rnd(-0.12, 0.12), 23.5 * DV, 0));   // top of the hat
+      spawnChip(_v, _s3.set(rnd(-0.5, 0.5), rnd(0.9, 1.5), rnd(-0.1, 0.3)), rnd(0.05, 0.08), Math.random() < 0.5 ? PAL.mist : PAL.bone, 0.75, -0.06);
+    }
+  } else if (H > 0) {                                            // HAPPY: hop with squash & stretch, wing flaps
+    const p = 1 - H / HOP;
+    y = Math.sin(Math.PI * Math.min(1, p / 0.85)) * 0.42; sy = p < 0.15 ? 0.86 : p > 0.85 ? 0.88 : 1.08;
+    wing = -0.95 * Math.abs(Math.sin(p * Math.PI * 4)); rz = 0.12 * Math.sin(p * Math.PI);
+  }
+  duck.sy += (sy - duck.sy) * Math.min(1, dt * 25);
+  duckBody.position.set(x, y, 0); duckBody.rotation.z = rz; duckBody.scale.set(2 - duck.sy, duck.sy, 1);
+  duckWing.rotation.z += (wing - duckWing.rotation.z) * Math.min(1, dt * 20);
+  duckBill.rotation.z += (bill - duckBill.rotation.z) * Math.min(1, dt * 25);
+  eyeHappy.visible = H > 0 && A <= 0;
+  eyeOpen.visible = A > 0 || (!eyeHappy.visible && duck.blink <= 0);
+  eyeShut.visible = !eyeOpen.visible && !eyeHappy.visible;
+  brows.visible = A > 0;
+}
+// where his head is on the HUD grid (for the "!" bubble / heart)
+const _hp = new THREE.Vector3();
+function duckHeadPx() {
+  duckMain.localToWorld(_hp.set(2 * DV, 25 * DV, 0)); _hp.project(camera);
+  return [Math.round((_hp.x + 1) / 2 * RW), Math.round((1 - _hp.y) / 2 * RH)];
+}
+
+// ---------- 10. THE GUN: first-person voxel light-gun (camera child) + coiled cable + muzzle flash ----------
+const GU = 0.016;                                    // gun voxel unit (camera-space metres)
+const GUN_PARTS = [ // [x0,y0,z0, x1,y1,z1, colour] in voxel units; barrel points -z, origin = centre of the back face
+  [-2, -2, -15, 2, 0, 0, PAL.pink], [-2, 0, -15, 2, 1, 0, PAL.cyan], [-2, 1, -15, 2, 2, 0, PAL.pink],   // body + accent band
+  [-1, 2, -13, 1, 3, -1, PAL.bubblegum],                                    // top rib
+  [-2, 2, -1, -1, 3.5, 0, PAL.void], [1, 2, -1, 2, 3.5, 0, PAL.void],       // rear sight
+  [-0.5, 3, -13, 0.5, 4, -12, PAL.void],                                    // front sight
+  [-3, -3, -19, 3, 3, -15, PAL.blue],                                       // big chunky muzzle
+  [-3.25, -3.25, -17.5, 3.25, 3.25, -16.5, PAL.deepblue],                   // muzzle band
+  [-2, -2, -19.3, 2, 2, -19, PAL.ice], [-1, -1, -19.45, 1, 1, -19.3, PAL.void],   // lens + bore
+  [-2.25, -2.25, 0, 2.25, 2.25, 0.6, PAL.magenta],                          // back cap
+  [-0.75, -0.25, 0.6, 0.75, 1.25, 0.9, PAL.lime],                           // status LED (faces the player)
+  [-0.75, -5, -9, 0.75, -4, -4, PAL.void], [-0.75, -5, -9, 0.75, -2, -8, PAL.void],   // trigger guard
+  [-0.5, -4, -6.5, 0.5, -2, -5.5, PAL.cyan]];                               // trigger
+const GRIP_PARTS = [ // grip-local: top centre at origin, hanging down -y, tilted back
+  [-2, -9, -2, 2, 0, 2, PAL.magenta], [-1.5, -8, 2, 1.5, -1, 2.4, PAL.plum],
+  [-2.25, -8, -1.5, -2, -1, 1.5, PAL.plum], [2, -8, -1.5, 2.25, -1, 1.5, PAL.plum],
+  [-2.25, -10, -2.25, 2.25, -9, 2.25, PAL.void],                            // butt cap
+  [-1, -11, -0.5, 1, -10, 1.5, PAL.slate]];                                 // cable boot
+const GRIP_M = new THREE.Matrix4().makeTranslation(0, -2 * GU, -2.5 * GU).multiply(new THREE.Matrix4().makeRotationX(-0.3));
+const gunVox = new Vox(); gunVox.shade = [0.62, 0.92, 1.0, 0.5, 0.8, 0.7];   // baked face shading: the hero prop ignores scene lights
+for (const p of GUN_PARTS) gunVox.bx(p[0] * GU, p[1] * GU, p[2] * GU, p[3] * GU, p[4] * GU, p[5] * GU, p[6]);
+for (const p of GRIP_PARTS) gunVox.bx(p[0] * GU, p[1] * GU, p[2] * GU, p[3] * GU, p[4] * GU, p[5] * GU, p[6], GRIP_M);
+const gunMesh = gunVox.mesh(MAT_GLOW);
+const gunRoot = new THREE.Group(), gunKick = new THREE.Group();
+camera.add(gunRoot); gunRoot.add(gunKick); gunKick.add(gunMesh);
+const CABLE_LOCAL = new THREE.Vector3(0, -10.6 * GU, 0.5 * GU).applyMatrix4(GRIP_M);
+const CABLE_DIR = new THREE.Vector3(0, -1, 0.15).normalize().transformDirection(GRIP_M);
+const MUZZLE_LOCAL = new THREE.Vector3(0, 0, -20.5 * GU), PORT_LOCAL = new THREE.Vector3(2.3 * GU, 1.5 * GU, -7 * GU);
+// muzzle flash: 16x16 pixel-art burst on a sprite, shown for 3 frames at a random 90-degree turn
+function flashTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 16; const g = c.getContext('2d');
+  const P = (x, y, w, h, col) => { g.fillStyle = CSS[col]; g.fillRect(x, y, w, h); };
+  P(7, 0, 2, 16, 'orange'); P(0, 7, 16, 2, 'orange');
+  P(3, 3, 2, 2, 'orange'); P(11, 3, 2, 2, 'orange'); P(3, 11, 2, 2, 'orange'); P(11, 11, 2, 2, 'orange');
+  P(5, 4, 6, 8, 'yellow'); P(4, 5, 8, 6, 'yellow'); P(7, 2, 2, 12, 'yellow'); P(2, 7, 12, 2, 'yellow');
+  P(6, 6, 4, 4, 'lemon'); P(7, 4, 2, 8, 'lemon'); P(4, 7, 8, 2, 'lemon');
+  const t = new THREE.CanvasTexture(c); t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; return t;
+}
+const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTexture(), alphaTest: 0.5, transparent: false, depthTest: false, fog: false }));
+flash.renderOrder = 10; flash.visible = false; flash.position.copy(MUZZLE_LOCAL); gunKick.add(flash);
+
+const gun = { kick: 0, kickV: 0, flash: 0, touch: IS_TOUCH, base: new THREE.Vector3(0.5, -0.11, -0.86) };
+const aim = { u: 0.5, v: 0.42 };                                  // aim point inside the frame (0..1)
+const _q2 = new THREE.Quaternion(), _gm = new THREE.Matrix4(), _up = new THREE.Vector3(0, 1, 0), _aimP = new THREE.Vector3(), _gp = new THREE.Vector3();
+function updateGun(dt) {
+  gun.base.x += ((gun.touch ? 0.2 : 0.5) - gun.base.x) * Math.min(1, dt * 6);   // lower-right (mouse) / lower-middle (touch)
+  const nx = aim.u * 2 - 1, ny = 1 - aim.v * 2;
+  _gp.set(gun.base.x + nx * 0.05, gun.base.y + ny * 0.035, gun.base.z);
+  gunRoot.position.lerp(_gp, Math.min(1, dt * 10));                                // lazy follow
+  _aimP.set(nx * TAN_H * ASPECT, ny * TAN_H, -1).multiplyScalar(9);
+  _gm.lookAt(gunRoot.position, _aimP, _up); _q.setFromRotationMatrix(_gm).multiply(_q2.setFromEuler(_e.set(0.05, 0.17 + 0.2 * gun.base.x, 0)));   // yaw bias shows the flank
+  gunRoot.quaternion.slerp(_q, Math.min(1, dt * 12));
+  gun.kickV += (-260 * gun.kick - 19 * gun.kickV) * dt; gun.kick += gun.kickV * dt;  // recoil spring
+  gunKick.position.set(0, gun.kick * 0.015, gun.kick * 0.14);
+  gunKick.rotation.set(gun.kick * 0.8, 0, 0);
+  postMat.uniforms.boost.value = Math.max(0, postMat.uniforms.boost.value - dt * 4);
+  if (gun.flash > 0) {
+    gun.flash -= dt; flash.visible = true;
+    flash.material.rotation = (Math.random() * 4 | 0) * Math.PI / 2; flash.scale.setScalar(rnd(0.11, 0.16));
+  } else flash.visible = false;
+}
+function gunFire() {
+  gun.kickV += 10; gun.flash = 0.06; postMat.uniforms.boost.value = 0.22;
+  gunMesh.updateMatrixWorld(true);
+  const p = PORT_LOCAL.clone().applyMatrix4(gunMesh.matrixWorld);               // shell + sparks out of the right side
+  spawnChip(p, _s3.set(rnd(1.2, 2.2), rnd(1.6, 2.6), rnd(0.2, 0.8)), 0.022, PAL.amber, 0.9);
+  for (let i = 0; i < 4; i++) spawnChip(p, _s3.set(rnd(0.4, 2.6), rnd(0.4, 2.6), rnd(-0.6, 0.6)), 0.012, i & 1 ? PAL.lemon : PAL.orange, rnd(0.12, 0.28), 0.3);
+}
+// cable: verlet rope pinned at the grip boot and below the frame, rendered as a helix of tiny cubes
+const ROPE_N = 14, ROPE_SEG = 0.058, COIL_N = 230, COIL_R = 0.011, COIL_TURN = 0.024;
+const rope = [], ropeOld = [];
+for (let i = 0; i < ROPE_N; i++) { rope.push(new THREE.Vector3(0.36, -0.42 - i * 0.04, -0.86)); ropeOld.push(rope[i].clone()); }
+const coil = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial(), COIL_N);
+coil.frustumCulled = false; camera.add(coil);
+for (let i = 0; i < COIL_N; i++) coil.setColorAt(i, _c.set(PAL.navy));
+const _a = new THREE.Vector3(), _a2 = new THREE.Vector3(), _b = new THREE.Vector3(), _t = new THREE.Vector3(),
+  _n1 = new THREE.Vector3(), _n2 = new THREE.Vector3(), _toCam = new THREE.Vector3(0, 0, 1), _d = new THREE.Vector3(), _ID = new THREE.Quaternion();
+function updateCable(dt) {
+  gunRoot.updateMatrix(); gunKick.updateMatrix();
+  _a.copy(CABLE_LOCAL).applyMatrix4(gunKick.matrix).applyMatrix4(gunRoot.matrix);
+  _a2.copy(CABLE_DIR).transformDirection(gunKick.matrix).transformDirection(gunRoot.matrix).multiplyScalar(ROPE_SEG).add(_a);
+  _b.set(gun.base.x + 0.07, -0.98, gun.base.z + 0.06);
+  const g = 9.8 * dt * dt;
+  for (let i = 2; i < ROPE_N - 1; i++) {
+    const p = rope[i], o = ropeOld[i];
+    _d.subVectors(p, o).multiplyScalar(0.985); o.copy(p); p.add(_d); p.y -= g;
+  }
+  for (let it = 0; it < 10; it++) {
+    rope[0].copy(_a); rope[1].copy(_a2); rope[ROPE_N - 1].copy(_b);
+    for (let i = 0; i < ROPE_N - 1; i++) {
+      const p = rope[i], q = rope[i + 1];
+      _d.subVectors(q, p); const len = _d.length() || 1e-6, diff = (len - ROPE_SEG) / len;
+      const wp = i < 2 ? 0 : 0.5, wq = i + 1 >= ROPE_N - 1 ? 0 : 0.5, sum = (wp + wq) || 1;
+      p.addScaledVector(_d, diff * wp / sum); q.addScaledVector(_d, -diff * wq / sum);
+    }
+  }
+  const total = (ROPE_N - 1) * ROPE_SEG;
+  for (let c = 0; c < COIL_N; c++) {
+    const s = c / (COIL_N - 1) * total, seg = Math.min(ROPE_N - 2, Math.floor(s / ROPE_SEG)), f = s / ROPE_SEG - seg;
+    _t.subVectors(rope[seg + 1], rope[seg]).normalize();
+    _n1.crossVectors(_t, _toCam).normalize(); _n2.crossVectors(_n1, _t).normalize();
+    const ph = s / COIL_TURN * Math.PI * 2, cs = Math.cos(ph), sn = Math.sin(ph);
+    _v.lerpVectors(rope[seg], rope[seg + 1], f).addScaledVector(_n1, cs * COIL_R).addScaledVector(_n2, sn * COIL_R);
+    coil.setMatrixAt(c, _m4.compose(_v, _ID, _s3.setScalar(0.0105)));
+    coil.setColorAt(c, _c.set(sn > 0.35 ? PAL.slate : sn < -0.35 ? PAL.void : PAL.navy));
+  }
+  coil.instanceMatrix.needsUpdate = true; coil.instanceColor.needsUpdate = true;
+}
+gunRoot.position.copy(gun.base); updateGun(1);                    // start in pose (no fly-in from the camera)
+for (let i = 0; i < 90; i++) updateCable(1 / 60);                  // let the cable settle before the first frame
+
+// ---------- 11. TITLE MARQUEE: extruded voxel letters + outline on a bulb-lit board (camera child) ----------
+// Sits top-centre on load; on the first shot it springs into the top-left corner and stays there.
+const MV = 0.075;                                                 // marquee voxel
+const TITLE = bold('B.L.A.M.');                                   // 40 x 7 pixels
+const LETTER_ROWS = [PAL.lemon, PAL.lemon, PAL.yellow, PAL.yellow, PAL.yellow, PAL.amber, PAL.orange];
+const marquee = new THREE.Group(); camera.add(marquee);
+const mqLetters = [];
+const MQ_X0 = -(TITLE.w - 1) / 2 * MV;                            // left edge offset (centres the title)
+{
+  const groups = [[], [], [], []];                                // "B." "L." "A." "M." each bounce on their own
+  for (const [x, y, ci] of TITLE.px) groups[ci >> 1].push([x, y]);
+  groups.forEach(g => {
+    const own = new Set(g.map(p => p[0] + ',' + p[1])), ring = new Set(), list = [];
+    for (const [x, y] of g) {
+      list.push([x, -y, 1, LETTER_ROWS[y]], [x, -y, 0, LETTER_ROWS[y]]);          // 2 voxels deep
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const k = (x + dx) + ',' + (y + dy); if (!own.has(k)) ring.add(k); }
+    }
+    ring.forEach(k => { const [x, y] = k.split(',').map(Number); list.push([x, -y, 0, PAL.void]); });   // thick dark outline
+    const m = new Vox().vox(list, MV, MQ_X0, 3 * MV, 0).mesh(MAT_OBJ);
+    marquee.add(m); mqLetters.push(m);
+  });
+  // board: crimson panel inside a plum frame
+  const b = new Vox(), L = MQ_X0 - 4.5 * MV, Rr = MQ_X0 + (TITLE.w + 3.5) * MV, T = 7.5 * MV, B = -7.5 * MV;
+  b.bx(L, B, -1.5 * MV, Rr, T, -0.5 * MV, PAL.crimson);
+  b.bx(L, T - 2 * MV, -1.5 * MV, Rr, T, 0.5 * MV, PAL.plum); b.bx(L, B, -1.5 * MV, Rr, B + 2 * MV, 0.5 * MV, PAL.plum);
+  b.bx(L, B + 2 * MV, -1.5 * MV, L + 2 * MV, T - 2 * MV, 0.5 * MV, PAL.plum); b.bx(Rr - 2 * MV, B + 2 * MV, -1.5 * MV, Rr, T - 2 * MV, 0.5 * MV, PAL.plum);
+  b.bx(L + 0.5 * MV, B - 0.6 * MV, -1.2 * MV, Rr - 0.5 * MV, B, -0.2 * MV, PAL.void);     // shadow lip under the board
+  marquee.add(b.mesh(MAT_OBJ));
+  marquee.userData.bottom = B;
+  // bulbs on the frame centre line (unlit, colours chase)
+  const pts = [], x0 = L + MV, x1 = Rr - MV, y0 = B + MV, y1 = T - MV, step = 3 * MV;
+  for (let x = x0; x < x1 - 1e-6; x += step) pts.push([x, y1]);
+  for (let y = y1; y > y0 + 1e-6; y -= step) pts.push([x1, y]);
+  for (let x = x1; x > x0 + 1e-6; x -= step) pts.push([x, y0]);
+  for (let y = y0; y < y1 - 1e-6; y += step) pts.push([x0, y]);
+  const bulbs = new THREE.InstancedMesh(new THREE.BoxGeometry(MV * 0.95, MV * 0.95, MV * 0.6), new THREE.MeshBasicMaterial({ fog: false }), pts.length);
+  pts.forEach(([x, y], i) => { bulbs.setMatrixAt(i, _m4.makeTranslation(x, y, 0.7 * MV)); bulbs.setColorAt(i, _c.set(PAL.rust)); });
+  marquee.add(bulbs); marquee.userData.bulbs = bulbs;
+}
+const MQ_BIG = { x: 0, y: 1.0, z: -3.4, s: 0.82 }, MQ_CORNER = { x: -2.08, y: 1.31, z: -3.4, s: 0.36 };
+const mq = { t: -1, step: -1 };                                   // t < 0: big; 0..1: moving; >= 1: in the corner
+function updateMarquee(dt) {
+  const T = performance.now() / 1000;
+  if (mq.t >= 0 && mq.t < 1) mq.t = Math.min(1, mq.t + dt / 0.7);
+  const k = mq.t < 0 ? 0 : easeOutBack(mq.t);
+  const lerp = (a, b) => a + (b - a) * k;
+  marquee.position.set(lerp(MQ_BIG.x, MQ_CORNER.x), lerp(MQ_BIG.y, MQ_CORNER.y), MQ_BIG.z);
+  marquee.scale.setScalar(Math.max(0.05, lerp(MQ_BIG.s, MQ_CORNER.s)));
+  marquee.rotation.set(-0.04 + Math.sin(T * 1.3) * 0.03, Math.sin(T * 0.8) * 0.13, Math.sin(T * 1.1) * 0.012);
+  mqLetters.forEach((m, i) => { const s = Math.max(0, Math.sin(T * 4.2 - i * 0.8)); m.position.y = s * s * s * 0.07; });
+  const step = Math.floor(T * 9);                                 // bulb chase: one in three lit
+  if (step !== mq.step) {
+    mq.step = step; const bl = marquee.userData.bulbs;
+    for (let i = 0; i < bl.count; i++) bl.setColorAt(i, _c.set((i + step) % 3 === 0 ? PAL.lemon : (i + step) % 3 === 1 ? PAL.amber : PAL.rust));
+    bl.instanceColor.needsUpdate = true;
+  }
+}
+// project a marquee-local point to HUD pixels (tagline placement)
+function marqueePx(x, y) {
+  marquee.updateMatrixWorld(true);
+  marquee.localToWorld(_hp.set(x, y, 0)); _hp.project(camera);
+  return [Math.round((_hp.x + 1) / 2 * RW), Math.round((1 - _hp.y) / 2 * RH)];
+}
+
+// ---------- 12. HUD: drawn every frame on the 426x240 canvas with fillRect only (palette colours, no AA) ----------
+const state = { hits: 0, firstShot: false, mouseIn: false, lastShot: 0, showFps: true, mode: 1, badgeBump: 0, crossHot: 0, hitFx: [], fps: 60 };
+const R = (x, y, w, h, col) => { hx.fillStyle = CSS[col] || col; hx.fillRect(Math.round(x), Math.round(y), w, h); };
+const OUT8 = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]];
+function text3(str, x, y, col, sc = 1, outline) {                 // 3x5 font, optional 1px outline all round
+  const pass = (ox, oy, c) => { let cx = x;
+    for (const ch of str) { const g = F3[ch] || F3[' '];
+      for (let r = 0; r < 5; r++) { const row = +g[r]; for (let k = 0; k < 3; k++) if ((row >> (2 - k)) & 1) R(cx + k * sc + ox, y + r * sc + oy, sc, sc, c); }
+      cx += 4 * sc; } };
+  if (outline) for (const [ox, oy] of OUT8) pass(ox, oy, outline);
+  pass(0, 0, col);
+}
+const text3w = (str, sc = 1) => str.length * 4 * sc - sc;
+function text7(str, x, y, sc, rowCols, outline, ow) {             // bold display font with a thick outline
+  const t = bold(str);
+  for (let oy = -ow; oy <= ow; oy++) for (let ox = -ow; ox <= ow; ox++) if (ox || oy) for (const [px, py] of t.px) R(x + px * sc + ox, y + py * sc + oy, sc, sc, outline);
+  for (const [px, py] of t.px) R(x + px * sc, y + py * sc, sc, sc, rowCols[py]);
+  return t.w * sc;
+}
+function sprite(rows, x, y, sc, key) { rows.forEach((row, j) => { for (let i = 0; i < row.length; i++) { const ch = row[i]; if (ch !== '.') R(x + i * sc, y + j * sc, sc, sc, key[ch]); } }); }
+const HEART = ['.XX...XX.', 'XHHX.XRRX', 'XHRRXRRRX', 'XRRRRRRCX', '.XRRRRCX.', '..XRRCX..', '...XRX...', '....X....'];
+const HEART_KEY = { X: 'void', R: 'red', H: 'coral', C: 'crimson' };
+// billiard-ball badge, pre-rendered once (34x34)
+const ballCv = document.createElement('canvas'); ballCv.width = ballCv.height = 34;
+{
+  const g = ballCv.getContext('2d');
+  for (let y = 0; y < 34; y++) for (let x = 0; x < 34; x++) {
+    const dx = x + 0.5 - 17, dy = y + 0.5 - 17, d = Math.hypot(dx, dy); if (d > 16.2) continue;
+    let col = 'blue';
+    if (d > 14.8) col = 'void';
+    else if (d <= 9.6) col = 'bone';
+    else if (dx + dy > 13) col = 'deepblue';
+    else if (Math.hypot(dx + 7.5, dy + 8) < 2.6) col = 'ice';
+    g.fillStyle = CSS[col]; g.fillRect(x, y, 1, 1);
+  }
+}
+const HIT_ROWS = ['lemon', 'lemon', 'yellow', 'yellow', 'yellow', 'orange', 'orange'];
+let blinkClock = 0;
+function drawHud(dt) {
+  blinkClock += dt;
+  hx.clearRect(0, 0, RW, RH);
+  // title tagline + start hint (until the first shot), then a small tagline under the corner logo
+  if (mq.t < 0) {
+    const [, by] = marqueePx(0, marquee.userData.bottom);
+    const s = 'BLAST LIKE A MANIAC!'; text3(s, Math.round(RW / 2 - text3w(s, 2) / 2), by + 5, 'cyan', 2, 'void');
+    if ((blinkClock * 2.2 | 0) % 2 === 0) { const h = 'CLICK OR TAP TO BLAST!'; text3(h, Math.round(RW / 2 - text3w(h) / 2), 162, 'yellow', 1, 'void'); }
+  } else if (mq.t >= 1) {
+    const [bx, by] = marqueePx(0, marquee.userData.bottom);
+    const s = 'BLAST LIKE A MANIAC!'; text3(s, bx - (text3w(s) >> 1), by + 3, 'cyan', 1, 'void');
+  }
+  // Deputy Duck reactions: angry "!" bubble, happy heart
+  if (duck.angry > 0 || duck.happy > 0) {
+    const [dx, dy] = duckHeadPx();
+    if (duck.angry > 0) {
+      const jx = Math.round(Math.sin(duck.t * 60)), bx = dx + 6 + jx, by = dy - 24;
+      R(bx - 1, by - 1, 14, 20, 'void'); R(bx, by, 12, 18, 'bone'); R(bx + 2, by + 18, 3, 3, 'void'); R(bx + 3, by + 18, 1, 2, 'bone');
+      text7('!', bx + 4, by + 2, 2, Array(7).fill('red'), 'red', 0);
+    } else {
+      const p = 1 - duck.happy / HOP; sprite(HEART, dx + 2, dy - 10 - Math.round(p * 10), 1, HEART_KEY);
+    }
+  }
+  // HIT! popups
+  for (let i = state.hitFx.length - 1; i >= 0; i--) {
+    const f = state.hitFx[i]; f.a += dt;
+    if (f.a > 0.62) { state.hitFx.splice(i, 1); continue; }
+    if (f.a > 0.45 && ((f.a * 30) | 0) % 2) continue;
+    const sc = f.a < 0.06 ? 4 : 3, w = 23 * sc;
+    const x = Math.max(4, Math.min(RW - w - 4, f.x - w / 2)), y = Math.max(4, Math.min(RH - 7 * sc - 40, f.y - 7 * sc - 16 - f.a * 22));
+    text7('HIT!', Math.round(x), Math.round(y), sc, HIT_ROWS, 'void', 2);
+  }
+  // hearts (decorative) bottom-left
+  for (let i = 0; i < 3; i++) sprite(HEART, 6 + i * 21, RH - 22, 2, HEART_KEY);
+  // HIT counter: billiard ball bottom-centre
+  state.badgeBump = Math.max(0, state.badgeBump - dt);
+  const bx = (RW >> 1) - 17, by = RH - 37 - Math.round(Math.sin(state.badgeBump / 0.3 * Math.PI) * 4);
+  hx.drawImage(ballCv, bx, by);
+  if (state.badgeBump > 0.2) { R(bx + 10, by + 8, 14, 18, 'lemon'); R(bx + 8, by + 10, 18, 14, 'lemon'); }
+  const num = String(state.hits), nsc = num.length > 2 ? 1 : 2;
+  text3(num, bx + 17 - (text3w(num, nsc) >> 1), by + (nsc === 2 ? 8 : 11), 'void', nsc);
+  text3('HIT', bx + 12, by + 20, 'crimson', 1);
+  // dither-mode button (top-right; tap/click or keys 1-3) + mode name + FPS
+  const mx = RW - 58, my = 4;
+  R(mx - 1, my - 1, 56, 15, 'void'); R(mx, my, 54, 13, 'plum'); R(mx, my, 54, 1, 'magenta'); R(mx, my + 12, 54, 1, 'oxblood');
+  text3('DITHER ' + state.mode, mx + 4, my + 4, 'bone', 1);
+  text3('>', mx + 46, my + 4, 'yellow', 1);
+  const name = MODE_NAMES[state.mode]; text3(name, RW - 4 - text3w(name), 21, 'mist', 1, 'void');
+  if (state.showFps) { const s = state.fps + ' FPS'; text3(s, RW - 4 - text3w(s), 29, 'lime', 1, 'void'); }
+  // crosshair (mouse only)
+  if (state.mouseIn) {
+    state.crossHot = Math.max(0, state.crossHot - dt);
+    const x = Math.round(aim.u * RW - 0.5), y = Math.round(aim.v * RH - 0.5), hot = state.crossHot > 0, g = hot ? 4 : 2, col = hot ? 'yellow' : 'bone';
+    const bars = [[x - g - 5, y, 5, 1], [x + g + 1, y, 5, 1], [x, y - g - 5, 1, 5], [x, y + g + 1, 1, 5]];
+    for (const [a, b, w, h] of bars) R(a - 1, b - 1, w + 2, h + 2, 'void');
+    R(x - 1, y - 1, 3, 3, 'void');
+    for (const [a, b, w, h] of bars) R(a, b, w, h, col);
+    R(x, y, 1, 1, 'red');
+  }
+}
+
+// ---------- 13. INPUT + SHOOTING: mouse = crosshair + left click; touch = tap fires exactly where tapped ----------
+const ray = new THREE.Raycaster(), _ndc = new THREE.Vector2();
+let shake = 0;
+function toFrame(e) {
+  const u = (e.clientX - frame.cssX) / frame.cssW, v = (e.clientY - frame.cssY) / frame.cssH;
+  return { u, v, inside: u >= 0 && u < 1 && v >= 0 && v < 1 };
+}
+function setMode(m) { state.mode = m; postMat.uniforms.mode.value = m; }
+view.addEventListener('pointermove', e => {
+  if (e.pointerType !== 'mouse') return;
+  const f = toFrame(e); state.mouseIn = f.inside; gun.touch = false;
+  if (f.inside) { aim.u = f.u; aim.v = f.v; }
+});
+view.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') state.mouseIn = false; });
+view.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  const f = toFrame(e), touch = e.pointerType !== 'mouse';
+  gun.touch = touch; if (touch) state.mouseIn = false;
+  if (!f.inside || (!touch && e.button !== 0)) return;
+  if (f.u * RW > RW - 82 && f.v * RH < 36) { setMode(state.mode % 3 + 1); return; }   // dither button (generous hit box)
+  aim.u = f.u; aim.v = f.v; if (!touch) state.mouseIn = true;
+  fire(f.u, f.v);
+});
+window.addEventListener('keydown', e => {
+  if (e.key >= '1' && e.key <= '3') setMode(+e.key);
+  else if (e.key === 'f' || e.key === 'F') state.showFps = !state.showFps;
+});
+// no page scroll / pinch zoom / double-tap zoom / long-press menu
+['touchstart', 'touchmove', 'gesturestart', 'gesturechange', 'dblclick', 'contextmenu'].forEach(ev =>
+  document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
+
+function fire(u, v) {
+  const now = performance.now(); if (now - state.lastShot < 45) return;   // multi-touch: each finger fires, but no double events
+  state.lastShot = now;
+  gunFire(); shake = 0.14; state.crossHot = 0.09;
+  if (!state.firstShot) { state.firstShot = true; mq.t = 0; }             // marquee springs to the corner
+  camera.position.copy(CAM_POS); camera.updateMatrixWorld();
+  _ndc.set(u * 2 - 1, 1 - v * 2); ray.setFromCamera(_ndc, camera);
+  const objs = [roomMesh];
+  for (const t of targets) if (shootable(t)) objs.push(t.mesh);
+  duckRoot.traverse(o => { if (o.isMesh && o.visible) objs.push(o); });
+  const hit = ray.intersectObjects(objs, false)[0];
+  const px = Math.round(u * RW), py = Math.round(v * RH);
+  if (hit && hit.object.userData.kind === 'target') {
+    shatter(targets[hit.object.userData.idx], hit.point);
+    state.hits++; state.badgeBump = 0.3; state.hitFx.push({ x: px, y: py, a: 0 });
+    duckReact('hit');
+    return;
+  }
+  if (hit && hit.object === roomMesh) {                                    // bullet hole + chips in the surface colour
+    const n = hit.face.normal.clone(), ca = hit.object.geometry.attributes.color, i = hit.face.a;
+    addDecal(hit.point, n);
+    _c.setRGB(Math.min(1, ca.getX(i)), Math.min(1, ca.getY(i)), Math.min(1, ca.getZ(i)));
+    const hex = _c.getHex();
+    for (let k = 0; k < 6; k++) spawnChip(hit.point, _s3.set(n.x * rnd(1, 2.5) + rnd(-1, 1), n.y * rnd(1, 2.5) + rnd(0.5, 2), n.z * rnd(1, 2.5) + rnd(-1, 1)), rnd(0.03, 0.05), hex, rnd(0.5, 0.9));
+  } else if (hit) {                                                        // plinked the deputy himself: sparks
+    for (let k = 0; k < 5; k++) spawnChip(hit.point, _s3.set(rnd(-1.5, 1.5), rnd(1, 2.5), rnd(0.5, 2)), 0.03, k & 1 ? PAL.lemon : PAL.yellow, 0.4);
+  }
+  duckReact('miss');
+}
+
+// ---------- 14. MAIN LOOP ----------
+let last = performance.now(), fpsAcc = 0, fpsN = 0;
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, Math.max(0.0001, (now - last) / 1000)); last = now;
+  fpsAcc += dt; fpsN++; if (fpsAcc >= 0.5) { state.fps = Math.round(fpsN / fpsAcc); fpsAcc = 0; fpsN = 0; }
+  for (const t of targets) updateTarget(t, dt);
+  updateDuck(dt); updateGun(dt); updateCable(dt); updateMarquee(dt); updateChips(dt);
+  camera.position.copy(CAM_POS);
+  if (shake > 0) { shake -= dt; const k = Math.max(0, shake) * 0.25; camera.position.x += rnd(-k, k); camera.position.y += rnd(-k, k); }
+  drawHud(dt);
+  renderFrame();
+}
+document.getElementById('boot').remove();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
