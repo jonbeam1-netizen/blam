@@ -636,20 +636,32 @@ const SKINS = [
   { id: 'zapper', name: 'RAY-85', desc: 'Retro ray gun in cream and orange: long ringed barrel, ribbed vent block, charge meter.' },
   { id: 'revolver', name: 'CANDY SIX', desc: 'Candy-green toy six-shooter with a swing-out cylinder and an orange safety tip.' }];
 const BUILDERS = { justifier: buildHotRod, guncon: buildAquaPro, zapper: buildRay85, revolver: buildCandySix };
-// Camera-space placement.  x/y/z = wrist position, s = scale, yaw = muzzle swung left (shows the left flank),
-// flank = how far the muzzle may turn right before it is squeezed (keeps the side readable), roll = cant, follow = slide toward aim.
+// Camera-space placement.  x/y/z = wrist position, s = scale, follow = slide with an aim left of centre, followR =
+// slide with an aim right of centre (negative on purpose: the gun steps LEFT so a right-hand aim keeps some screen
+// distance from it and the barrel can show its right profile instead of its back), lift = slide up with the aim,
+// near / nearR = depth on the crosshair ray where the bore line converges for an aim left / right of the gun (see
+// "aim" in update), roll = cant, rollX / rollY = extra cant when aiming right / up (small: readable silhouette).
 // Check pass 0.002: both shrunk to ~60% of the first size (on the 426x240 grid the desktop gun is ~80x60 px at
-// a centre aim, tucked in the bottom-right corner; mobile ~57x58 px, bottom-middle) so it never covers the
-// centre lane, the far targets or the menu signs.  Variants: '-low' parks it lower (mobile: in the bottom-right
-// corner, out of the way of the menu signs, which sit low on a phone), '-away' slides it below the frame
-// (briefing / results, where Deputy Duck stands bottom-right).  The rig eases between layouts.
+// a centre aim; mobile ~57x58 px, bottom-middle) so it never covers the centre lane or the far targets.
+// Phase 3 (#21): the desktop PLAY layout moved a third of the way in from the corner (wrist at x 0.5 instead of
+// 0.74); its muzzle stays well right of the centre lane (x 213) at a centre aim.  '-low' parks it in the corner
+// for menus (desktop: where the play layout used to be; mobile: bottom-right, clear of the low phone signs),
+// '-away' slides it below the frame (briefing / results, where Deputy Duck stands bottom-right).
+// The rig eases between layouts.
 const LAYOUTS = {
-  desktop: { x: 0.74, y: -0.34, z: -1.0, s: 0.64, yaw: 0.62, flank: 0.5, roll: 0.1, follow: 0.035, lift: 0.035, pitchK: 0.85, yawK: 0.85, rollX: 0.2, rollY: 0.06 },
-  mobile:  { x: 0.12, y: -0.36, z: -1.0, s: 0.62, yaw: 0.75, flank: 0.42, roll: 0.16, follow: 0.1, lift: 0.03, pitchK: 0.55, yawK: 0.5, rollX: 0.14, rollY: 0.08 }
+  desktop: { x: 0.5, y: -0.35, z: -1.0, s: 0.64, near: 2.4, nearR: 1.5, roll: 0.06, follow: 0.07, followR: -0.2, lift: 0.03, rollX: 0.06, rollY: 0.03 },
+  mobile:  { x: 0.12, y: -0.36, z: -1.0, s: 0.62, near: 2.2, nearR: 1.6, roll: 0.08, follow: 0.1, followR: -0.1, lift: 0.03, rollX: 0.06, rollY: 0.04 }
 };
-for (const k of ['desktop', 'mobile']) {
-  LAYOUTS[k + '-low'] = Object.assign({}, LAYOUTS[k], k === 'mobile' ? { x: 0.74, y: -0.42 } : { y: LAYOUTS[k].y - 0.14 });
-  LAYOUTS[k + '-away'] = Object.assign({}, LAYOUTS[k], { y: LAYOUTS[k].y - 0.62 });
+LAYOUTS['desktop-low'] = Object.assign({}, LAYOUTS.desktop, { x: 0.74, y: -0.38, follow: 0.035, followR: 0.06 });
+LAYOUTS['mobile-low'] = Object.assign({}, LAYOUTS.mobile, { x: 0.74, y: -0.42, follow: 0.035, followR: 0.06 });
+LAYOUTS['desktop-away'] = Object.assign({}, LAYOUTS['desktop-low'], { y: LAYOUTS['desktop-low'].y - 0.62 });
+LAYOUTS['mobile-away'] = Object.assign({}, LAYOUTS.mobile, { y: LAYOUTS.mobile.y - 0.62 });
+const LKEYS = ['near', 'nearR', 'roll', 'follow', 'followR', 'lift', 'rollX', 'rollY'];
+// Until main.js asks for 'desktop-low' on menus itself, the play layout on a menu screen means the corner park
+// (the signs sit where the play gun now stands).  Harmless once main.js picks '-low' for desktop menus.
+function menuPark(name) {
+  const G = BLAM.G;
+  return name === 'desktop' && G && G.screenName && G.screenName !== 'play' ? 'desktop-low' : name;
 }
 function create(THREE, opts) {
   opts = opts || {};
@@ -664,15 +676,16 @@ function create(THREE, opts) {
   flash.renderOrder = 10; flash.visible = false; flash.name = 'gun-flash'; holder.add(flash);
   const parts = new Particles(THREE, 80, group), cable = new Cable(THREE, group), skins = {};
   for (const m of [parts.mesh, cable.mesh]) m.geometry.boundingBox = new THREE.Box3();   // effects never count toward the gun's bounds
-  let skin = null, skinIndex = 0, layoutName = LAYOUTS[opts.layout] ? opts.layout : (String(opts.layout || '').indexOf('mobile') === 0 ? 'mobile' : 'desktop');
+  let skin = null, skinIndex = 0, layoutName = LAYOUTS[menuPark(opts.layout)] ? menuPark(opts.layout) : (String(opts.layout || '').indexOf('mobile') === 0 ? 'mobile' : 'desktop');
   const L0 = LAYOUTS[layoutName], base = new THREE.Vector3(L0.x, L0.y, L0.z);
-  let scale = L0.s, yawB = L0.yaw, flankB = L0.flank, rollB = L0.roll, follow = L0.follow, lift = L0.lift, pitchK = L0.pitchK, yawK = L0.yawK, rollX = L0.rollX, rollY = L0.rollY;
+  let scale = L0.s;
+  const P = {}; for (const k of LKEYS) P[k] = L0[k];                             // eased layout parameters
   let reloadT = 0, reloadDur = 0, flashRot = 0, flashScale = 1;
   const aim = { x: 0, y: 0 };
   const S = { t: 0, frame: 0, trig: 0, kick: 0, kickV: 0, rp: -1, rpPrev: -1, empty: false, emptyFrame: -1, reloadFrame: -1, fireAge: 9, dryAge: 9, shots: 0 };
   S.cross = a => S.rp >= 0 && S.rpPrev < a && S.rp >= a;
   const _q = new THREE.Quaternion(), _e = new THREE.Euler(0, 0, 0, 'YXZ'), _p = new THREE.Vector3(), _aim = new THREE.Vector3(), _M = new THREE.Matrix4(),
-    _a = new THREE.Vector3(), _a2 = new THREE.Vector3(), _b = new THREE.Vector3(), _v = new THREE.Vector3(), _d = new THREE.Vector3();
+    _bo = new THREE.Vector3(), _a = new THREE.Vector3(), _a2 = new THREE.Vector3(), _b = new THREE.Vector3(), _v = new THREE.Vector3(), _d = new THREE.Vector3();
   const chain = () => { rig.updateMatrix(); kick.updateMatrix(); holder.updateMatrix(); return _M.multiplyMatrices(rig.matrix, kick.matrix).multiply(holder.matrix); };
   const toGroup = (p, out) => out.copy(p).applyMatrix4(_M);                          // skin space -> group space (after chain())
   const dirGroup = (d, out) => out.set(d[0], d[1], d[2]).transformDirection(_M);
@@ -706,6 +719,7 @@ function create(THREE, opts) {
     if (def.setup) def.setup(root, def.meshes, THREE);
     def.root = root; def.st = {}; def.muzzleV = V3(THREE, def.muzzle); def.portV = V3(THREE, def.port);
     def.cableV = V3(THREE, def.cable); def.wristV = V3(THREE, def.wrist);
+    def.boreV = def.muzzleV.clone().sub(def.wristV).multiplyScalar(def.size || 1); def.boreV.z = 0;   // bore line point, rig space
     return (skins[id] = def);
   }
   function setSkin(x) {
@@ -718,8 +732,7 @@ function create(THREE, opts) {
     flash.position.copy(sk.muzzleV); cable.cols = sk.coil; cable.fresh = true; sk.st = {};
   }
   function settle() {                                                             // jump to the rest pose, let the cable hang
-    const L = LAYOUTS[layoutName]; base.set(L.x, L.y, L.z); scale = L.s; yawB = L.yaw; flankB = L.flank; rollB = L.roll; follow = L.follow;
-    lift = L.lift; pitchK = L.pitchK; yawK = L.yawK; rollX = L.rollX; rollY = L.rollY;
+    const L = LAYOUTS[layoutName]; base.set(L.x, L.y, L.z); scale = L.s; for (const k of LKEYS) P[k] = L[k];
     for (let i = 0; i < 40; i++) update(0.05, S.t);
     cable.fresh = true; for (let i = 0; i < 60; i++) update(1 / 60, S.t);
   }
@@ -729,24 +742,30 @@ function create(THREE, opts) {
     S.frame++;
     const L = LAYOUTS[layoutName], kL = 1 - Math.exp(-6 * dt);
     base.x += (L.x - base.x) * kL; base.y += (L.y - base.y) * kL; base.z += (L.z - base.z) * kL; scale += (L.s - scale) * kL;
-    yawB += (L.yaw - yawB) * kL; flankB += (L.flank - flankB) * kL; rollB += (L.roll - rollB) * kL; follow += (L.follow - follow) * kL;
-    lift += (L.lift - lift) * kL; pitchK += (L.pitchK - pitchK) * kL; yawK += (L.yawK - yawK) * kL; rollX += (L.rollX - rollX) * kL; rollY += (L.rollY - rollY) * kL;
+    for (const k of LKEYS) P[k] += (L[k] - P[k]) * kL;
     S.fireAge += dt; S.dryAge += dt; S.trig = Math.max(0, S.trig - dt * 6); S.rpPrev = S.rp;
     if (reloadDur > 0) { reloadT += dt; if (reloadT >= reloadDur) { reloadDur = 0; S.rp = -1; S.rpPrev = -1; } else S.rp = reloadT / reloadDur; }
     S.kickV += (-260 * S.kick - 19 * S.kickV) * dt; S.kick += S.kickV * dt;              // recoil spring
-    // rig: layout base + slide toward the aim + breathing; turns toward the aim point with lag
+    // rig: layout base + slide toward the aim + breathing
     const T = S.t, br = Math.sin(T * 1.9), sw = Math.sin(T * 0.95);
-    _p.set(base.x + aim.x * follow + sw * 0.0035, base.y + aim.y * lift + br * 0.003, base.z);
+    _p.set(base.x + aim.x * (aim.x > 0 ? P.followR : P.follow) + sw * 0.0035, base.y + aim.y * P.lift + br * 0.003, base.z);
     rig.position.lerp(_p, 1 - Math.exp(-10 * dt)); rig.scale.setScalar(scale);
-    _aim.set(aim.x * TAN_H * ASPECT * 9, aim.y * TAN_H * 9, -9);
-    const dx = _aim.x - rig.position.x, dy = _aim.y - rig.position.y, dz = _aim.z - rig.position.z;
-    let yaw = Math.atan2(dx, -dz) * yawK - yawB - (skin.view || 0), pitch = Math.atan2(dy, Math.hypot(dx, dz)) * pitchK;
-    const lim = Math.atan2(rig.position.x, -rig.position.z) - flankB;               // never turn the back of the gun to the player
-    if (yaw > lim) yaw = lim + (yaw - lim) * 0.22;
-    if (pitch < -0.22) pitch = -0.22 + (pitch + 0.22) * 0.4;
-    const up = Math.max(0, aim.y), rt = Math.max(0, aim.x);                    // cant toward the player when aiming up/right
-    _e.set(pitch + 0.03 + br * 0.006, -yaw, rollB + rollX * rt + rollY * up * (0.5 + rt) + sw * 0.012, 'YXZ');
-    rig.quaternion.slerp(_q.setFromEuler(_e), 1 - Math.exp(-11 * dt));
+    // aim (#20): the bore line (through the muzzle, along the barrel) is turned to pass through a point ON the
+    // crosshair ray, so on screen the barrel always points exactly at the crosshair.  Which point on the ray is a
+    // free choice, and it is the readability knob: a close point turns the barrel across the view (long, side-on
+    // silhouette), a far one turns it into the screen (you see the back of the gun).  Left of the gun P.near shows
+    // the whole left flank; right of it P.nearR (closer still) shows a right-hand profile.  Blended smoothly on the
+    // screen-space gap between gun and aim.
+    _bo.copy(skin.boreV).multiplyScalar(scale).applyQuaternion(rig.quaternion).add(rig.position);   // bore origin, camera space
+    const gx = _bo.x / (-_bo.z * TAN_H * ASPECT), wl = smooth01(-0.05, 0.4, gx - aim.x);
+    const D = P.nearR + (Math.max(1.6, P.near - (skin.view || 0) * 2) - P.nearR) * wl;
+    _aim.set(aim.x * TAN_H * ASPECT * D, aim.y * TAN_H * D, -D);
+    const dx = _aim.x - _bo.x, dy = _aim.y - _bo.y, dz = _aim.z - _bo.z;
+    const yaw = Math.atan2(dx, -dz), pitch = Math.atan2(dy, Math.hypot(dx, dz));
+    const up = Math.max(0, aim.y), rt = Math.max(0, aim.x);                    // a small cant toward the player up / right
+    // roll turns about the barrel axis, so it never moves the aim; kept small so the up-right silhouette stays a gun
+    _e.set(pitch + br * 0.006, -yaw, P.roll + P.rollX * rt + P.rollY * up * (0.5 + rt) + sw * 0.012, 'YXZ');
+    rig.quaternion.slerp(_q.setFromEuler(_e), 1 - Math.exp(-12 * dt));          // a little lag behind the crosshair
     // kick: recoil, then the reload pose (dip, tilt, show the side)
     kick.position.set(0, S.kick * 0.012, S.kick * 0.11); kick.rotation.set(S.kick * 0.62, 0, 0);
     if (S.rp >= 0) {
@@ -787,7 +806,7 @@ function create(THREE, opts) {
     get flashAmount() { return Math.max(0, 1 - S.fireAge / 0.08); },
     setSkin(x) { setSkin(x); },
     nextSkin() { setSkin((skinIndex + 1) % SKINS.length); },
-    setLayout(name) { layoutName = LAYOUTS[name] ? name : (String(name).indexOf('mobile') === 0 ? 'mobile' : 'desktop'); },
+    setLayout(name) { name = menuPark(name); layoutName = LAYOUTS[name] ? name : (String(name).indexOf('mobile') === 0 ? 'mobile' : 'desktop'); },
     setAim(x, y) { aim.x = Math.max(-1.3, Math.min(1.3, +x || 0)); aim.y = Math.max(-1.3, Math.min(1.3, +y || 0)); },
     fire,
     reload(seconds) { if (!skin) return; reloadDur = Math.max(0.3, +seconds || 1.2); reloadT = 0; S.rp = 0; S.rpPrev = 0; S.reloadFrame = S.frame; },

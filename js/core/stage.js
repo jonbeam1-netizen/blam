@@ -155,13 +155,18 @@ class Run {
       if (this.applyHit(win.by, tid, win.st, null)) B.Net.broadcastHit(tid, win.by, win.st);
     }
   }
+  // display-only ammo for the other player in versus (synced by shots / 'am' / snapshots; reloading is theirs)
+  remoteAmmo(a, ar) {
+    const mag = !!(this.cfg.ammo && this.cfg.ammo.mag), n = Math.max(0, a | 0);
+    return { infinite: a < 0, count: n, reloading: !!ar, empty: !mag && a >= 0 && n <= 0 && this.cfg.ammo !== 'unlimited', magEmpty: mag && n <= 0 && !ar, flash: 0 };
+  }
   snapshot() { return this.players.map(p => [p.hits, p.shots, p.score, p.lives, isFinite(p.fastest) ? +p.fastest.toFixed(3) : -1, p.ammo.infinite ? -1 : p.ammo.count, p.ammo.reloading ? 1 : 0]); }
   applySnapshot(s) {
     if (!Array.isArray(s)) return;
     s.forEach((a, i) => {
       const p = this.players[i]; if (!p || !Array.isArray(a)) return;
       p.hits = a[0] | 0; p.shots = a[1] | 0; p.score = a[2] | 0;
-      if (i !== this.local) { p.lives = a[3] | 0; p.ammo = { infinite: a[5] < 0, count: Math.max(0, a[5]), reloading: !!a[6], empty: false, flash: 0 }; }
+      if (i !== this.local) { p.lives = a[3] | 0; p.ammo = this.remoteAmmo(a[5], a[6]); }
       p.fastest = a[4] >= 0 ? a[4] : Infinity;
     });
   }

@@ -6,7 +6,7 @@
 window.BLAM = window.BLAM || {};
 (function (B) {
 const R = B.R, I = B.Input, H = B.HUD, S = B.Stage, Tg = B.Targets, Save = B.Save, SFX = B.SFX, UI = B.UI, N = B.Net;
-const BUILD = '0.002';                      // bump on every publish (shown on the title status line)
+const BUILD = '0.003';                      // bump on every publish (shown on the title status line)
 const Q = new URLSearchParams(location.search);
 // ?slow=0.25 (dev/testing): single-player stage clock runs at that rate, so slow tools (screenshot -> click
 // takes seconds) can still shoot a target that is really there. Versus always runs on the wall clock.
@@ -55,7 +55,7 @@ try { for (let i = 0; i < G.skins.length; i++) if (i !== G.skin) G.gun.setSkin(i
 const GUN_AWAY = { briefing: 1, results: 1, final: 1, vsresults: 1 };
 G.gunLayout = () => {
   const base = G.touch && R.frame.portrait ? 'mobile' : 'desktop', n = G.screenName;
-  try { G.gun.setLayout(GUN_AWAY[n] ? base + '-away' : (base === 'mobile' && n !== 'play') ? base + '-low' : base); } catch (e) {}
+  try { G.gun.setLayout(GUN_AWAY[n] ? base + '-away' : n !== 'play' ? base + '-low' : base); } catch (e) {}   // menus: '-low' (desktop-low = the corner spot)
 };
 I.onLayout(touch => { G.touch = touch; G.gunLayout(); });
 R.resizeHooks.push(() => G.gunLayout());     // rotating a phone swaps the layout
@@ -138,13 +138,28 @@ function touchPick(run, u, v) {
   R.rayAt(u, v);
   return p;
 }
+// ---- shoot-to-reload (#23): a shot at the frame beside the game rect (pillars, or the top / bottom bars) reloads
+// a magazine, full or partial. It is not a shot: no stats, no ammo from a cap, never sent to the versus host.
+// When the game rect fills the whole canvas (no frame), a thin edge zone of the rect stands in for the frame.
+const EDGE_ZONE = 0.028;
+G.edgeZone = () => !R.frame.portrait && !H.markerSpots().length;
+G.isSideShot = (run, u, v, inside) => !inside || (run.ammo.type === 'mag' && G.edgeZone() && (u < EDGE_ZONE || u > 1 - EDGE_ZONE));
+G.sideReload = run => {
+  if (!run || !run.canShoot()) return false;
+  const ammo = run.ammo;
+  if (!ammo.startReload()) return false;        // unlimited / cap / full / already reloading: nothing happens
+  if (run.versus && N.sendAmmo) N.sendAmmo(run);
+  return true;
+};
 // a shot during a stage
 G.playFire = (run, u, v, inside, touch) => {
-  if (!inside || !run.canShoot()) return;
+  if (G.isSideShot(run, u, v, inside)) { G.sideReload(run); return; }
+  if (!run.canShoot()) return;
+  if (inside) G.lastTap = { u, v, t: G.t };
   const ammo = run.ammo;
   // dry (reloading / spent): ammo emits 'empty' + the HUD flash; a spent gun plays its dry-trigger click
   // (mid-reload the reload animation already says it all). No muzzle flash, no shot.
-  if (!ammo.canFire()) { ammo.use(); if (ammo.empty) try { G.gun.fire(); } catch (e) {} return; }
+  if (!ammo.canFire()) { ammo.use(); if (ammo.empty || ammo.magEmpty) try { G.gun.fire(); } catch (e) {} return; }
   // fire the gun BEFORE spending the round: the last round of a magazine / cap gets its flash and recoil,
   // then ammo.use() starts the reload (gun.reload) or sets the empty state (gun.setEmpty)
   const ray = G.shoot(u, v), me = run.local;
@@ -166,7 +181,9 @@ G.hudState = run => ({
   versus: run.versus, portrait: R.frame.portrait, players: run.versus ? run.players : [run.me],
   timeFrac: run.state === 'count' ? 1 : run.timeLeft / run.cfg.time, secs: Math.ceil(run.timeLeft),
   quota: run.cfg.quota, score: run.me.score, best: run.versus ? 0 : Save.best(run.stage + ':' + run.variant, run.tier),
-  label: G.stageLabel + (G.slow < 1 && !run.versus ? ' SLOW' : ''), status: G.statusText
+  label: G.stageLabel + (G.slow < 1 && !run.versus ? ' SLOW' : ''), status: G.statusText,
+  // frame RELOAD markers (#31): only on magazine stages
+  reload: run.ammo.type === 'mag' ? { empty: run.ammo.magEmpty, reloading: run.ammo.reloading, kick: run.ammo.kick } : null
 });
 G.toast = (text, secs = 2) => { G.toastMsg = { text, t: secs }; };
 G.after = (secs, fn) => { G.timers.push({ t: secs, fn }); };
@@ -265,6 +282,7 @@ G.vsAbort = reason => { if (G.run) { G.run.dispose(); G.run = null; } G.go('lobb
 // =========================================================================================
 I.onKey((k, e) => {
   if (k === '4') G.setSkin(G.skin + 1);
+  else if (k === 'r' || k === 'R') { if (G.screenName === 'play' && G.run) G.sideReload(G.run); }   // PC fallback for shoot-to-reload
   else if (k === 'f' || k === 'F') Save.set('fps', !Save.settings.fps);
   else if (k >= '1' && k <= '3') { R.setMode(+k); G.toast('DITHER MODE ' + k + ': ' + R.MODE_NAMES[+k], 1.2); }
   else if (k === 'Escape') {
@@ -291,6 +309,8 @@ function step(dt, draw) {
   if (duckBackT > 0) { duckBackT -= dt; if (duckBackT <= 0) try { G.duck.setPose(duckBack); } catch (e) {} }
   try { G.duck.lookAt(ax, ay); G.duck.update(dt, G.t); } catch (e) { if (!G.duckErr) { G.duckErr = 1; console.error(e); } }
   if (G.screen) G.screen.update(dt, G.t);
+  if (G.screenName === 'play' && G.run) playExtras(G.run);
+  else if (duckHoverOn) { duckHoverOn = false; try { G.duck.setHover(false); } catch (e) {} }
   if (G.vsWait) { G.vsWait.t -= dt; if (G.vsWait.t <= 0) { const r = G.vsWait.run; G.vsWait = null; G.vsFinish(r); } }
   Tg.updateChips(dt);
   R.postMat.uniforms.boost.value = Math.max(0, R.postMat.uniforms.boost.value - dt * 4);
@@ -308,7 +328,9 @@ function step(dt, draw) {
     else if (!tall) H.text3c(G.toastMsg.text, R.RW / 2, 46, 'yellow', 1, 'void');
   }
   G.crossHot = Math.max(0, G.crossHot - dt);
-  if (I.mouseIn && !I.touch && Save.settings.crosshair) H.crosshair(I.aim.u, I.aim.v, G.crossHot > 0);
+  const crossOn = I.mouseIn && !I.touch && Save.settings.crosshair;
+  if (crossOn) H.crosshair(I.aim.u, I.aim.v, G.crossHot > 0);
+  if (G.screenName === 'play' && G.run) guard('reloadHud', () => drawReloadHud(G.run, crossOn));
   if (Save.settings.fps) H.text3r(G.fps + ' FPS', R.RW - 4, 12, 'lime', 1, 'void');
   // outer frame (+ portrait HUD strip)
   const hs = G.screenName === 'play' && G.run ? G.hudState(G.run) : { menuLine: 'B.L.A.M. BUILD ' + BUILD };
@@ -317,6 +339,35 @@ function step(dt, draw) {
   guard('outer', () => H.drawOuter(R.frame, G.t, hs));
   H.use(R.hx);
   R.render();
+}
+// per-frame play extras: duck hover hook (the mini HUD duck under the crosshair) + versus reload sync
+let duckHoverOn = false, vsReloading = false, vsRun = null;
+function playExtras(run) {
+  if (typeof G.duck.setHover === 'function') {
+    let on = false;
+    if (G.duckMode === 'mini' && I.mouseIn && !I.touch) { try { on = !!G.duck.hitTest(R.rayAt(I.aim.u, I.aim.v)); } catch (e) { on = false; } }
+    if (on || duckHoverOn) { try { G.duck.setHover(on); } catch (e) {} }
+    duckHoverOn = on;
+  }
+  if (run.versus) {                                                         // reload started / finished: tell the other side (not a shot)
+    if (vsRun !== run) { vsRun = run; vsReloading = false; }
+    const ar = run.ammo.reloading;
+    if (ar !== vsReloading) { vsReloading = ar; if (N.sendAmmo) N.sendAmmo(run); }
+  }
+}
+// empty magazine: small blinking RELOAD under the crosshair (desktop) or at the last tap / lower centre (touch);
+// no frame around the game rect: the edge zone + its markers are drawn on the HUD instead
+function drawReloadHud(run, crossOn) {
+  const am = run.ammo;
+  if (am.type !== 'mag' || run.state !== 'play') return;
+  if (am.magEmpty) {
+    if (crossOn) H.reloadPrompt(I.aim.u, I.aim.v, G.t);
+    else if (I.touch) { const lt = G.lastTap; H.reloadPrompt(lt ? lt.u : 0.5, lt ? lt.v : 0.72, G.t); }
+  }
+  if (G.edgeZone()) {
+    const st = H.markerState({ empty: am.magEmpty, reloading: am.reloading, kick: am.kick }, G.t);
+    H.reloadMarker(6, R.RH * 0.42, 'l', st, 1); H.reloadMarker(R.RW - 6, R.RH * 0.42, 'r', st, 1);
+  }
 }
 let last = performance.now(), fpsAcc = 0, fpsN = 0;
 function loop(now) {

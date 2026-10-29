@@ -36,6 +36,7 @@ const mqLetters = []; let mqBulbs = null, mqStep = -1;
   b.bx(L, Bt + 2 * MV, -1.5 * MV, L + 2 * MV, T - 2 * MV, 0.5 * MV, PAL.plum); b.bx(Rr - 2 * MV, Bt + 2 * MV, -1.5 * MV, Rr, T - 2 * MV, 0.5 * MV, PAL.plum);
   b.bx(L + 0.5 * MV, Bt - 0.6 * MV, -1.2 * MV, Rr - 0.5 * MV, Bt, -0.2 * MV, PAL.void);
   marquee.add(b.mesh(R.MAT.obj)); marquee.userData.bottom = Bt;
+  marquee.userData.box = [L, Bt - 0.6 * MV, Rr, T];                           // board extent in marquee units (rope routing)
   const pts = [], x0 = L + MV, x1 = Rr - MV, y0 = Bt + MV, y1 = T - MV, step = 3 * MV;
   for (let x = x0; x < x1 - 1e-6; x += step) pts.push([x, y1]);
   for (let y = y1; y > y0 + 1e-6; y -= step) pts.push([x1, y]);
@@ -48,22 +49,105 @@ const mqLetters = []; let mqBulbs = null, mqStep = -1;
 }
 const MQ = { x: 0, y: 1.06, z: -3.4, s: 0.64 };
 const _c = new THREE.Color(), _hp = new THREE.Vector3();
-function updateMarquee(t) {
+let mqFlick = 0, mqFlickAt = 0;                                                // ricochet: bulb flicker timer + where it hit
+function updateMarquee(t, dt) {
   marquee.position.set(MQ.x, MQ.y, MQ.z); marquee.scale.setScalar(MQ.s);
   marquee.rotation.set(-0.04 + Math.sin(t * 1.3) * 0.03, Math.sin(t * 0.8) * 0.13, Math.sin(t * 1.1) * 0.012);
   mqLetters.forEach((m, i) => { const s = Math.max(0, Math.sin(t * 4.2 - i * 0.8)); m.position.y = s * s * s * 0.07; });
   const step = Math.floor(t * 9);
-  if (step !== mqStep) {
+  if (mqFlick > 0) {                                                           // a shot rattled the board: bulbs near the hit stutter
+    mqFlick -= dt || 1 / 60; mqStep = -1;
+    const f = Math.floor(t * 30);
+    for (let i = 0; i < mqBulbs.count; i++) {
+      const near = Math.abs(i - mqFlickAt) < 9 || Math.abs(i - mqFlickAt) > mqBulbs.count - 9;
+      const off = near ? ((i * 7 + f) % 3 === 0) : ((i * 13 + f) % 11 === 0);
+      mqBulbs.setColorAt(i, _c.set(off ? PAL.oxblood : (i + f) % 2 ? PAL.lemon : PAL.bone));
+    }
+    mqBulbs.instanceColor.needsUpdate = true;
+  } else if (step !== mqStep) {
     mqStep = step;
     for (let i = 0; i < mqBulbs.count; i++) mqBulbs.setColorAt(i, _c.set((i + step) % 3 === 0 ? PAL.lemon : (i + step) % 3 === 1 ? PAL.amber : PAL.rust));
     mqBulbs.instanceColor.needsUpdate = true;
   }
 }
+// shot at the marquee: ricochet spark burst + bulb flicker + 'ricochet' event. Returns true when the board was hit.
+const _mqLocal = new THREE.Vector3();
+function marqueeShot(ray) {
+  if (!marquee.visible) return false;
+  marquee.updateMatrixWorld(true);
+  const h = ray.intersectObject(marquee, true)[0];
+  if (!h) return false;
+  Tg.sparks(h.point, 12, ['lemon', 'bone', 'yellow', 'amber'], 1.9, 0.034);  // hard white-hot ricochet
+  Tg.sparks(h.point, 4, ['steel', 'haze'], 1.0, 0.042);                       // a few grey flakes of paint
+  // nearest bulb to the hit, so the flicker starts where the bullet struck
+  marquee.worldToLocal(_mqLocal.copy(h.point));
+  let best = 0, bd = 1e9; const m4 = new THREE.Matrix4(), p = new THREE.Vector3();
+  for (let i = 0; i < mqBulbs.count; i++) { mqBulbs.getMatrixAt(i, m4); p.setFromMatrixPosition(m4); const d = p.distanceToSquared(_mqLocal); if (d < bd) { bd = d; best = i; } }
+  mqFlick = 0.32; mqFlickAt = best;
+  SFX.play('ricochet', { u: B.Input.aim.u });
+  return true;
+}
 function marqueeBottomPx() {
   marquee.updateMatrixWorld(true); marquee.localToWorld(_hp.set(0, marquee.userData.bottom, 0));
   return R.toPx(_hp)[1];
 }
-UI.marquee = marquee; UI.updateMarquee = updateMarquee;
+UI.marquee = marquee; UI.updateMarquee = updateMarquee; UI.marqueeShot = marqueeShot;
+
+// ---------- sign ropes (gripe #30): each rope runs up from the top edge of its own sign and stops at the bottom edge
+// of the first thing above it (another sign or the marquee), so it never draws through a board; ropes with a clear
+// sky run up out of frame as before.  The Sign's own ropes are switched off (hang 0) and these replace them.
+const ROPE_GEO = (() => { const v = new R.Vox(); v.bx(-0.012, 0, -0.02, 0.012, 1, 0.004, PAL.steel); return v.mesh(R.MAT.obj).geometry; })();
+const KNOT_GEO = (() => { const v = new R.Vox(); v.bx(-0.03, -0.01, -0.03, 0.03, 0.03, 0.02, PAL.void); return v.mesh(R.MAT.obj).geometry; })();
+const _rp = new THREE.Vector3();
+function projRect(pts) {                                                       // screen-px bounds of world points
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const p of pts) { const [x, y] = R.toPx(p); x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  return [x0, y0, x1, y1];
+}
+function signRect(sign) {
+  const g = sign.group.position, w = sign.w / 2 * 1.08, h = sign.h / 2 * 1.08;   // 1.08 = hover scale
+  return projRect([0, 1, 2, 3].map(i => new THREE.Vector3(g.x + (i & 1 ? w : -w), g.y + (i & 2 ? h : -h), g.z)));
+}
+function marqueeRect() {
+  const [l, b, r, t] = marquee.userData.box, pts = [];
+  R.camera.updateMatrixWorld(true);
+  for (let i = 0; i < 4; i++) {
+    // rest pose, widened for the yaw wobble; b is the bottom of the board's dark drop shadow, where the ropes tie on
+    const v = new THREE.Vector3(MQ.x + (i & 1 ? r * 1.04 : l * 1.04) * MQ.s, MQ.y + (i & 2 ? t : b) * MQ.s, MQ.z);
+    pts.push(R.camera.localToWorld(v));
+  }
+  return projRect(pts);
+}
+function routeRopes(items) {
+  const obst = [];
+  if (marquee.visible) obst.push({ r: marqueeRect(), mq: true });
+  for (const it of items) if (it.sign.alive) obst.push({ r: signRect(it.sign), sign: it.sign });
+  for (const it of items) {
+    const sg = it.sign, hang = it.hang == null ? 2.6 : it.hang;
+    if (!sg.ropes) sg.ropes = [];
+    for (const m of sg.ropes) sg.pivot.remove(m);
+    sg.ropes.length = 0; sg.ropeW = sg.w;
+    if (hang <= 0) continue;
+    const top = sg.h / 2, sx = sg.w / 2 - 3 * sg.opts.s, g = sg.group.position;
+    for (const x of [-sx, sx]) {
+      let len = hang;
+      for (let y = 0; y < hang; y += 0.004) {
+        const [px, py] = R.toPx(_rp.set(g.x + x, g.y + top + y, g.z));
+        if (obst.some(o => o.sign !== sg && px >= o.r[0] && px <= o.r[2] && py >= o.r[1] && py <= o.r[3] + 1)) { len = Math.max(0, y); break; }
+      }
+      const rope = new THREE.Mesh(ROPE_GEO, R.MAT.obj), knot = new THREE.Mesh(KNOT_GEO, R.MAT.obj);
+      rope.position.set(x, top, 0); rope.scale.y = Math.max(1e-4, len); rope.userData.cap = top + len;
+      knot.position.set(x, top, 0);
+      for (const m of [rope, knot]) { m.raycast = () => {}; m.userData.sharedGeo = true; sg.pivot.add(m); sg.ropes.push(m); }   // ropes are never shootable
+    }
+  }
+}
+// per frame: keep the rope tops fixed while the sign grows on hover (the pivot scales about the sign centre)
+function holdRopes(sg) {
+  if (!sg.ropes) return;
+  const sc = sg.pivot.scale.y || 1;
+  for (const m of sg.ropes) if (m.userData.cap !== undefined) m.scale.y = Math.max(1e-4, m.userData.cap / sc - sg.h / 2);
+}
 
 // ---------- Menu: a set of shootable signs placed in screen terms ----------
 // items: [{ text, sub, color, u, v, s, z, act(sign), keep (don't shatter, e.g. toggles) }]
@@ -72,12 +156,13 @@ class Menu {
     this.items = items.map(it => {
       // signs hang on the plane z (default 1.5); sizes are authored for z = 0 and scaled by distance so they keep their screen size
       const z = it.z == null ? 1.5 : it.z, k = (R.CAM_POS.z - z) / R.CAM_POS.z;
-      const sign = new Tg.Sign({ text: it.text, sub: it.sub, color: it.color || 'crimson', s: (it.s || 0.05) * k, hang: it.hang == null ? 2.6 : it.hang, minW: it.minW || 0 });
+      const sign = new Tg.Sign({ text: it.text, sub: it.sub, color: it.color || 'crimson', s: (it.s || 0.05) * k, hang: 0, minW: it.minW || 0 });   // ropes: routeRopes()
       R.screenToWorld(it.u, it.v, z, sign.group.position);
       R.scene.add(sign.group); sign.group.updateMatrixWorld(true);   // shootable before the first render
       return Object.assign({ sign }, it);
     });
     this.busy = 0; this.hover = null;
+    routeRopes(this.items);
   }
   update(dt, t) {
     this.busy = Math.max(0, this.busy - dt);
@@ -86,7 +171,8 @@ class Menu {
       const p = Tg.pick(R.rayAt(B.Input.aim.u, B.Input.aim.v), this.items.map(i => i.sign));
       hov = p ? p.target : null;
     }
-    for (const it of this.items) { it.sign.setHover(it.sign === hov); it.sign.update(dt, t); }
+    if (this.items.some(it => it.sign.alive && it.sign.ropeW !== it.sign.w)) routeRopes(this.items);   // setText changed a width
+    for (const it of this.items) { it.sign.setHover(it.sign === hov); it.sign.update(dt, t); holdRopes(it.sign); }
     this.hover = hov;
   }
   // returns true if a sign was hit
@@ -168,7 +254,7 @@ UI.screens.title = {
     ]);
   },
   exit() { marquee.visible = false; this.menu.dispose(); this.decor.targets.forEach(t => t.dispose()); },
-  update(dt, t) { updateMarquee(t); this.decor.update(t); this.menu.update(dt, t); },
+  update(dt, t) { updateMarquee(t, dt); this.decor.update(t); this.menu.update(dt, t); },
   draw(t) {
     if (tall()) return;                                                       // portrait: drawPortrait() has the text
     const by = marqueeBottomPx();
@@ -178,7 +264,10 @@ UI.screens.title = {
   },
   extraFire(ray) {
     const p = Tg.pick(ray, this.decor.targets);
-    if (!p) return false;
+    if (!p) return marqueeShot(ray);                                          // the marquee hangs in front of the paddles
+    marquee.updateMatrixWorld(true);
+    const mh = marquee.visible && ray.intersectObject(marquee, true)[0];
+    if (mh && mh.distance < p.distance) return marqueeShot(ray);
     p.target.shatter(p.point); SFX.play('hit', { pts: 0 }); G().duckReact('happy'); return true;
   },
   fire(u, v, inside) { menuFire(this, u, v, inside); }
@@ -316,7 +405,7 @@ function shotsPillar(x, y, rule) {
   H.text3c('SHOTS', x + w / 2, y + 14, 'bone', 2, 'void');
   const r = rule || 'unlimited';
   if (r === 'unlimited' || (!r.mag && !r.cap)) { H.sprite(H.INF, x + w / 2 - 13, y + 52, 3, { X: 'bone' }, 'inf3'); H.text3c('NO LIMIT', x + w / 2, y + 80, 'lemon', 1, 'void'); }
-  else if (r.mag) { H.text7c(String(r.mag), x + w / 2, y + 40, 4, 'bone', 'void', 2); H.text3c('PER MAG', x + w / 2, y + 76, 'lemon', 1, 'void'); H.text3c('AUTO', x + w / 2, y + 86, 'bone', 1, 'void'); H.text3c('RELOAD', x + w / 2, y + 93, 'bone', 1, 'void'); }
+  else if (r.mag) { H.text7c(String(r.mag), x + w / 2, y + 40, 4, 'bone', 'void', 2); H.text3c('PER MAG', x + w / 2, y + 76, 'lemon', 1, 'void'); H.text3c(r.autoReload ? 'AUTO' : 'SHOOT SIDE', x + w / 2, y + 86, 'bone', 1, 'void'); H.text3c(r.autoReload ? 'RELOAD' : 'TO RELOAD', x + w / 2, y + 93, 'bone', 1, 'void'); }
   else { H.text7c(String(r.cap), x + w / 2, y + 40, 4, 'bone', 'void', 2); H.text3c('IN TOTAL', x + w / 2, y + 76, 'lemon', 1, 'void'); H.text3c('MAKE THEM', x + w / 2, y + 86, 'bone', 1, 'void'); H.text3c('COUNT!', x + w / 2, y + 93, 'bone', 1, 'void'); }
 }
 function timePillar(x, y, secs) {
@@ -608,4 +697,22 @@ UI.screens.vsresults = {
   },
   fire() { if (this.t > 1.5) this.go(); }
 };
+
+// ---------- duck hover hook: on every screen that shows the big Deputy Duck (all but play, where main.js does the
+// mini HUD duck), he flinches while the crosshair is on him and relaxes when it leaves.  Mouse only (a touch has
+// no hover).  Wraps each screen's update so the hook runs once per frame after the screen has moved things.
+function duckHover() {
+  const g = G(), duck = g && g.duck;
+  if (!duck || typeof duck.setHover !== 'function') return;
+  let on = false;
+  if (g.duckMode && g.duckMode !== 'mini' && g.duckMode !== 'hidden' && B.Input.mouseIn && !B.Input.touch) {
+    try { on = !!duck.hitTest(R.rayAt(B.Input.aim.u, B.Input.aim.v)); } catch (e) { on = false; }
+  }
+  try { duck.setHover(on); } catch (e) {}
+}
+for (const name in UI.screens) {
+  if (name === 'play') continue;
+  const scr = UI.screens[name], up = scr.update;
+  scr.update = function (dt, t) { if (up) up.call(this, dt, t); duckHover(); };
+}
 })(window.BLAM);

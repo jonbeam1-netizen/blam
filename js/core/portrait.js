@@ -176,7 +176,7 @@ SC.briefing.drawPortrait = function (t, L) {
   card(x1, y, cw, ch, 'red');
   H.text3c('SHOTS', x1 + cw / 2, y + 6, 'bone', 1, 'void');
   if (r === 'unlimited' || (!r.mag && !r.cap)) { H.sprite(H.INF, x1 + cw / 2 - 9, y + 22, 2, { X: 'bone' }, 'inf'); H.text3c('NO LIMIT', x1 + cw / 2, y + 44, 'lemon', 1, 'void'); }
-  else { H.text7c(String(r.mag || r.cap), x1 + cw / 2, y + 18, 2, 'bone', 'void', 1); H.text3c(r.mag ? 'PER MAG' : 'IN TOTAL', x1 + cw / 2, y + 38, 'lemon', 1, 'void'); H.text3c(r.mag ? 'RELOADS' : 'COUNT!', x1 + cw / 2, y + 48, 'bone', 1, 'void'); }
+  else { H.text7c(String(r.mag || r.cap), x1 + cw / 2, y + 18, 2, 'bone', 'void', 1); H.text3c(r.mag ? 'PER MAG' : 'IN TOTAL', x1 + cw / 2, y + 38, 'lemon', 1, 'void'); H.text3c(r.mag ? (r.autoReload ? 'AUTO RELOAD' : 'SHOOT SIDE') : 'COUNT!', x1 + cw / 2, y + 48, 'bone', 1, 'void'); }
   const x2 = x1 + cw + 4;
   card(x2, y, cw, ch, 'magenta');
   H.text3c('TIME', x2 + cw / 2, y + 6, 'bone', 1, 'void');

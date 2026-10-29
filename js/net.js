@@ -88,11 +88,17 @@ function hostRecv(from, m) {
       SFX.play('vsJoin'); setStatus(n + ' JOINED! PICK A TIER + STAGE, THEN START');
       break;
     }
+    case 'am': {                                // ammo / reload status only (a side-shot reload is NOT a shot)
+      if (!live || from === run.local) return;
+      const P = run.players[from]; if (!P) return;
+      P.ammo = run.remoteAmmo(m.a, m.ar); bcastSnap(run);
+      break;
+    }
     case 'shot': {
       if (!live) return;
       const P = run.players[from]; if (!P) return;
       P.shots++;
-      if (from !== run.local) P.ammo = { infinite: m.a < 0, count: Math.max(0, m.a | 0), reloading: !!m.ar, empty: false, flash: 0 };
+      if (from !== run.local) P.ammo = run.remoteAmmo(m.a, m.ar);
       const tid = m.tid | 0, st = +m.st || 0;
       if (m.k === 'hit') run.hostClaim(from, tid, st);
       else if (m.k === 'bomb') { if (from !== run.local) run.applyPenalty(from, 'bomb', tid); bcast({ t: 'pen', by: from, tid }); }
@@ -162,6 +168,13 @@ function clientRecv(m) {
 // ---------- both ----------
 // a local shot in a versus match: { st, k: 'hit'|'miss'|'bomb'|'duck', tid, a: ammo (-1 = infinite), ar: reloading }
 N.sendShot = m => { m.t = 'shot'; if (N.isHost) hostRecv(N.me, m); else sendTo(N.conn, m); };
+// local ammo / reload state changed without a shot (a reload started or finished): keep the other side's HUD
+// honest. Never counts as a shot, never adjudicated.
+N.sendAmmo = run => {
+  if (!run || !run.versus) return;
+  const am = run.ammo, a = am.infinite ? -1 : am.count, ar = am.reloading ? 1 : 0;
+  if (N.isHost) bcastSnap(run); else sendTo(N.conn, { t: 'am', a, ar });
+};
 N.leave = () => {
   if (N.isHost) bcast({ t: 'bye' }); else sendTo(N.conn, { t: 'bye' });
   cleanup(); N.state = 'idle'; N.status = ''; touch();

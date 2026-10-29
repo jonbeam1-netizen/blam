@@ -27,8 +27,8 @@
    B.L.A.M.  --  GUN + DEPUTY DUCK VIEWER (review page for js/guns.js and js/duck.js)
    Same pipeline as looktest.html: scene -> 426x240 target -> palette snap + Bayer dither -> NEAREST letterbox blit.
    Keys: 1/2/3 dither mode | 4 next gun skin | click fire | R reload | E empty | M mobile layout
-         Q idle  W happy  A angry  S shot  D present  Z cheer  X sad | click the duck = hit()
-         C duck close-up | arrows turn the duck | F fps | H help
+         Q idle  W happy  A angry  S shot  D present  Z cheer  X sad  H scared  J relief | click the duck = hit()
+         K hover test (setHover driven by the real crosshair hit test) | C duck close-up | arrows turn the duck | F fps | G help
    ========================================================================================= */
 if (!window.THREE) { document.getElementById('boot').textContent = 'COULD NOT LOAD THREE.JS'; throw new Error('three.js missing'); }
 
@@ -227,8 +227,8 @@ const duck = BLAM.Duck ? BLAM.Duck.create(THREE, {}) : null;
 const duckRoot = new THREE.Group(); scene.add(duckRoot);
 if (duck) duckRoot.add(duck.group);
 const DUCK_SPOTS = [{ x: -1.3, z: 1.0, s: 1.35 }, { x: -0.95, z: 0.75, s: 2.05 }];
-const POSE_KEYS = { q: 'idle', w: 'happy', a: 'angry', s: 'shot', d: 'present', z: 'cheer', x: 'sad' };
-const st = { mode: 1, fps: 60, showFps: true, help: true, mobile: false, empty: false, pose: 'idle', spot: 0, yaw: 0.42, mouseIn: false, crossHot: 0, u: 0.62, v: 0.45 };
+const POSE_KEYS = { q: 'idle', w: 'happy', a: 'angry', s: 'shot', d: 'present', z: 'cheer', x: 'sad', h: 'scared', j: 'relief' };
+const st = { hoverTest: false, hovered: false, mode: 1, fps: 60, showFps: true, help: true, mobile: false, empty: false, pose: 'idle', spot: 0, yaw: 0.42, mouseIn: false, crossHot: 0, u: 0.62, v: 0.45 };
 function placeDuck() { const p = DUCK_SPOTS[st.spot]; duckRoot.position.set(p.x, 0, p.z); duckRoot.scale.setScalar(p.s); duckRoot.rotation.y = st.yaw; }
 placeDuck();
 gun.setAim(st.u * 2 - 1, 1 - st.v * 2);
@@ -255,7 +255,7 @@ function drawHud(dt) {
   if (st.help) for (const line of wrap(sk.desc, 62)) { text3(line, 4, y, 'mist'); y += 8; }
   const flags = [gun.layout === 'mobile' ? 'MOBILE' : 'DESKTOP', gun.reloading ? 'RELOADING' : '', gun.empty ? 'EMPTY' : ''].filter(Boolean).join('  ');
   text3(flags, 4, y, gun.empty ? 'red' : 'cyan');
-  text3('DUCK: ' + (duck ? duck.pose || st.pose : 'NOT LOADED'), 4, y + 9, 'lemon', 1);
+  text3('DUCK: ' + (duck ? duck.pose || st.pose : 'NOT LOADED') + (st.hoverTest ? '  HOVER TEST ' + (st.hovered ? 'ON HIM' : 'OFF HIM') : ''), 4, y + 9, st.hovered ? 'coral' : 'lemon', 1);
   const mode = 'DITHER ' + st.mode + ' ' + MODE_NAMES[st.mode]; text3(mode, RW - 4 - text3w(mode), 4, 'bone');
   if (st.showFps) {
     const s = st.fps + ' FPS'; text3(s, RW - 4 - text3w(s), 12, 'lime');
@@ -263,8 +263,9 @@ function drawHud(dt) {
     const g = 'GUN ' + stats.gunCalls + '  DUCK ' + stats.duckCalls; text3(g, RW - 4 - text3w(g), 28, 'mist');
   }
   if (st.help) {
-    text3('4 SKIN  CLICK FIRE  R RELOAD  E EMPTY  M MOBILE  1-3 DITHER', 4, RH - 16, 'bone');
-    text3('Q IDLE W HAPPY A ANGRY S SHOT D PRESENT Z CHEER X SAD  C ZOOM  H HELP', 4, RH - 8, 'bone');
+    text3('4 SKIN  CLICK FIRE  R RELOAD  E EMPTY  M MOBILE  1-3 DITHER', 4, RH - 24, 'bone');
+    text3('Q IDLE W HAPPY A ANGRY S SHOT D PRESENT Z CHEER X SAD H SCARED J RELIEF', 4, RH - 16, 'bone');
+    text3('K HOVER TEST (' + (st.hoverTest ? 'ON' : 'OFF') + ')  C ZOOM  ARROWS TURN  G HELP', 4, RH - 8, 'bone');
   }
   if (st.mouseIn) {
     st.crossHot = Math.max(0, st.crossHot - dt);
@@ -296,7 +297,8 @@ window.addEventListener('keydown', e => {
   else if (k === 'e') { st.empty = !st.empty; gun.setEmpty(st.empty); }
   else if (k === 'm') { st.mobile = !st.mobile; gun.setLayout(st.mobile ? 'mobile' : 'desktop'); }
   else if (k === 'f') st.showFps = !st.showFps;
-  else if (k === 'h') st.help = !st.help;
+  else if (k === 'g') st.help = !st.help;
+  else if (k === 'k' && duck) { st.hoverTest = !st.hoverTest; if (!st.hoverTest) { st.hovered = false; duck.setHover(false); } }
   else if (k === 'c') { st.spot = 1 - st.spot; placeDuck(); }
   else if (k === 'arrowleft') { st.yaw -= 0.2; placeDuck(); }
   else if (k === 'arrowright') { st.yaw += 0.2; placeDuck(); }
@@ -307,8 +309,14 @@ window.addEventListener('keydown', e => {
 // ---------- 8. LOOP + review hooks (GV.step / GV.snap are used to capture screenshots) ----------
 function countCalls(obj) { let n = 0; obj.traverseVisible(o => { if (o.isMesh || o.isSprite || o.isInstancedMesh) n++; }); return n; }
 let T = 0;
+// K: drive duck.setHover() from the same crosshair ray the shots use, every frame (like the engine does)
+function hoverTest() {
+  if (!duck || !st.hoverTest) return;
+  camera.updateMatrixWorld(); _ndc.set(st.u * 2 - 1, 1 - st.v * 2); ray.setFromCamera(_ndc, camera);
+  st.hovered = st.mouseIn && !!duck.hitTest(ray); duck.setHover(st.hovered);
+}
 function tick(dt) {
-  T += dt;
+  T += dt; hoverTest();
   gun.update(dt, T); if (duck) duck.update(dt, T);
   postMat.uniforms.boost.value = Math.max(0, postMat.uniforms.boost.value - dt * 4);
   stats.gunCalls = countCalls(gun.group); stats.duckCalls = duck ? countCalls(duck.group) : 0;

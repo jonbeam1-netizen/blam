@@ -16,7 +16,7 @@ The render pipeline, palette, fonts and the voxel builder are lifted from `lookt
 | `js/core/input.js` | `BLAM.Input`: mouse crosshair + left click, touch tap fires where tapped (pointer events), keys, no page scroll/zoom; `aim {u,v}`, `onFire`, `onKey`, `onLayout(touch)` |
 | `js/core/save.js` | `BLAM.Save`: localStorage `blam.save.v1` (settings, best per `stageKey|tier`, gun skin) |
 | `js/core/audio.js` | `BLAM.SFX` **stub**: `play(name, opts)` logs to `BLAM.SFX.log`; the event list is documented at the top of the file |
-| `js/core/ammo.js` | `BLAM.Ammo`: `'unlimited'` / `{mag, autoReload, reloadTime}` / `{cap}`; automatic reload calls `gun.reload(t)` and locks the trigger |
+| `js/core/ammo.js` | `BLAM.Ammo`: `'unlimited'` / `{mag, reloadTime, autoReload?}` / `{cap}`; magazine reload is MANUAL (shoot the frame / R, see Build 0.003), `startReload()` calls `gun.reload(t)` and locks the trigger; `autoReload: true` = the old automatic reload |
 | `js/core/hud.js` | `BLAM.HUD`: cached 3x5 / bold text, sprites, ammo shell, hearts, HIT badge (0.35 s, beside the shell), timer ball, quota pill, versus counters, crosshair, briefing/results panels (stone banner, red panel, sticker, plate, starburst, icons), `drawPlay(hs)`, `drawOuter(frame, t, hs)` |
 | `js/core/targets.js` | `BLAM.Targets`: chips (InstancedMesh), bullet-hole decals with a rim, sparks, bomb puff, `Target` base class, `pick(ray, targets)`, `Sign` (shootable menu board) |
 | `js/core/stage.js` | `BLAM.Stage`: tiers, `mulberry32`, stage registry, env cache, `Run` (one stage being played, scoring, versus adjudication), `Course` |
@@ -28,7 +28,7 @@ The render pipeline, palette, fonts and the voxel builder are lifted from `lookt
 | `js/main.js` | `BLAM.G`: boot, mounting gun + duck, game flow (course / free play / versus), the loop, keys, **build stamp** |
 | `js/guns.js`, `js/duck.js` | owned by the art agent; used through `BLAM.Guns` / `BLAM.Duck` if present |
 
-Keys: **4** next gun skin (anywhere), **F** FPS readout, **1/2/3** dither modes (dev, not saved), **Esc** back / leave.
+Keys: **R** reload (PC fallback for shoot-to-reload, during a stage), **4** next gun skin (anywhere), **F** FPS readout, **1/2/3** dither modes (dev, not saved), **Esc** back / leave.
 URL params: `?seed=N` fixes every stage seed (repeatable runs), `?go=free|settings|scores|lobby|tiers` jumps to a menu,
 `?slow=0.25` (testing) runs a solo stage clock at that rate (HUD label shows SLOW; versus ignores it).
 
@@ -63,8 +63,8 @@ Spawn objects need `id` (= index), `t0`, `t1` (stage-clock start/end) and option
 A target's `update(lt, run)` is called every frame with **local time** `lt = run.t - spawn.t0`; it must set `group` pose and `shootable` as a **pure function of lt** (that is what keeps versus in sync) and return `true` when finished.
 Set `kind` to `'target'` (scores), `'bomb'` or `'bystander'` (life -1). Register shatterable voxel parts with `this.part(mesh, voxelList, size, ox, oy, oz)`; optional `explode(point)` for bombs. The run removes it after `update` returns true.
 
-**Stage config fields** (`cfg`): `quota` (hits to clear), `time` (seconds), `ammo` (`'unlimited'` | `{mag, autoReload, reloadTime}` | `{cap}`), `title`, `subtitle`, plus stage-specific tuning. The range uses `hold, swing, scoot, steps, live (max at once), bomb (rate), gap [min,max], rel (reload s), slack (spare shots for a cap)`.
-The range derives `quota` from the good targets its timeline produced (share per tier 45/52/58/64% + 3% per variant) so a quota is always reachable.
+**Stage config fields** (`cfg`): `quota` (hits to clear), `time` (seconds), `ammo` (`'unlimited'` | `{mag, autoReload, reloadTime}` | `{cap}`), `title`, `subtitle`, plus stage-specific tuning. The range uses `hold, quick + mix (mixed hold times), swing, scoot, steps, live (max at once), bomb (rate), bombCap (max bomb share), gap [min,max], rel (reload s), slack (spare shots for a cap), share (quota share), autoReload, flipbomb`.
+The range derives `quota` from the REAL targets its timeline produced (share per tier 52/56/58/60% + 2% per variant, flip bombs never counted) so a quota is always reachable (table in "Build 0.003").
 
 Determinism: `Run` seeds `mulberry32(hash(stage|tier|variant) ^ seed)`; `run.timelineHash` lets you compare two machines.
 
@@ -84,6 +84,7 @@ Code `BLAM-XXXX` (alphabet `ABCDEFGHJKMNPQRSTUVWXYZ23456789`), peer id `blam-xxx
 | H->G | `{t:'lobby', lobby:{stage, variant, tier}, players}` | host changed tier/stage |
 | H->G | `{t:'start', seed, stage, variant, tier, names}` | both build the same `Run`; versus briefing lasts 5.5 s from receipt, then 3.2 s countdown |
 | both->H | `{t:'shot', st, k:'hit'/'miss'/'bomb'/'duck', tid, a (ammo, -1 = inf), ar (reloading)}` | every local shot (host feeds its own through the same path) |
+| G->H | `{t:'am', a, ar}` | ammo / reload status only (a reload started or finished). NOT a shot: no stats, no adjudication; host updates the guest's display ammo and sends `sc` (the host's own reload just sends `sc`) |
 | H->G | `{t:'hit', tid, by, st}` | target `tid` awarded to player `by` |
 | H->G | `{t:'miss', by, st}` / `{t:'pen', by, tid}` | a miss / a bomb hit (explode it, hearts come with `sc`) |
 | H->G | `{t:'sc', p:[[hits, shots, score, lives, fastest, ammo, reloading] x2]}` | authoritative tallies after every shot |
@@ -117,3 +118,65 @@ Integration pass over the engine + the real `guns.js` / `duck.js`, tested with r
 - **Portrait phones.** `UI.tall()` (portrait and `hudScale >= 2`): every text screen's `draw()` leaves the game rect to the 3D and `core/portrait.js` draws its text on the outer canvas (headline on a sign board in the curtain, the panel on the shelf), like the play HUD strip. Toasts move above the game rect. Tablets in portrait keep the normal layouts.
 - **Other.** All gun skins are built at boot (first key-4 press used to cost 8-14 ms mid-stage). Bold font: hand-made `W` (the doubled one read as V: "VINNER!"). Versus results no longer dim Deputy Duck. `index.html` scripts carry `?v=BUILD`.
 - Files: `js/main.js`, `js/guns.js` (LAYOUTS + setLayout only), `js/stages/range.js` (shootable windows), `js/core/ui.js`, `js/core/hud.js` (drawOuter panel hook), `js/core/render.js` (W glyph), new `js/core/portrait.js`, `index.html`, this file.
+
+## Build 0.003
+
+Reload, difficulty, target mix and target motion rework (engine side; `guns.js` / `ui.js` / `duck.js` belong to other agents). Proof captures: `review/phase3/B/`.
+
+### Shoot-to-reload (#23, #31)
+
+- **Default magazine rule is manual.** Shoot the frame around the 16:9 game rect (side pillars; on windows taller than 16:9 and on portrait phones, the top / bottom bars; on touch, a tap there) to reload. Works on a partial magazine (tactical reload). **R** is the PC fallback. Full magazine / already reloading / unlimited / cap: a frame shot does nothing.
+- A frame shot is **not a shot**: no stats (shots / accuracy), no ammo from a cap, no miss, never sent to the versus host as `shot`. `main.js`: `G.isSideShot`, `G.sideReload(run)`; `Ammo.startReload()` returns whether a reload started.
+- An emptied magazine stays empty (`gun.setEmpty(true)`) until you reload; a dry trigger plays the gun's dry click. `startReload` clears the empty state and calls `gun.reload(reloadTime)`; the trigger is locked for `reloadTime`.
+- `autoReload: true` in a stage's `ammo` rule brings back the old automatic reload (per-stage option, `cfg.autoReload`, default `false` in the range).
+- No frame at all (window exactly 16:9): a 2.8 % edge zone on the left / right of the game rect stands in for the frame (magazine stages only) and its markers are drawn on the HUD.
+- **HUD:** shell shows `RELOAD` (red, blinking) when the magazine is empty, `RELOAD` + `...` + a lemon progress bar while reloading. A small blinking red `RELOAD` sits under the crosshair (above it near the bottom); on touch it sits at the last tap point (lower centre before any tap).
+- **Frame markers:** `HUD.reloadMarker(cx, cy, dir, state, sc)`; plaque with `< R E L O A D <` stacked vertically, arrows pointing outward (pillars), or horizontal `^ RELOAD ^` / `v RELOAD v` on the top / bottom bars. States: dim (normal), lit + blinking (empty), yellow flash for 0.35 s (reload triggered, `ammo.kick`), amber (reloading). Only on magazine stages. Spots are computed in `buildOuter` (`HUD.markerSpots()`); `drawOuter` also redraws when the marker state changes.
+- **Versus:** reload state is local. A reload start / finish sends `{t:'am', a, ar}` (guest) or a `sc` snapshot (host) so the other side's shell is right; hits are adjudicated exactly as before. `Run.remoteAmmo(a, ar)` builds the display-only ammo of the other player.
+- **Numbers:** magazines 6 (variant 1 RELOAD DRILL) and 8 (variant 3 FINAL ROUND); reload time 0.75 / 0.70 / 0.62 / 0.55 s by tier (variant 3: x0.9 = 0.68 / 0.63 / 0.56 / 0.50 s). Hard cap (variant 2) = quota + slack (10 / 8 / 6 / 4).
+
+### Difficulty curve (#22): shifted up two notches
+
+Base values (variant 0). Variants: hold x(1 - 0.06 v), scoot x(1 - 0.05 v), quick x(1 - 0.04 v), live +1 at v3, bomb rate +0.04 at v >= 2, quota share +0.02 v.
+
+| tier | time | hold (linger) | quick hold / mix | swing | scoot | steps | live | bomb rate | bomb cap | gap s | quota share |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| BEGINNER (~ old Adv/VH midpoint) | 42 | 1.10 | - | 0.62 | 0.27 | 4 | 4 | 0.12 | 10 % | 0.95-1.6 | 52 % |
+| ADVANCED (~ old Insane) | 38 | 0.72 | - | 0.50 | 0.20 | 5 | 5 | 0.22 | 20 % | 0.6-1.15 | 56 % |
+| VERY HARD | 35 | 0.70 | 0.26 / 50 % | 0.40 | 0.15 | 5 | 6 | 0.34 | 30 % | 0.3-0.68 | 58 % |
+| INSANE | 32 | 0.60 | 0.20 / 50 % | 0.32 | 0.12 | 5 | 7 | 0.42 | 35 % | 0.22-0.52 | 60 % |
+
+Old table for reference (0.002): hold 1.7 / 1.25 / 0.95 / 0.7, swing 0.85 / 0.7 / 0.6 / 0.5, scoot 0.38 / 0.3 / 0.24 / 0.2, live 3 / 4 / 5 / 5, bomb 0 / 0.14 / 0.2 / 0.26.
+**Mixed holds** (Very Hard, Insane): per target from the seeded rng, about half linger (`hold`; stationary motions stay `1.8 x hold`), half are *quick*: hold `quick` and a scooting paddle only makes 2 stops, so it drops almost at once. Quick targets score +50.
+Sweep over 300 seeds per tier (variant 0 / 3): spawns 28 / 38 / 63 / 77, real targets 26 / 33 / 50 / 60, quota avg 14-16 / 18-21 / 29-33 / 36-41.
+
+### Target mix (#24)
+
+The generator (`range.js timeline`) enforces, as it lays out spawns: bombs <= `bombCap` share of the spawns so far (10 / 20 / 30 / 35 %), never two bombs in a row, a bomb only while at least as many real targets are up (staying >= 0.6 s) as bombs; so "two bombs up and no real target" cannot happen (0 cases in 2400 seeds, old generator: up to 25 per 300 seeds) and the worst seed is at the cap (old: 53 % bombs, e.g. Insane seed 187 had 15 bombs of 29 spawns; now 23 of 79 with 56 real targets). The quota is a share of the real targets only.
+**Flip bombs** (`cfg.flipbomb`, default ON at Very Hard / Insane only): ~45 % of bombs; the fuse spark burns down the fuse and blinks faster, then in the last ~0.4 s on screen (+ the exit) the disc flips (0.12 s) to a bullseye worth step points +100. Kind is a pure function of local time (`sp.flip`); shooting it before the flip is a normal bomb. Never counted toward the quota.
+
+### Target motion (#34)
+
+`sp.mo` per spawn from the seeded rng (weights scoot 40 %, drop 20 %, pop 20 %, side 20 %), all pure functions of local time, all voxel paddles:
+- `scoot`: the classic (swing up from the side, scoot forward in steps, drop back).
+- `drop`: hangs from a ceiling hanger rod (group upside down at y 4.3, disc art kept upright), swings DOWN from above with an overshoot, pendulum settle, swings back up. Uses its own lane slot (ceiling), so a lane can hold a floor paddle and a hanging one.
+- `pop`: rises out of the floor slot (the floor hides it), sinks back.
+- `side`: swings in on a vertical hinge (edge-on to face-on) while sliding in from the side wall, then falls back.
+Stationary motions sit at a random depth stop `k` (points by stop as before). Shootable windows keep the 0.002 rule: from 15 % of the entrance to 70 % of the exit.
+
+### Other
+
+- Mini HUD duck hover hook: each PLAY frame, `duck.setHover(duck.hitTest(ray at the aim))` (mouse only; guarded by `typeof duck.setHover === 'function'`; switched off when leaving PLAY).
+- `G.gunLayout`: every non-play screen uses the `-low` layout on desktop too (`desktop-low` = the old corner spot; the PLAY layout moved inward in `guns.js`).
+- Portrait briefing SHOTS card: magazine reads `SHOOT SIDE` (or `AUTO RELOAD` when `autoReload`). The landscape briefing card in `ui.js` still says `AUTO RELOAD` (ui.js owner).
+- Testing: the browser pane may serve stale scripts; bump the `?v=` or re-fetch with `cache: 'reload'`.
+- Files: `js/core/ammo.js`, `js/core/hud.js`, `js/core/stage.js`, `js/core/portrait.js`, `js/stages/range.js`, `js/net.js`, `js/main.js`, `index.html`, this file.
+
+## Duck contract additions (build 0.003)
+- `BLAM.Duck.POSES` now: idle, happy, angry, shot, present, cheer, sad, scared, relief.
+- `duck.setHover(bool)`: call every frame with the crosshair hit test; edge-triggered inside. Hover on -> `scared` (unless `shot` is playing); hover off after >= 0.25 s -> `relief` (1.5 s) then the resting pose. ALWAYS call `setHover(false)` when the duck is hidden or the screen changes. `duck.hovered` getter.
+- `duck.hit()` = fall straight back (1.6 s) then back to resting pose. `setPose('shot')` stays fuming.
+
+## New files (stubs, build 0.003)
+- `js/core/props.js`: shared prop builders (paddle, bomb, decoy, flipbomb, posts) for the props art pass; stages should use `BLAM.Props` once it exists.
+- `js/stages/alley.js`, `js/stages/boneyard.js`: next stages. Stages self-register with `BLAM.Stage.register`; the course picks from the registry and free play lists every registered stage/variant (note: free play currently shows only the first 6 items and needs paging).
