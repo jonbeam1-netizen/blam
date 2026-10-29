@@ -1,0 +1,5 @@
+[
+ {"name": "shot",  "dur": 0.7, "n": 3, "prompt": "arcade light gun shot, short punchy cartoon blaster pop with a tiny click, dry, no reverb, retro arcade cabinet"},
+ {"name": "hit",   "dur": 0.6, "n": 3, "prompt": "bullet hitting a thin metal hexagon plate target, bright clang with a short ring, playful arcade shooting gallery"},
+ {"name": "bomb",  "dur": 1.2, "n": 3, "prompt": "cartoon bomb explosion, round chunky boom with a comedic puff of smoke, arcade shooting gallery, not scary"}
+]

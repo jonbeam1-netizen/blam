@@ -324,12 +324,16 @@ function pickMotion(rng) {
 // A bomb slot becomes a flip bomb, a decoy or (Very Hard / Insane, #41) a HIDDEN bomb: a real plate with a bomb behind it
 // (sp.bomb stays true: it takes the bomb share and is a bonus like a flip bomb, never counted toward the quota). The hidden
 // roll reuses flipRoll, so a seed that never rolls one keeps the exact same timeline.
+// PRACTICE (c.prior): the spawns of the previous chunk that are still running, already shifted to this chunk's local
+// time. They hold their lanes and count toward `live`, so a new chunk (or a live tier switch) joins the stream without
+// two paddles sharing a lane. They are never returned and never counted for the quota.
 function timeline(c, rng) {
-  const out = [], floorFree = LANES.map(() => 0), hangFree = LANES.map(() => 0);
+  const out = [], floorFree = LANES.map(() => 0), hangFree = LANES.map(() => 0), prior = c.prior || [];
+  for (const s of prior) { const arr = s.mo === 'drop' ? hangFree : floorFree; arr[s.lane] = Math.max(arr[s.lane], s.t1 + 0.25 + (s.hidden ? HB_HOLD : 0)); }
   const sd = +((Z_NEAR - Z_FAR) / (c.steps - 1)).toFixed(3);
   let t = 0.4, guard = 0, bombs = 0;
   while (guard++ < 800) {
-    const up = out.filter(s => s.t1 > t);
+    const up = prior.length ? prior.concat(out).filter(s => s.t1 > t) : out.filter(s => s.t1 > t);
     if (up.length >= c.live) { t = up.map(s => s.t1).sort((a, b) => a - b)[up.length - c.live] + 0.05; continue; }
     let mo = pickMotion(rng);
     const freeOf = arr => { const f = []; arr.forEach((e, l) => { if (e <= t) f.push(l); }); return f; };
@@ -380,6 +384,15 @@ function briefing(c) {
   return { rule: [['SHOOT ', 'void'], [c.quota + ' TARGETS', 'red'], [' OR MORE!', 'void']], icon: 'bullseye', unit: 'TARGETS',
     dont: c.bomb > 0 ? 'bomb' : null, tip };
 }
+// PRACTICE (free play, ENGINE.md "Practice"): the variant 0 rules of the tier (hold, scoot, mix, live, bomb share,
+// decoys / flip / hidden bombs from Very Hard) with a 12-round magazine that reloads itself (R / the frame still work)
+// and the sound / rack animation still play. window = seconds of schedule per chunk; Run keeps appending chunks.
+function practiceConfig(tier) {
+  const c = config(tier, 0);
+  c.autoReload = true; c.ammo = { mag: 12, reloadTime: c.rel, autoReload: true };
+  c.window = 40; c.title = 'SHOOTING RANGE'; c.subtitle = 'PRACTICE';
+  return c;
+}
 // briefing card icon (stage hook, ENGINE.md "Briefing icons"): the lime hex plate, ~2r across (the HUD default is the old
 // red bullseye). The don't-shoot sticker keeps the HUD's bomb.
 function drawIcon(cx, cy, r) {
@@ -413,5 +426,5 @@ function decor() {
   };
 }
 B.Stage.register({ id: 'range', name: 'SHOOTING RANGE', short: 'RANGE', variants: 4, variantNames: VARIANT_NAMES, penalty: -300,
-  buildEnv, config, timeline, makeTarget: sp => new Paddle(sp), points, briefing, drawIcon, decor, pose, LANES });
+  buildEnv, config, practiceConfig, timeline, makeTarget: sp => new Paddle(sp), points, briefing, drawIcon, decor, pose, LANES });
 })(window.BLAM);

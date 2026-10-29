@@ -1,0 +1,26 @@
+[
+ {
+  "name": "gun-ray85",
+  "dur": 0.6,
+  "n": 4,
+  "prompt": "retro sci-fi ray gun laser shot, hard punchy percussive attack like a real gunshot crack, then a clean tonal laser zap sweeping down in pitch, alien energy weapon, full volume, close up, tight, short tail, no static, no white noise, no hiss, no music"
+ },
+ {
+  "name": "gun-ray85-b",
+  "dur": 0.7,
+  "n": 4,
+  "prompt": "alien plasma blaster shot, big punchy thump on the attack followed by a smooth resonant laser tone with a quick pitch drop, synthesized clean and tonal, arcade ray gun, full volume, close up, short tail, no static, no noise burst, no hiss, no music"
+ },
+ {
+  "name": "gun-ray85-c",
+  "dur": 0.55,
+  "n": 4,
+  "prompt": "retro sci-fi ray gun laser shot, hard punchy percussive attack like a real gunshot crack, then a clean tonal laser zap sweeping down in pitch, alien energy weapon, full volume, close up, tight, short tail, no static, no white noise, no hiss, no music"
+ },
+ {
+  "name": "gun-ray85-d",
+  "dur": 0.55,
+  "n": 10,
+  "prompt": "retro sci-fi ray gun laser shot, hard punchy percussive attack like a real gunshot crack, then a clean tonal laser zap sweeping down in pitch, alien energy weapon, full volume, close up, tight, short tail, no static, no white noise, no hiss, no music"
+ }
+]

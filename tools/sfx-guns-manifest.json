@@ -1,0 +1,32 @@
+[
+ {
+  "name": "gun-hotrod",
+  "dur": 0.6,
+  "n": 4,
+  "prompt": "loud real 9mm pistol gunshot, deep powerful crack with low-mid body, full volume, close up, tight and punchy, short natural tail, no high-pitched ringing, no whine, no hiss, no music"
+ },
+ {
+  "name": "gun-aquapro",
+  "dur": 0.6,
+  "n": 4,
+  "prompt": "loud real 9mm pistol gunshot, deep powerful crack with low-mid body, full volume, close up, tight and punchy, short natural tail, no high-pitched ringing, no whine, no hiss, no music"
+ },
+ {
+  "name": "gun-ray85",
+  "dur": 0.6,
+  "n": 4,
+  "prompt": "loud real gunshot crack with a short electric zap on the attack, retro ray gun feel, full volume, close up, tight and punchy, short natural tail, no high-pitched ringing, no whine, no hiss, no music"
+ },
+ {
+  "name": "gun-candysix",
+  "dur": 0.6,
+  "n": 4,
+  "prompt": "loud real snub nose revolver gunshot, big sharp bang with a mechanical hammer click before the shot, full volume, close up, punchy, short natural tail, no high-pitched ringing, no whine, no hiss, no music"
+ },
+ {
+  "name": "gun-aquapro-b",
+  "dur": 0.85,
+  "n": 4,
+  "prompt": "loud real 9mm pistol gunshot, deep powerful crack with low-mid body, full volume, close up, tight and punchy, slightly longer natural tail, no high-pitched ringing, no whine, no hiss, no music"
+ }
+]

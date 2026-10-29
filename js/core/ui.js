@@ -373,15 +373,19 @@ UI.screens.free = {
     const g = G(); g.placeDuck('title'); g.duckPose('idle');
     this.build();
   },
-  // 6 stage signs per page; with more registered stage variants a PAGE sign (right side) cycles the pages
+  // the 6-slot grid: PRACTICE always takes the top-left slot (every page), then 5 stage signs per page; with more
+  // registered stage variants a PAGE sign (right side) cycles the pages
   build() {
-    const g = G(), items = [], PER = 6;
+    const g = G(), items = [], PER = 5;
     for (const id of S.order) { const d = S.get(id); for (let v = 0; v < d.variants; v++) items.push({ stage: id, variant: v }); }
     const pages = Math.max(1, Math.ceil(items.length / PER));
     g.free.page = Math.max(0, Math.min(pages - 1, g.free.page | 0));
-    const menuItems = items.slice(g.free.page * PER, g.free.page * PER + PER).map((it, i) => ({ text: (S.get(it.stage).short || 'RANGE') + ' ' + (it.variant + 1), sub: (S.get(it.stage).variantNames || [])[it.variant] || '',
-      color: 'wood', s: 0.034, u: [0.33, 0.63][i % 2], v: [0.27, 0.5, 0.73][i >> 1], stage: it.stage, variant: it.variant,
-      act: () => g.startFree(it.stage, it.variant, g.free.tier) }));
+    const slot = i => ({ u: [0.33, 0.63][i % 2], v: [0.27, 0.5, 0.73][i >> 1] });
+    const menuItems = [Object.assign({ id: 'practice', text: 'PRACTICE', sub: 'RANGE, NO CLOCK', color: 'green', s: 0.034,
+      act: () => g.startPractice(g.free.tier) }, slot(0))];
+    items.slice(g.free.page * PER, g.free.page * PER + PER).forEach((it, i) => menuItems.push(Object.assign({ text: (S.get(it.stage).short || 'RANGE') + ' ' + (it.variant + 1), sub: (S.get(it.stage).variantNames || [])[it.variant] || '',
+      color: 'wood', s: 0.034, stage: it.stage, variant: it.variant,
+      act: () => g.startFree(it.stage, it.variant, g.free.tier) }, slot(i + 1))));
     const T = S.TIERS[g.free.tier];
     const lastRow = pages > 1 || Math.ceil(menuItems.length / 2) >= 3 ? 0.9 : 0.75;   // paged: the bottom row stays put
     menuItems.push({ id: 'tier', text: 'TIER: ' + T.name, keep: true, color: T.sign, s: 0.04, u: 0.33, v: lastRow, act: sign => {
@@ -396,6 +400,7 @@ UI.screens.free = {
   draw(t) {
     if (tall()) return;                                                       // portrait: drawPortrait() has the text
     header('FREE PLAY', 'SHOOT A STAGE TO PLAY IT');
+    const pr = this.menu.find('practice'); if (pr) caption(pr.sign, 'NO TIMER, NO QUOTA', 'lime', 3);
     for (const it of this.menu.items) if (it.stage) {
       const b = B.Save.best(it.stage + ':' + it.variant, G().free.tier);
       caption(it.sign, b ? 'BEST ' + b : B.Ammo.describe(S.get(it.stage).config(G().free.tier, it.variant).ammo), b ? 'yellow' : 'mist', 3);
@@ -514,15 +519,17 @@ UI.screens.briefing = {
 UI.screens.play = {
   enter(a) {
     this.run = a.run; this.versus = !!a.versus; this.left = false; this.pop = null;
-    const g = G(); g.run = a.run; g.placeDuck('mini'); g.duckPose('idle');
+    const g = G(); g.run = a.run; g.placeDuck(a.run.practice ? 'practice' : 'mini'); g.duckPose('idle');
+    g.practiceMenu = this.menu = a.run.practice ? practiceMenu(a.run) : null;
   },
-  exit() {},
+  exit() { if (this.menu) this.menu.dispose(); this.menu = null; G().practiceMenu = null; },
   update(dt, t) {
     const run = this.run, g = G();
     run.update(run.versus ? dt : dt * (g.slow || 1));                       // ?slow= (testing) slows a solo stage
+    if (this.menu) { this.menu.paint(); this.menu.update(dt, t); this.heckle(dt, run); }
     for (const e of run.events) {
       if (e.type === 'hit' && e.by === run.local) g.duckReact('happy', 0.6);
-      else if ((e.type === 'bomb' || e.type === 'bystander') && e.by === run.local) { g.duckReact('angry', 1.1); g.shakeIt(0.35); this.pop = { text: 'LIFE -1', t: 0, rows: 'red' }; }
+      else if ((e.type === 'bomb' || e.type === 'bystander') && e.by === run.local) { g.duckReact('angry', 1.1); g.shakeIt(0.35); this.pop = { text: run.practice ? 'BOMB!' : 'LIFE -1', t: 0, rows: 'red' }; }
       else if (e.type === 'quota') this.pop = { text: 'QUOTA!', t: 0, rows: 'lime' };
     }
     run.events.length = 0;
@@ -538,13 +545,69 @@ UI.screens.play = {
       else H.text7c('BLAM!', RW / 2, 76, 6, 'hot', 'void', 2);
     } else if (run.state === 'play' && run.t < 0.5) H.text7c('BLAM!', RW / 2, 76, 6, 'hot', 'void', 2);
     if (run.state === 'end') {
-      const w = { time: 'TIME UP!', done: 'FINISH!', ammo: 'OUT OF AMMO!', lives: 'OUCH!' }[run.endReason] || 'FINISH!';
+      const w = run.practice ? 'DONE!' : { time: 'TIME UP!', done: 'FINISH!', ammo: 'OUT OF AMMO!', lives: 'OUCH!' }[run.endReason] || 'FINISH!';
       H.text7c(w, RW / 2, 80, 4, run.endReason === 'lives' ? 'red' : 'gold', 'void', 2);
     }
     if (this.pop && ((this.pop.t * 10) | 0) % 2 === 0) H.text7c(this.pop.text, RW / 2, 40, 2, this.pop.rows, 'void', 2);
     if (run.versus && run.me.lives <= 0 && run.state === 'play') H.text3c('OUT OF LIVES - WATCH THE REST!', RW / 2, 40, 'red', 1, 'void');
+    if (run.practice && run.state === 'play' && !tall()) H.text3c(G().touch ? 'PRACTICE' : 'ESC TO FINISH', RW / 2, 4, 'mist', 1, 'void');
+  },
+  // practice: Deputy Duck heckles from the floor now and then (idle -> a short pose -> idle); duckReact skips his gag
+  heckle(dt, run) {
+    if (run.state !== 'play') return;
+    this.hk = (this.hk == null ? 6 : this.hk) - dt;
+    if (this.hk > 0) return;
+    this.hk = 5 + Math.random() * 5;
+    G().duckReact(['happy', 'angry', 'cheer', 'present'][(Math.random() * 4) | 0], 1.2);
   },
   fire(u, v, inside, touch) { G().playFire(this.run, u, v, inside, touch); }
+};
+
+// PRACTICE tier signs: four small signs in a row in the low band over Deputy Duck's head, under the lanes' lowest
+// paddle (so they never cover a target). The current tier wears its colour, the others are slate; shooting one
+// switches the practice rules live (Run.setTier). They are 'keep' signs: they spark, they don't shatter.
+const PRACTICE_SIGNS = { v: 0.6, u: [0.26, 0.42, 0.58, 0.74], s: 0.022 };
+function practiceMenu(run) {
+  const menu = new Menu(S.TIERS.map((T, i) => ({ id: 'tier' + i, text: T.name, keep: true, color: i === run.tier ? T.sign : 'slate',
+    s: PRACTICE_SIGNS.s, u: PRACTICE_SIGNS.u[i], v: PRACTICE_SIGNS.v, z: 1.5,
+    act: () => G().practiceTier(i) })));
+  function paint() {
+    menu.items.forEach((it, i) => { const c = i === run.tier ? S.TIERS[i].sign : 'slate'; if (it.sign.opts.color !== c) { it.sign.opts.color = c; it.sign.setText(S.TIERS[i].name); } });
+  }
+  menu.paint = paint;                                // play.update calls it every frame (a no-op unless the tier changed)
+  return menu;
+}
+
+// =========================================================================================
+// PRACTICE RESULTS: the session's numbers (never saved, no score), AGAIN / BACK signs (always both)
+// =========================================================================================
+UI.screens.practiceresults = {
+  enter(a) {
+    this.a = a; const g = G(); g.placeDuck('results'); g.duckPose('cheer', 'idle', 1.5);
+    this.menu = new Menu([
+      { text: 'AGAIN', color: 'green', s: 0.045, u: 0.3, v: 0.86, act: () => g.startPractice(g.free.tier) },
+      { text: 'BACK', color: 'slate', s: 0.045, u: 0.56, v: 0.86, act: () => g.go('free') }
+    ]);
+  },
+  exit() { this.menu.dispose(); },
+  update(dt, t) { this.menu.update(dt, t); },
+  // no portrait panel: on a tall phone this card simply draws in the game rect
+  draw(t) {
+    const r = this.a.res, m = Math.floor(r.secs / 60), sec = Math.floor(r.secs % 60);
+    H.dim(0, 0, 262, 190); H.dim(262, 0, RW - 262, 60);                     // the AGAIN / BACK signs below stay bright
+    H.text7c('PRACTICE', RW / 2, 10, 4, 'gold', 'void', 2);
+    H.text3c(S.TIERS[r.tier].name + '  -  NOTHING SAVED', RW / 2, 40, 'cyan', 1, 'void');
+    H.plate(18, 50, 236, 132);
+    const row = (i, k, v, c = 'void') => { H.text3(k, 30, 60 + i * 20, 'umber', 2, 'bone'); H.text3r(v, 242, 60 + i * 20, c, 2, 'bone'); };
+    row(0, 'SHOTS', String(r.shots));
+    row(1, 'HITS', String(r.hits), 'forest');
+    row(2, 'ACCURACY', r.pct + '%');
+    row(3, 'BEST STREAK', String(r.bestStreak));
+    row(4, 'BOMBS SHOT', String(r.bombs), r.bombs ? 'crimson' : 'void');
+    row(5, 'TIME', m + ':' + String(sec).padStart(2, '0'));
+    statusLine(this.a.status || '');
+  },
+  fire(u, v, inside) { menuFire(this, u, v, inside); }
 };
 
 // =========================================================================================

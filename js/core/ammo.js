@@ -3,14 +3,14 @@
    rule: 'unlimited' | { mag: N, reloadTime?: s, autoReload?: bool } | { cap: N }
    Magazine (build 0.005, #44): reload is INSTANT, Time Crisis / Area 51 style. The moment a reload trigger
    registers (frame shot / pillar hover / right click / swipe down / key R, see main.js G.sideReload) the
-   magazine is full and the next shot can fire at once. The gun's rack animation (~0.12 s) is cosmetic and never
+   magazine is full and the next shot can fire at once. The gun's rack animation (~0.3 s, RACK) is cosmetic and never
    blocks the trigger (guns.js snaps it when you fire). Works on a partial magazine too (tactical reload).
    `reloadTime` is IGNORED (kept harmless so stage configs may still pass it). `reloading` is always false now.
    An emptied magazine sits empty (gun.setEmpty(true)) until you reload; { autoReload: true } refills it
    instantly when the last round is spent. A hard cap simply runs dry (gun.setEmpty(true)). */
 window.BLAM = window.BLAM || {};
 (function (B) {
-const RACK = 0.12;                                   // cosmetic gun rack animation (s)
+const RACK = 0.3;                                    // cosmetic gun rack animation (s); matches the 0.40 s reload sounds, a shot snaps it to the end
 const KICK = 0.3;                                    // HUD capsule / frame marker flash after a reload (s)
 class Ammo {
   constructor(rule, gun) { this.gun = gun || null; this.set(rule); }

@@ -192,6 +192,16 @@ function timerBall(cx, cy, frac, secs, t) {
   const s = String(Math.max(0, secs)), sc = s.length > 2 ? 1 : 2;
   text3c(s, cx + 1, cy - (sc === 2 ? 5 : 2), warn ? 'crimson' : 'void', sc);
 }
+// practice clock: the timer ball with an infinity glyph (no countdown) and a lime stopwatch sweep (one lap a minute);
+// the running time practised sits under it as M:SS
+function practiceBall(cx, cy, secs, t) {
+  const x = cx - 17, y = cy - 17;
+  draw(ballBase(), x, y);
+  const steps = Math.max(1, Math.ceil((secs % 60) / 60 * 64));
+  draw(ballRing(steps, 'lime'), x, y);
+  sprite(INF, cx - 8, cy - 5, 2, { X: 'void' }, 'infv');
+}
+const mmss = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
 function quotaPill(x, y, hits, quota) {
   const ok = hits >= quota;
   pill(x, y, 46, 14, ok ? 'green' : 'blue', ok ? 'lime' : 'cyan', ok ? 'forest' : 'deepblue');
@@ -294,7 +304,18 @@ function crosshair(u, v, hot) {
 // the bottom strip. box = {x, y, w}; hs = HUD state from main.js (see ENGINE.md); compact = portrait strip
 function strip(bx, by, w, hs, t, compact) {
   const P = hs.players, me = P[0];
-  if (!hs.versus) {
+  if (hs.practice) {
+    // practice: shell (no hearts, nothing to lose) | HIT badge ... the middle stays free for Deputy Duck ... | clock + HITS
+    shell(bx, by, 0, me.ammo, false, t);
+    hitBadge(bx + 51, by + 1, me.hitAge);
+    const cx = compact ? bx + w / 2 + 6 : bx + 100;
+    practiceBall(cx, by + 15, hs.practice.secs, t);
+    text3c(mmss(hs.practice.secs), cx, by - 9, 'lime', 1, 'void');
+    pill(cx + 20, by + 8, 30, 14, 'blue', 'cyan', 'deepblue'); text3c(String(me.hits), cx + 35, by + 10, 'bone', me.hits > 99 ? 1 : 2);
+    text3c('HITS', cx + 35, by + 1, 'mist', 1, 'void');
+    if (hs.practice.streak > 1) text3('STREAK ' + hs.practice.streak, bx + 1, by + 21, 'yellow', 1, 'void');
+    if (hs.status && compact) text3(hs.status, bx, by + 30, 'lime', 1, 'void');
+  } else if (!hs.versus) {
     // solo: shell + hearts | HIT badge | timer ball | quota pill
     shell(bx, by, 0, me.ammo, false, t);
     hearts(bx + 1, by + 19, me.lives, me.maxLives);

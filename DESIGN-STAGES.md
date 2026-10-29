@@ -62,6 +62,10 @@ and the duck heckling from the corner. NO light flicker, NO camera flash, NO fal
 - **VAULT**: a bank vault with timed shutters sliding over targets.
 - **SKEE BALL** (Jon's idea): balls roll down a skee-ball lane; the hole a ball drops into decides whether a target or a bomb pops up there. Shoot the targets as they appear.
 
+- **BEE HIVE** (Jon, 2026-10-29, hex-plate stage, refined): a honeycomb wall of hex cells; targets and bombs flip in and out of the cells (hex plates in wax/amber colours). Bees crawl and fly across the comb, over targets and bombs. Shooting a bee = a BRIEF frenzy (bees speed up for a moment), no anger meter, no escalation. Honey drips down the comb for looks only (no mechanic). LARVA cells: larvae grow up on a visible timer; some hatch into a bee, some into a target, some into a bomb, so the player watches cells ripen. No wax caps. Ref: `review/refs/ideas/beehive-honeycomb.webp`.
+- **STOP! GO!** (Jon, 2026-10-29, PARKED): STOP (red) / GO (green) octagon paddles as the hook. Fable's crossing-guard reading (KEEP, Jon is thinking on it): guard duck flips the paddles; GO = ducks waddle across as bystanders, STOP = crooks dart across as targets; high tiers flip fast and fake flips. Jon found it a little creepy/gruesome as-is; alternatives: school bus, race starter lights, something else. Decide later. Ref: `review/refs/ideas/stop-go-paddles.webp`.
+- **SOCCER BALL** (Jon, 2026-10-29, refined): shots knock a soccer ball around the screen; light hex panels are safe, dark panels are bomb spots. Shoot it into a goal past a goalie duck. Several balls at once at high tiers. Goalie flinch idea dropped for now (Jon: focus on shooting the ball). Also wanted: a HEXAGONAL BOMB target in the catalogue.
+
 ## 3. Open questions for Jon
 1. Approve Alley, Boneyard, Sky Show as the next three, in that order?
 2. Fake-surrender criminal: fun or unfair?

@@ -1,0 +1,8 @@
+[
+ {"name":"duck-happy-a","dur":1.2,"n":8,"prompt":"real mallard duck quacking happily, cheerful bouncy quacks, pleased and content, loud, full volume, close up, dry, no music, no hiss, no other animals"},
+ {"name":"duck-hit-a","dur":1.0,"n":8,"prompt":"real mallard duck startled yelp, one sharp squawk of surprise as if bonked on the head, loud, full volume, close up, dry, no music, no hiss, no other animals"},
+ {"name":"duck-scared-a","dur":1.2,"n":8,"prompt":"real mallard duck panicking, frightened frantic high quacks and flapping, loud, full volume, close up, dry, no music, no hiss, no other animals"},
+ {"name":"duck-relief-a","dur":1.2,"n":8,"prompt":"real mallard duck relieved, a long exhaling sigh-like quack settling down after a scare, full volume, close up, dry, no music, no hiss, no other animals"},
+ {"name":"duck-cheer-a","dur":1.2,"n":8,"prompt":"real mallard duck celebrating, excited triumphant rapid quacks rising in pitch like cheering, loud, full volume, close up, dry, no music, no hiss, no other animals"},
+ {"name":"duck-sad-a","dur":1.2,"n":8,"prompt":"real mallard duck sad and disappointed, slow low drooping quacks trailing off, full volume, close up, dry, no music, no hiss, no other animals"}
+]

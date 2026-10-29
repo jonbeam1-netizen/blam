@@ -6,7 +6,7 @@
 window.BLAM = window.BLAM || {};
 (function (B) {
 const R = B.R, I = B.Input, H = B.HUD, S = B.Stage, Tg = B.Targets, Save = B.Save, SFX = B.SFX, UI = B.UI, N = B.Net;
-const BUILD = '0.007';                      // bump on every publish (shown on the title status line)
+const BUILD = '0.008';                      // bump on every publish (shown on the title status line)
 const Q = new URLSearchParams(location.search);
 // ?slow=0.25 (dev/testing): single-player stage clock runs at that rate, so slow tools (screenshot -> click
 // takes seconds) can still shoot a target that is really there. Versus always runs on the wall clock.
@@ -52,7 +52,7 @@ try { for (let i = 0; i < G.skins.length; i++) if (i !== G.skin) G.gun.setSkin(i
 // portrait plays with it bottom-middle (its HUD is under the game rect there; in landscape the HUD strip owns the
 // bottom middle) and parks it in the corner on menus, where the signs sit low; both slide it out of frame on the
 // briefing / results cards, where Deputy Duck stands bottom-right
-const GUN_AWAY = { briefing: 1, results: 1, final: 1, vsresults: 1 };
+const GUN_AWAY = { briefing: 1, results: 1, final: 1, vsresults: 1, practiceresults: 1 };
 G.gunLayout = () => {
   const base = G.touch && R.frame.portrait ? 'mobile' : 'desktop', n = G.screenName;
   // versus play (landscape): 'desktop-versus' keeps the gun off P2's HUD half (name / counter / ammo capsule)
@@ -65,13 +65,16 @@ R.resizeHooks.push(() => G.gunLayout());     // rotating a phone swaps the layou
 // ---------- Deputy Duck: placement + reactions ----------
 // spots: [u, v (feet), plane z, scale, mirror]. Right-hand spots are mirrored (negative x scale) so he faces the
 // card; check pass: 1.25 -> 1.0 / 0.95, so every pose stays inside the frame and clear of the panels
-const DUCK_SPOTS = { title: [0.12, 0.93, 1.2, 1.3, false], brief: [0.885, 0.93, 2.0, 1.0, true], results: [0.9, 0.935, 2.0, 0.95, true] };
+// practice: bottom centre in front of the lanes, facing the player square on (6th value = yaw), small enough that the
+// paddles and the tier signs read above his head; the HUD strip (shell left, clock right) leaves the middle free
+const DUCK_SPOTS = { title: [0.12, 0.93, 1.2, 1.3, false], brief: [0.885, 0.93, 2.0, 1.0, true], results: [0.9, 0.935, 2.0, 0.95, true],
+  practice: [0.5, 0.965, 2.0, 0.8, false, 0] };
 // shot gag keep-in-frame (0.007): the flop (lying flat, the fuming arm shake and the overshoot when he springs back
 // to idle, ~1.3-2.0 s) reached up to 3 % past the game rect edge (title: left, brief / results: right, mini HUD duck:
 // left). From the shot until he has settled (GAG_LEN) the holder eases INWARD by GAG_NUDGE[mode] = [du, dv]
 // (fractions of the game rect) and back. Vertex extents over every frame of the gag at 7 aim directions: the flop
 // now stays inside the rect as far as his resting pose does (see ENGINE.md, Build 0.007).
-const GAG_NUDGE = { title: [0.05, 0], brief: [-0.04, 0], results: [-0.05, 0], mini: [0.013, 0] };
+const GAG_NUDGE = { title: [0.05, 0], brief: [-0.04, 0], results: [-0.05, 0], mini: [0.013, 0], practice: [0, 0] };
 const GAG_LEN = 2.3, duckBase = new THREE.Vector3(), gagTo = new THREE.Vector3();
 let gagT = 0;
 function gagStart() {                                       // target spot, computed once (camera steady at the shot)
@@ -98,7 +101,7 @@ G.placeDuck = mode => {
   } else {
     const s = DUCK_SPOTS[mode] || DUCK_SPOTS.title;
     R.scene.add(duckHolder); R.screenToWorld(s[0], s[1], s[2], duckHolder.position); duckBase.copy(duckHolder.position);
-    duckHolder.scale.set(s[4] ? -s[3] : s[3], s[3], s[3]); duckHolder.rotation.set(0, s[4] ? -0.3 : 0.3, 0);
+    duckHolder.scale.set(s[4] ? -s[3] : s[3], s[3], s[3]); duckHolder.rotation.set(0, s[5] != null ? s[5] : s[4] ? -0.3 : 0.3, 0);
   }
 };
 // duckBack = this screen's resting pose; duckBackT = when to return to it after a reaction.
@@ -195,11 +198,15 @@ G.playFire = (run, u, v, inside, touch) => {
   if (!ammo.canFire()) { ammo.use(); if (ammo.empty || ammo.magEmpty) try { G.gun.fire(); } catch (e) {} return; }
   // fire the gun BEFORE spending the round: the last round of a magazine / cap gets its flash and recoil,
   // then ammo.use() starts the reload (gun.reload) or sets the empty state (gun.setEmpty)
+  // practice: the tier signs over the duck's head are menu signs, not shots (no ammo, no stats)
+  if (run.practice && G.practiceMenu && Tg.pick(R.rayAt(u, v), G.practiceMenu.items.map(i => i.sign))) { G.practiceMenu.fire(G.shoot(u, v)); return; }
   const ray = G.shoot(u, v), me = run.local;
   ammo.use();
   if (!run.versus) run.me.shots++;
   const send = (k, tid, z) => { if (run.versus) N.sendShot({ st: +run.t.toFixed(3), k, tid, z, a: ammo.infinite ? -1 : ammo.count, ar: 0 }); };
-  if (G.duckShot(ray)) { send('duck', -1); return; }                        // shooting the deputy is just for fun
+  // shooting the deputy is just for fun (a miss). In practice he stands in the scene under the lanes, so the
+  // targets are picked first and he is only hit-tested after a miss: he never blocks a shot at a paddle
+  if (!run.practice && G.duckShot(ray)) { run.me.streak = 0; send('duck', -1); return; }
   const p = Tg.pick(ray, run.live) || (touch ? touchPick(run, u, v) : null);
   if (p) {
     const tg = p.target;
@@ -208,12 +215,15 @@ G.playFire = (run, u, v, inside, touch) => {
     else run.applyHit(me, tg.id, run.t, p.point, p.zone);
     return;
   }
+  run.me.streak = 0;
+  if (run.practice && G.duckShot(ray)) return;
   G.envShot(ray); SFX.play('miss'); G.duckReact('angry', 0.8); send('miss', -1);
 };
 G.hudState = run => ({
   versus: run.versus, portrait: R.frame.portrait, players: run.versus ? run.players : [run.me],
-  timeFrac: run.state === 'count' ? 1 : run.timeLeft / run.cfg.time, secs: Math.ceil(run.timeLeft),
-  quota: run.cfg.quota, score: run.me.score, best: run.versus ? 0 : Save.best(run.stage + ':' + run.variant, run.tier),
+  practice: run.practice ? { secs: run.practiceTime, streak: run.me.streak } : null,
+  timeFrac: run.practice ? 1 : run.state === 'count' ? 1 : run.timeLeft / run.cfg.time, secs: run.practice ? 0 : Math.ceil(run.timeLeft),
+  quota: run.cfg.quota, score: run.me.score, best: run.versus || run.practice ? 0 : Save.best(run.stage + ':' + run.variant, run.tier),
   label: G.stageLabel + (G.slow < 1 && !run.versus ? ' SLOW' : ''), status: G.statusText,
   // frame RELOAD markers (#31, #38): only on magazine stages; mode picks the art (plaque / mouse / swipe arrow)
   reload: run.ammo.type === 'mag' ? { empty: run.ammo.magEmpty, kick: run.ammo.kick, mode: G.reloadMode() } : null
@@ -281,6 +291,23 @@ G.startFree = (stage, variant, tier) => {
   G.stageLabel = 'FREE PLAY';
   G.go('briefing', { run, label: 'FREE PLAY: ' + stageName(stage, variant), status: G.statusText });
 };
+// ---- practice (free play, first sign): the range at the free-play tier, no clock / quota / lives, never saved ----
+// No briefing: straight into the 3-2-1 countdown. Deputy Duck stands in the scene (placeDuck('practice')); the
+// tier signs over his head (play screen) call G.practiceTier. ESC ends it (key handler) -> practice results.
+G.startPractice = tier => {
+  G.mode = 'practice'; G.free.tier = tier;
+  Tg.clearDecals(); try { Tg.clearChips(); } catch (e) {}
+  const run = new S.Run({ stage: 'range', tier, variant: 0, seed: newSeed(), practice: true, gun: G.gun, names: [Save.settings.name] });
+  setRun(run);
+  G.statusText = 'PRACTICE  ' + tierName(tier) + '  ESC TO FINISH';
+  G.stageLabel = 'PRACTICE';
+  G.go('play', { run });
+};
+G.practiceTier = tier => {
+  const run = G.run; if (!run || !run.practice) return;
+  run.setTier(tier); G.free.tier = run.tier;
+  G.statusText = 'PRACTICE  ' + tierName(run.tier) + '  ESC TO FINISH';
+};
 // ---- a stage finished (play screen calls this ~1.3 s after the end) ----
 G.stageEnded = run => {
   run.dispose();
@@ -289,6 +316,7 @@ G.stageEnded = run => {
     else G.vsWait = { run, t: 5 };                                         // wait for the host's final tally
     return;
   }
+  if (run.practice) { G.go('practiceresults', { res: run.practiceResults(), status: 'PRACTICE  ' + tierName(run.tier) }); return; }   // never saved
   const res = run.results(), key = run.stage + ':' + run.variant;
   const newRecord = res.score > 0 && Save.submit(key, run.tier, res.score), best = Save.best(key, run.tier);
   if (G.mode === 'course') {
@@ -324,6 +352,9 @@ I.onKey((k, e) => {
   else if (k >= '1' && k <= '3') { R.setMode(+k); G.toast('DITHER MODE ' + k + ': ' + R.MODE_NAMES[+k], 1.2); }
   else if (k === 'Escape') {
     if (G.screenName === 'title') return;
+    // practice: ESC finishes the session (-> its results); on those results ESC goes back to FREE PLAY
+    if (G.screenName === 'play' && G.run && G.run.practice) { if (G.run.state !== 'end') G.run.end('done'); return; }
+    if (G.screenName === 'practiceresults') { G.go('free'); return; }
     if (G.run && G.run.versus) { N.leave(); G.vsAbort('YOU LEFT THE MATCH'); return; }
     if (G.screenName === 'lobby') N.leave();
     G.go('title');
@@ -390,7 +421,7 @@ function onFrameNow(run) {                       // the mouse rests on the frame
 function playExtras(run) {
   if (typeof G.duck.setHover === 'function') {
     let on = false;
-    if (G.duckMode === 'mini' && I.mouseIn && !I.touch) { try { on = !!G.duck.hitTest(R.rayAt(I.aim.u, I.aim.v)); } catch (e) { on = false; } }
+    if ((G.duckMode === 'mini' || G.duckMode === 'practice') && I.mouseIn && !I.touch) { try { on = !!G.duck.hitTest(R.rayAt(I.aim.u, I.aim.v)); } catch (e) { on = false; } }
     if (on || duckHoverOn) { try { G.duck.setHover(on); } catch (e) {} }
     duckHoverOn = on;
   }

@@ -39,13 +39,23 @@ function env(id) {                 // the stage's static set, built once and cac
 function showEnv(id) { for (const k in envCache) envCache[k].visible = false; env(id).visible = true; }
 
 // ---------- Run: one stage being played ----------
-// o: { stage, tier, variant, seed, versus, local (0/1), names: [..], lives: [..], gun }
+// o: { stage, tier, variant, seed, versus, local (0/1), names: [..], lives: [..], gun, practice }
+// PRACTICE (o.practice, solo only): no clock (cfg.time = Infinity: no ticks, no TIME UP), no quota, bombs cost nothing,
+// never ends by itself (ESC calls end('done')). The schedule is built in chunks of cfg.window seconds: whenever every
+// spawn so far has come out, the next chunk is generated from a fresh seed, starting now, with the still-running
+// spawns handed in as cfg.prior so lanes and the live cap carry over. setTier() swaps the rules mid-run the same way.
 class Run {
   constructor(o) {
     this.o = o; this.def = get(o.stage); this.stage = this.def.id; this.tier = o.tier | 0; this.variant = o.variant | 0;
     this.seed = (o.seed >>> 0) || 1;
-    this.cfg = this.def.config(this.tier, this.variant);
-    this.timeline = this.def.timeline(this.cfg, mulberry32(hashStr(this.stage + '|' + this.tier + '|' + this.variant) ^ this.seed));
+    this.practice = !!o.practice && !o.versus;
+    if (this.practice) {
+      this.cfg = this.practiceCfg(this.tier); this.chunk = 0; this.timeline = [];
+      this.extend(0);
+    } else {
+      this.cfg = this.def.config(this.tier, this.variant);
+      this.timeline = this.def.timeline(this.cfg, mulberry32(hashStr(this.stage + '|' + this.tier + '|' + this.variant) ^ this.seed));
+    }
     this.timelineHash = hashStr(JSON.stringify(this.timeline)).toString(16);
     this.versus = !!o.versus; this.local = o.local | 0;
     this.t = -COUNTDOWN; this.state = 'count'; this.endReason = ''; this.endT = 0;
@@ -55,7 +65,7 @@ class Run {
     for (let i = 0; i < n; i++) {
       const lives = (o.lives && o.lives[i] != null) ? o.lives[i] : TIERS[this.tier].lives;
       this.players.push({ name: names[i] || 'P' + (i + 1), lives, maxLives: Math.max(lives, (o.maxLives && o.maxLives[i]) || lives),
-        hits: 0, shots: 0, score: 0, fastest: Infinity, bombs: 0, hitAge: 9,
+        hits: 0, shots: 0, score: 0, fastest: Infinity, bombs: 0, hitAge: 9, streak: 0, bestStreak: 0,
         ammo: new B.Ammo(this.cfg.ammo, i === this.local ? o.gun : null) });   // the remote one is display-only (synced by snapshots)
     }
     this.ammo = this.players[this.local].ammo;
@@ -66,6 +76,30 @@ class Run {
     showEnv(this.stage);
   }
   get me() { return this.players[this.local]; }
+  // ---------- practice ----------
+  practiceCfg(tier) {
+    const c = this.def.practiceConfig ? this.def.practiceConfig(tier) : this.def.config(tier, 0);
+    c.window = c.window || 40; c.time = Infinity; c.quota = Infinity; c.practice = true;
+    return c;
+  }
+  // append the next chunk of the schedule, starting at stage time `base`; spawns ids continue the timeline index
+  extend(base) {
+    const c = Object.assign({}, this.cfg, { time: this.cfg.window });
+    c.prior = this.timeline.filter(s => s.t1 > base).map(s => Object.assign({}, s, { t0: s.t0 - base, t1: s.t1 - base }));
+    const rng = mulberry32(hashStr(this.stage + '|practice|' + this.tier + '|' + this.chunk++) ^ this.seed);
+    const add = this.def.timeline(c, rng);
+    for (const sp of add) { sp.t0 = +(sp.t0 + base).toFixed(3); sp.t1 = +(sp.t1 + base).toFixed(3); sp.id = this.timeline.length; this.timeline.push(sp); }
+    return add.length;
+  }
+  // live difficulty switch: drop the spawns that have not come out yet, keep the ones on screen (they finish their
+  // motion), and build a fresh chunk at the new tier from now on. Ammo, stats and the clock carry on.
+  setTier(tier) {
+    if (!this.practice || (tier | 0) === this.tier) return;
+    this.tier = tier | 0; this.cfg = this.practiceCfg(this.tier);
+    this.timeline.length = this.next;
+    this.extend(Math.max(0, this.t));
+  }
+  get practiceTime() { return Math.max(0, this.state === 'end' ? this.endAt || 0 : this.t); }
   get timeLeft() { return Math.max(0, this.cfg.time - Math.max(0, this.t)); }
   canShoot() { return this.state === 'play' && this.me.lives > 0 && this.t < this.cfg.time; }
   update(dt) {
@@ -79,6 +113,7 @@ class Run {
     for (const p of this.players) p.hitAge += dt;
     this.ammo.update && this.ammo.update(dt);
     if (this.state !== 'play') return;
+    if (this.practice && this.next >= this.timeline.length) this.extend(this.t);   // keep the targets coming
     // spawn everything whose time has come (deterministic order)
     while (this.next < this.timeline.length && this.timeline[this.next].t0 <= this.t) {
       const sp = this.timeline[this.next++];
@@ -108,7 +143,7 @@ class Run {
   byId(id) { return this.live.find(t => t.id === id) || null; }
   end(why) {
     if (this.state === 'end') return;
-    this.state = 'end'; this.endReason = why; this.endT = 0;
+    this.state = 'end'; this.endReason = why; this.endT = 0; this.endAt = Math.max(0, this.t);
     const p = this.me;
     this.cleared = this.versus ? false : p.hits >= this.cfg.quota && p.lives > 0;
   }
@@ -120,22 +155,24 @@ class Run {
     const sp = this.timeline[tid]; if (!sp) return false;
     const lt = st - sp.t0, pts = this.def.points(sp, lt, zone || undefined), P = this.players[by];
     this.taken.set(tid, by);
-    P.hits++; P.score += pts; P.hitAge = 0; P.fastest = Math.min(P.fastest, Math.max(0, lt - (sp.readyAt || 0)));
+    P.hits++; P.streak++; P.bestStreak = Math.max(P.bestStreak, P.streak); P.score += pts; P.hitAge = 0; P.fastest = Math.min(P.fastest, Math.max(0, lt - (sp.readyAt || 0)));
     const tg = this.byId(tid);
     if (tg && tg.alive) { tg.shatter(point || null, { tint: this.versus ? PCOLS[by] : null }); tg.deadT = this.t; }
     this.events.push({ type: 'hit', by, tid, pts, step: tg && tg.step });
     if (by === this.local) B.SFX.play('hit', { pts, step: tg && tg.step, by });
     else B.SFX.play('vsTaken', { by });
-    if (!this.versus && !this.quotaMet && P.hits >= this.cfg.quota) { this.quotaMet = true; B.SFX.play('quota'); this.events.push({ type: 'quota' }); }
+    if (!this.versus && !this.practice && !this.quotaMet && P.hits >= this.cfg.quota) { this.quotaMet = true; B.SFX.play('quota'); this.events.push({ type: 'quota' }); }
     return true;
   }
   // a bomb / bystander was shot by player `by`
   applyPenalty(by, kind, tid, point) {
     const P = this.players[by];
-    P.lives = Math.max(0, P.lives - 1); P.bombs++; P.score = Math.max(0, P.score + (this.def.penalty || -300));
+    P.bombs++; P.streak = 0;
+    // practice: the bomb still blows (sound, burst) but costs no life and no points
+    if (!this.practice) { P.lives = Math.max(0, P.lives - 1); P.score = Math.max(0, P.score + (this.def.penalty || -300)); }
     if (tid != null) { this.taken.set(tid, -1); const tg = this.byId(tid); if (tg && tg.alive) { if (tg.explode) tg.explode(point); else tg.shatter(point); tg.deadT = this.t; } }
     this.events.push({ type: kind, by });
-    if (by === this.local) { B.SFX.play(kind); B.SFX.play('lifeLost'); }
+    if (by === this.local) { B.SFX.play(kind); if (!this.practice) B.SFX.play('lifeLost'); }
     if (!this.versus && P.lives <= 0) this.end('lives');
   }
   // ---------- versus adjudication (host only) ----------
@@ -170,6 +207,12 @@ class Run {
       if (i !== this.local) { p.lives = a[3] | 0; p.ammo = this.remoteAmmo(a[5], a[6]); }
       p.fastest = a[4] >= 0 ? a[4] : Infinity;
     });
+  }
+  // practice results (no score, no quota): shots, hits, accuracy, best streak, bombs shot, seconds practised
+  practiceResults() {
+    const p = this.me, shots = Math.max(p.shots, p.hits);
+    return { practice: true, tier: this.tier, shots, hits: p.hits, pct: shots ? Math.round(p.hits / shots * 100) : 0,
+      bestStreak: p.bestStreak, bombs: p.bombs, secs: this.practiceTime };
   }
   // results for the results screen
   results() {
