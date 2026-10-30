@@ -47,6 +47,17 @@ Live link: https://jonbeam1-netizen.github.io/blam/ (hard refresh once: Ctrl+Shi
 - [ ] Hidden bombs behind plates at every tier.
 - [ ] Nothing hidden by tier: every trick exists at Beginner, slower and rarer.
 
+## BEE HIVE, stage 5 (0.018) - NEW, nothing of it heard or felt at full speed yet
+- [ ] A honeycomb wall (7x4 live cells, Beginner plays the middle 5 columns) in a wooden hive frame at dusk, APIARY sign, smoker, honey drips.
+- [ ] Plates, bombs, your three decoys and hidden bombs flip UP out of the cells on a hinge, stay, flip back. Same pop windows / aim travel / spare shots as the range.
+- [ ] LARVAE: a grub grows and wriggles, the cell glows umber -> lemon, a ring of six lights fills, then it shakes and hatches into a BEE (flies off), a TARGET (+150 bonus) or a BOMB. Readable? Fun to pre-aim?
+- [ ] BEES crawl and hop over everything. They never block a shot. Shooting one = no penalty, 2 s FRENZY (faster, louder buzz). Annoying or fun?
+- [ ] Patterns: row on a beat, column bottom to top, snake through cells, ping-pong then bomb, deep cell (hidden column in one cell), the wall (6-8 at once).
+- [ ] Variants: HIVE 1 HONEYCOMB (unlimited), HIVE 2 ROYAL JELLY (8 per mag, more larvae), HIVE 3 SWARM (12 per mag, many bees, frenzies on their own).
+- [ ] Sounds are synth placeholders: beePass, beeFrenzy, beeHit, larvaHatch, honeyDrip, a quiet hive buzz bed.
+- [ ] Not built: lights-out on the comb, turncoats on the comb, a bee on the duck's hat.
+- [ ] HIGH SCORES now fits 17 rows (five stages).
+
 ## Practice mode (0.008)
 - [ ] First sign in FREE PLAY; no timer/quota/lives; tier signs above the duck's head; ESC to finish (desktop).
 - [ ] #77 MOBILE: a crimson FINISH sign left of the tier signs ends practice (touch only). (0.015)

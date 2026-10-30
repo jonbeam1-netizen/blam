@@ -429,7 +429,7 @@ UI.screens.scores = {
     rows.push(['COURSE', 'course']);
     // rows squeeze from 14 px down to 9 px so every stage variant + COURSE fits above the BACK sign (14 rows max:
     // 0.007, four stages = 13 variants + COURSE; 12 cut off SKY 3 and COURSE)
-    const n = Math.min(rows.length, 14), rh = Math.max(9, Math.min(14, Math.floor(126 / n)));
+    const n = Math.min(rows.length, 17), rh = Math.max(7, Math.min(14, Math.floor(126 / n)));   // 5 stages: 16 variants + COURSE
     H.plate(x0 - 8, y0 - 4, 312, Math.max(152, 26 + n * rh));
     const ab = ['BEGINNER', 'ADVANCED', 'VERY HARD', 'INSANE'];
     ab.forEach((n, i) => H.text3c(n, x0 + 92 + i * cw - 30, y0 + 6, 'oxblood', 1, 'bone'));

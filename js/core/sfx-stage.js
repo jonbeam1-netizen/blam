@@ -1,5 +1,5 @@
 'use strict';
-/* B.L.A.M. core/sfx-stage.js -- Deputy Duck's voice set and the stage-specific sounds (alley, boneyard, sky show).
+/* B.L.A.M. core/sfx-stage.js -- Deputy Duck's voice set and the stage-specific sounds (alley, boneyard, sky show, bee hive).
    Recipes only (see sfx-kit.js for the recipe contract). */
 window.BLAM = window.BLAM || {};
 (function (B) {
@@ -257,4 +257,77 @@ def('finale', { max: 1, pv: 0.2, dv: 0.05, verb: 0.3, pri: 4, gain: 0.9 },
     [[500, 1], [1500, 0.6], [2600, 0.35]].forEach(([f, g]) => noise(v, { kind: 'pink', ft: 'bandpass', ff: f, q: 1.5, at: b + 0.2, a: 0.4, hold: 0.8, d: 1.5, g: 0.09 * g }));
     return 4.2;
   });
+// ---------- BEE HIVE ----------
+// a buzz: detuned saws through a nasal band-pass, the pitch wobbling like wings (vib) and a tremolo from the band sweep
+const buzz = (v, o) => {
+  const f = o.f || 220, n = o.n || 2;
+  for (let k = 0; k < n; k++) tone(v, { type: 'sawtooth', f: f * (1 + (k - (n - 1) / 2) * 0.025), fs: o.fs ? o.fs.map(([dt, ff]) => [dt, ff * (1 + (k - (n - 1) / 2) * 0.025)]) : null,
+    at: o.at, a: o.a || 0.03, hold: o.hold || 0, d: o.d || 0.2, g: (o.g || 0.05) / n, vib: o.vib || [38 + k * 7, 0.03], ft: 'bandpass', ff: o.ff || 700, ff2: o.ff2, q: o.q || 1.4, lp: 3200 });
+};
+def('beePass', { max: 2, gap: 0.1, pv: 1.2, dv: 0.15, verb: 0.08, pri: 0, gain: 0.7 },
+  v => {                                   // a bee zips past: the buzz swells and drops in pitch (doppler), panned across
+    buzz(v, { f: 250, fs: [[0.22, 270], [0.5, 180]], a: 0.16, hold: 0.12, d: 0.28, g: 0.07, ff: 900, ff2: 500 });
+    if (v.pan) { const p = v.pan.pan, a = (v.o.u || 0.5) < 0.5 ? -0.7 : 0.7; p.setValueAtTime(a, v.t); p.linearRampToValueAtTime(-a * 0.6, v.t + 0.55); }
+    return 0.6;
+  },
+  v => { buzz(v, { f: 310, fs: [[0.15, 330], [0.4, 230]], a: 0.1, hold: 0.08, d: 0.22, g: 0.06, ff: 1100, ff2: 650 }); return 0.45; });
+def('beeFrenzy', { max: 1, cool: 0.5, pv: 0.4, dv: 0.08, verb: 0.12, pri: 2, gain: 0.85 },
+  v => {                                   // the swarm goes wild for ~2 s: a loud, rising, wobbling cloud of buzz
+    buzz(v, { f: 205, fs: [[0.25, 250], [1.6, 262], [2.1, 200]], a: 0.18, hold: 1.4, d: 0.45, g: 0.16, n: 4, ff: 650, ff2: 1300, q: 1.1, vib: [44, 0.045] });
+    buzz(v, { f: 410, fs: [[0.3, 500], [2.0, 420]], a: 0.25, hold: 1.2, d: 0.5, g: 0.05, n: 2, ff: 1600, q: 2 });
+    noise(v, { kind: 'pink', ft: 'bandpass', ff: 1800, ff2: 2600, q: 1.5, a: 0.3, hold: 1.1, d: 0.5, g: 0.05 });
+    return 2.2;
+  });
+def('beeHit', { max: 2, gap: 0.05, pv: 0.8, dv: 0.1, verb: 0.1, pri: 2, gain: 0.85 },
+  v => {                                   // pok! + an angry little bzzt that climbs
+    noise(v, { ft: 'bandpass', ff: 2500, q: 2, d: 0.03, g: 0.3 });
+    tone(v, { type: 'triangle', f: 900, f2: 500, ft: 0.05, d: 0.06, g: 0.12 });
+    buzz(v, { f: 300, fs: [[0.18, 520]], at: 0.03, a: 0.01, hold: 0.08, d: 0.12, g: 0.09, ff: 1400 });
+    return 0.35;
+  },
+  v => {
+    noise(v, { ft: 'bandpass', ff: 3000, q: 2.5, d: 0.025, g: 0.28 });
+    buzz(v, { f: 340, fs: [[0.06, 280], [0.22, 560]], at: 0.02, a: 0.01, hold: 0.06, d: 0.14, g: 0.09, ff: 1500 });
+    return 0.35;
+  });
+def('larvaHatch', { max: 2, gap: 0.05, pv: 0.7, dv: 0.1, verb: 0.15, pri: 2, gain: 0.85 },
+  v => {                                   // a wet pop out of the cell + wax crackle (+ a tiny buzz if a bee came out)
+    tone(v, { f: 260, f2: 980, ft: 0.06, d: 0.09, g: 0.3 });
+    noise(v, { ft: 'lowpass', ff: 1800, d: 0.05, g: 0.25 });
+    K.grains(v, { n: 7, at: 0.03, span: 0.18, f: [1800, 4200], q: 5, g: [0.05, 0.12] });
+    if (v.o.kind === 'bee') buzz(v, { f: 280, fs: [[0.3, 320]], at: 0.1, a: 0.05, hold: 0.1, d: 0.2, g: 0.05 });
+    else tone(v, { type: 'triangle', f: 1320, at: 0.08, d: 0.12, g: 0.05 });
+    return 0.5;
+  });
+def('honeyDrip', { max: 1, cool: 4, pv: 1.5, dv: 0.1, verb: 0.25, pri: 0, gain: 0.6 },
+  v => {                                   // gloop ... plip
+    tone(v, { f: 820, f2: 300, ft: 0.09, a: 0.004, d: 0.1, g: 0.09 });
+    tone(v, { f: 1500, f2: 900, ft: 0.05, at: 0.55, d: 0.06, g: 0.05 });
+    return 0.7;
+  });
+// the hive's ambience bed (a quiet hum of the comb, a breeze, the odd bee nearby). sfx-music.js owns K.beds and loads
+// after this file, so the bed waits in K.stageBeds and stages/beehive.js adds it to K.beds (id 'beehive').
+K.stageBeds = K.stageBeds || {};
+K.stageBeds.beehive = (ctx, bus) => {
+  const now = ctx.currentTime, out = ctx.createGain(), srcs = [];
+  out.gain.setValueAtTime(0, now); out.gain.linearRampToValueAtTime(1, now + 2.5); out.connect(bus);
+  const hum = ctx.createGain(); hum.gain.value = 1; const bp = K.filt(ctx, 'bandpass', 520, 1.1); bp.connect(hum).connect(out);
+  [[214, 0.0042], [219.5, 0.0036], [437, 0.0014]].forEach(([f, g]) => { const o = ctx.createOscillator(), gn = K.gain(ctx, g); o.type = 'sawtooth'; o.frequency.value = f; o.connect(gn).connect(bp); o.start(now); srcs.push(o); });
+  const lfo = (rate, depth, param, base) => { const o = ctx.createOscillator(), gn = K.gain(ctx, depth); o.frequency.value = rate; param.value = base; o.connect(gn).connect(param); o.start(now); srcs.push(o); };
+  lfo(0.17, 0.35, hum.gain, 1); lfo(0.07, 160, bp.frequency, 520);
+  const s = ctx.createBufferSource(), fl = K.filt(ctx, 'lowpass', 650, 0.7), gn = K.gain(ctx, 0.035);
+  s.buffer = K.noiseBuf(ctx, 'pink'); s.loop = true; s.connect(fl).connect(gn).connect(out); s.start(now, Math.random() * 1.5); srcs.push(s);
+  lfo(0.09, 0.018, gn.gain, 0.035);
+  let stopped = false;
+  return {
+    tick() {},
+    stop(fade = 1.5) {
+      if (stopped) return; stopped = true;
+      const t = ctx.currentTime, gp = out.gain;
+      gp.cancelScheduledValues(t); gp.setValueAtTime(gp.value, t); gp.linearRampToValueAtTime(0, t + fade);
+      for (const x of srcs) { try { x.stop(t + fade + 0.1); } catch (e) {} }
+      setTimeout(() => { try { out.disconnect(); } catch (e) {} }, (fade + 1) * 1000);
+    }
+  };
+};
 })(window.BLAM);

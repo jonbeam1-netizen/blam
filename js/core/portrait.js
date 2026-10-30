@@ -116,7 +116,7 @@ SC.scores.drawPortrait = function (t, L) {
   const rows = [];
   for (const id of S.order) { const d = S.get(id); for (let v = 0; v < d.variants; v++) rows.push([(d.short || 'RANGE') + ' ' + (v + 1), id + ':' + v]); }
   rows.push(['COURSE', 'course']);
-  const n = Math.min(rows.length, 14), w = Math.min(L.W - 6, 206), x0 = Math.round(L.cx - w / 2), y0 = shelf(L) - 2, cw = (w - 50) / 4;
+  const n = Math.min(rows.length, 17), w = Math.min(L.W - 6, 206), x0 = Math.round(L.cx - w / 2), y0 = shelf(L) - 2, cw = (w - 50) / 4;
   H.plate(x0, y0, w, 22 + n * 10);
   ['BEG', 'ADV', 'V.HARD', 'INSANE'].forEach((a, i) => H.text3c(a, x0 + 46 + cw * i + cw / 2, y0 + 7, 'oxblood', 1, 'bone'));
   rows.slice(0, n).forEach(([label, key], r) => {
