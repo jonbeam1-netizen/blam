@@ -1,5 +1,5 @@
 'use strict';
-/* B.L.A.M. core/sfx-stage.js -- Deputy Duck's voice set and the stage-specific sounds (alley, boneyard, sky show, bee hive, invasion, laser tag, skee ball).
+/* B.L.A.M. core/sfx-stage.js -- Deputy Duck's voice set and the stage-specific sounds (alley, boneyard, sky show, bee hive, invasion, laser tag, skee ball, conveyor).
    Recipes only (see sfx-kit.js for the recipe contract). */
 window.BLAM = window.BLAM || {};
 (function (B) {
@@ -627,6 +627,84 @@ K.stageBeds.skeeball = (ctx, bus) => {
   let stopped = false, next = now + 2;
   return {
     tick(until) { if (stopped) return; if (next < ctx.currentTime - 0.5) next = ctx.currentTime + 1; while (next < until) { try { far(next); } catch (e) {} next += 2.5 + Math.random() * 5; } },
+    stop(fade = 1.5) {
+      if (stopped) return; stopped = true;
+      const t = ctx.currentTime, gp = out.gain;
+      gp.cancelScheduledValues(t); gp.setValueAtTime(gp.value, t); gp.linearRampToValueAtTime(0, t + fade);
+      for (const x of srcs) { try { x.stop(t + fade + 0.1); } catch (e) {} }
+      setTimeout(() => { try { out.disconnect(); } catch (e) {} }, (fade + 1) * 1000);
+    }
+  };
+};
+// ---------- CONVEYOR ----------
+// a toy factory at night: rubber flaps, a klaxon, the stamping press, a servo arm, the belts' hum
+const clank = (v, f, at, g, d = 0.25) => K.bell(v, { f, at, d, g, ratios: [1, 2.31, 3.87, 5.12], amps: [1, 0.6, 0.35, 0.2], damp: 1.2 });   // struck steel
+def('itemIn', { max: 3, gap: 0.05, pv: 0.5, dv: 0.1, verb: 0.08, pri: 1, gain: 3 },
+  v => {                                   // an item rides out of the tunnel: the rubber flaps slap, a little clunk on the belt
+    const b = +v.o.belt || 0, f = [520, 640, 780][b] || 600;
+    noise(v, { ft: 'bandpass', ff: 1100, q: 1.6, a: 0.002, d: 0.06, g: 0.06 });
+    noise(v, { ft: 'bandpass', ff: 1500, q: 1.6, at: 0.045, a: 0.002, d: 0.05, g: 0.04 });
+    tone(v, { f: f * 0.3, f2: f * 0.2, ft: 0.06, at: 0.02, a: 0.002, d: 0.07, g: 0.07 });
+    clank(v, f * 2, 0.02, 0.012, 0.15);
+    return 0.3;
+  });
+def('beltReverse', { max: 1, cool: 0.4, pv: 0, dv: 0.03, verb: 0.25, pri: 4, gain: 2.5 },
+  v => {                                   // the klaxon: AH-OO-GAH twice (a buzzy square through a horn-ish band), a relay clunk under it
+    const w = K.pulse(v.ctx, 0.4);
+    for (let k = 0; k < 2; k++) {
+      const at = k * 0.26;
+      tone(v, { wave: w, f: 330, fs: [[0.06, 440], [0.2, 415]], at, a: 0.01, hold: 0.14, d: 0.06, g: 0.06, lp: 2400, np: true });
+      tone(v, { wave: w, f: 220, fs: [[0.06, 293], [0.2, 277]], at, a: 0.01, hold: 0.14, d: 0.06, g: 0.04, lp: 1800, np: true });
+    }
+    tone(v, { f: 90, f2: 50, ft: 0.08, at: 0.5, a: 0.002, d: 0.12, g: 0.1 }); noise(v, { ft: 'bandpass', ff: 700, q: 3, at: 0.5, d: 0.05, g: 0.05 });
+    return 0.8;
+  });
+def('pressDown', { max: 1, cool: 0.2, pv: 0.3, dv: 0.06, verb: 0.2, pri: 3, gain: 0.75 },
+  v => {                                   // the press: a hydraulic hiss, the SLAM (a low thud with a steel ring), a puff of air
+    noise(v, { ft: 'highpass', ff: 2500, a: 0.02, d: 0.09, g: 0.035 });
+    tone(v, { f: 85, f2: 38, ft: 0.18, at: 0.08, a: 0.002, d: 0.3, g: 0.3, drive: 1.6 });
+    noise(v, { kind: 'brown', ft: 'lowpass', ff: 900, ff2: 200, fft: 0.25, at: 0.08, a: 0.002, d: 0.3, g: 0.25 });
+    clank(v, 410, 0.08, 0.05, 0.5);
+    noise(v, { ft: 'bandpass', ff: 3200, q: 1, at: 0.12, a: 0.03, d: 0.25, g: 0.02 });
+    return 0.8;
+  });
+def('sorterArm', { max: 1, cool: 0.3, pv: 0.3, dv: 0.06, verb: 0.1, pri: 2, gain: 4.5 },
+  v => {                                   // the sorter swings in: a servo whine up, a pneumatic claw snap
+    tone(v, { type: 'sawtooth', f: 260, fs: [[0.3, 620], [0.45, 540]], a: 0.04, hold: 0.25, d: 0.15, g: 0.025, lp: 1800 });
+    tone(v, { type: 'triangle', f: 1040, fs: [[0.3, 2480]], a: 0.04, hold: 0.25, d: 0.1, g: 0.008 });
+    noise(v, { ft: 'bandpass', ff: 2600, q: 2, at: 0.48, a: 0.001, d: 0.04, g: 0.07 });
+    noise(v, { ft: 'highpass', ff: 3000, at: 0.5, a: 0.005, d: 0.12, g: 0.025 });
+    return 0.7;
+  });
+def('sheetStamp', { max: 1, pv: 0, dv: 0.03, verb: 0.35, pri: 5, gain: 2.5 },
+  v => {                                   // the finale: the press punches B.L.A.M. into the steel sheet: a huge slam, an anvil ring, sparks
+    tone(v, { f: 70, f2: 30, ft: 0.3, a: 0.002, d: 0.6, g: 0.4, drive: 2 });
+    noise(v, { kind: 'brown', ft: 'lowpass', ff: 1400, ff2: 180, fft: 0.4, a: 0.002, d: 0.5, g: 0.3 });
+    clank(v, 523, 0, 0.07, 1.4); clank(v, 784, 0.01, 0.04, 1.1);
+    K.pings(v, { n: 9, span: 0.45, at: 0.05, f: [3200, 7000], gmax: 0.03 });
+    return 1.6;
+  });
+// the factory bed: the belts' motor hum and slat clatter, a ventilation hiss, far clanks / a forklift beep now and then.
+// Waits in K.stageBeds; stages/conveyor.js adds it to K.beds (id 'conveyor').
+K.stageBeds.conveyor = (ctx, bus) => {
+  const now = ctx.currentTime, out = ctx.createGain(), srcs = [];
+  out.gain.setValueAtTime(0, now); out.gain.linearRampToValueAtTime(1, now + 2.5); out.connect(bus);
+  const lfo = (rate, depth, param, base) => { const o = ctx.createOscillator(), gn = K.gain(ctx, depth); o.frequency.value = rate; param.value = base; o.connect(gn).connect(param); o.start(now); srcs.push(o); };
+  const loop = (kind, type, f, q, g) => { const s = ctx.createBufferSource(), fl = K.filt(ctx, type, f, q), gn = K.gain(ctx, g); s.buffer = K.noiseBuf(ctx, kind); s.loop = true; s.connect(fl).connect(gn).connect(out); s.start(now, Math.random() * 1.5); srcs.push(s); return { f: fl, g: gn }; };
+  const hum = K.filt(ctx, 'lowpass', 300, 0.8); hum.connect(out);
+  [[55, 0.006], [110, 0.003], [165, 0.0012]].forEach(([f, g]) => { const o = ctx.createOscillator(), gn = K.gain(ctx, g); o.type = 'sawtooth'; o.frequency.value = f; o.connect(gn).connect(hum); o.start(now); srcs.push(o); });
+  const rumble = loop('brown', 'lowpass', 260, 0.7, 0.02); lfo(0.13, 0.006, rumble.g.gain, 0.02);
+  const clatter = loop('white', 'bandpass', 1800, 4, 0.0); lfo(7.5, 0.004, clatter.g.gain, 0.003);   // the slats rattling past
+  const vent = loop('pink', 'highpass', 2600, 0.7, 0.004); lfo(0.05, 0.002, vent.g.gain, 0.004);
+  const far = t => {                       // a far clank, sometimes the forklift's reversing beep
+    if (Math.random() < 0.7) {
+      const f = 300 + Math.random() * 500;
+      [1, 2.31, 3.87].forEach((r, i) => { const o = ctx.createOscillator(), og = ctx.createGain(); og.gain.value = 0; o.frequency.value = f * r; og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(0.004 / (i + 1), t + 0.003); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.6 / (i + 1)); o.connect(og).connect(out); o.start(t); o.stop(t + 0.7); });
+    } else for (let k = 0; k < 3; k++) { const o = ctx.createOscillator(), og = ctx.createGain(), a = t + k * 0.5; o.type = 'square'; o.frequency.value = 1180; og.gain.value = 0; og.gain.setValueAtTime(0, a); og.gain.linearRampToValueAtTime(0.0018, a + 0.01); og.gain.setValueAtTime(0.0018, a + 0.22); og.gain.linearRampToValueAtTime(0, a + 0.24); o.connect(og).connect(out); o.start(a); o.stop(a + 0.3); }
+  };
+  let stopped = false, next = now + 2;
+  return {
+    tick(until) { if (stopped) return; if (next < ctx.currentTime - 0.5) next = ctx.currentTime + 1; while (next < until) { try { far(next); } catch (e) {} next += 3 + Math.random() * 6; } },
     stop(fade = 1.5) {
       if (stopped) return; stopped = true;
       const t = ctx.currentTime, gp = out.gain;

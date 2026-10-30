@@ -1,7 +1,18 @@
-# B.L.A.M. play-test list (builds 0.008 to 0.022, live 2026-10-30)
+# B.L.A.M. play-test list (builds 0.008 to 0.023, live 2026-10-30)
 
 Everything that changed since you last played a build by ear, in one place. Tick what is good, gripe what is not.
 Live link: https://jonbeam1-netizen.github.io/blam/ (hard refresh once: Ctrl+Shift+R).
+
+## Build 0.023 (2026-10-30 morning): CONVEYOR (stage 9)
+- [ ] CONVEYOR = BELT 1-3 in FREE PLAY (page 6) and in the course pool. A toy factory at night: three belts at different heights and depths with tunnel housings, the press over the middle belt, the sorter arm, racks of toy parts, the B.L.A.M. TOY WORKS sign.
+- [ ] Plates, bombs, decoys and hidden-bomb pairs (back belt) ride the belts standing up; the ride IS the pop window (fast belt 1.4 s Beginner -> 0.6 s Insane). Shootable the whole ride?
+- [ ] THE PRESS slams over the middle belt and hides a segment; a plate that ticks on its way in comes out a bomb (turncoat: still a plate while ticking, unshootable under the head). Fair?
+- [ ] BELT REVERSE: klaxon + amber light, then one belt turns round. SORTER: the arm lifts an item to another belt (unshootable in the claw). Readable?
+- [ ] Patterns: shot-driven rows, stacks across the belts, snakes via the sorter, ping-pong then a bomb, the wall. +50 for a plate shot in the press's shadow.
+- [ ] Variants: BELT 1 ASSEMBLY free fire, BELT 2 OVERTIME faster belts + 8 per mag, BELT 3 NIGHT SHIFT dark factory lit by the belts (muzzle flash bigger) + 12 per mag. Finale: the press punches B.L.A.M. into a sheet; NIGHT SHIFT brings the lights back on for it (say if it should stay dark).
+- [ ] Insane softened by Fable after the solver (fast ride 0.52 -> 0.60 s; a slow bot failed 42 of 90 at 0.52). Still insane enough?
+- NOT VERIFIED: nothing by ear; no real mouse / touch play; portrait; two-browser versus; no real frame-rate number (42-48 draw calls in a busy round, the highest of any stage).
+- Agent-reported rough spots: the sorter arm reads thin; turncoats about once a round.
 
 ## Build 0.022 (2026-10-30 morning): SKEE BALL (stage 8) + #93 #94 #96 #97
 - [ ] SKEE BALL = SKEE 1-3 in FREE PLAY (page 5) and in the course pool. Boardwalk arcade, five fanned lanes, ring boards, prize wall, marquee. Balls roll up and drop into a pocket: GREEN pockets pop a plate (or a decoy / hidden-bomb plate), RED pockets pop a bomb, the 100s pop a gold plate (+500) or the duck cameo. Read the arc, be aimed before the pop.

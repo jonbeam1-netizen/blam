@@ -80,6 +80,13 @@
      ticketSpray : the finale: every ticket dispenser sprays ('finale' plays too)
      jackpot     : a jackpot rain's first gold plate / a ball kicked into a 100 pocket (opts.u)
      + targetIn / bombReveal / duckCameo / duckCameoHit as the range's; the ambience bed 'skeeball' (arcade murmur, bulb buzz, surf)
+   CONVEYOR (stage 9):
+     itemIn      : an item rides out of a belt's tunnel mouth (opts.u, opts.belt 0 front / 1 middle / 2 back)
+     beltReverse : the BELT REVERSE telegraph: the klaxon, 0.5 s before a belt runs backwards (opts.u, opts.belt)
+     pressDown   : the stamping press slams down over the middle belt (opts.u)
+     sorterArm   : the sorter arm swings in to pluck an item (opts.u)
+     sheetStamp  : the finale: the press punches B.L.A.M. into the steel sheet ('finale' plays as it rolls out)
+     + bombReveal / turnTick (the press's turncoats) as the range's; the ambience bed 'conveyor' (the belt hum, motors, far clanks)
    Internal (the router plays these itself): duckScared, duckRelief, duckHeckle, duckCheer, duckSad (Deputy Duck's
    pose changes, watched on BLAM.G.duck.pose; duckQuiet(s) mutes the scared / relief ones for s seconds, used by the
    bomb's silent scared face), the title-menu chiptune and a quiet ambience bed per stage.
