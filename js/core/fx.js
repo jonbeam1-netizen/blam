@@ -154,11 +154,58 @@ function localOrigin(ray, out) {
   }
   return out;
 }
+// ---------- #96 (0.028) HUD MUZZLE FLASH: drawn in 2D on the game HUD (H.rect pixels) at the projected barrel tip, on top of
+// the post pass, so no depth / dither / foreshortening in the 3D pipeline can hide it. A jagged pixel star at the tip plus a
+// tongue along the shot's screen direction; 2 frames over 0.09 s; per-gun size and colours; x1.35 in dark scenes.
+// guns.js keeps its 3D tongue + burst hidden while FX.HUD_FLASH is true.
+const HUD_FLASH = true;
+const FLASH_LOOK = {
+  guncon: { r: 9, len: 2.0, cols: ['bone', 'lemon', 'yellow', 'orange'], spikes: 8 },
+  justifier: { r: 11, len: 2.6, cols: ['lemon', 'yellow', 'orange', 'rust'], spikes: 8 },
+  zapper: { r: 8, len: 1.8, cols: ['bone', 'lime', 'green', 'cyan'], spikes: 4 },
+  revolver: { r: 5, len: 1.2, cols: ['lemon', 'orange', 'rust', 'rust'], spikes: 4 }
+};
+const FH = { t0: -1e9, x: 0, y: 0, dx: 1, dy: 0, skin: 'guncon', rot: 0 };
+const _fd = new THREE.Vector3();
+function noteFlash(aCam, ray, skin) {
+  const z = Math.max(0.05, -aCam.z), u = pxUnit(z);
+  FH.x = RW / 2 + aCam.x / u; FH.y = RH / 2 - aCam.y / u;
+  _fd.copy(ray.ray.direction).transformDirection(R.camera.matrixWorldInverse);        // shot direction, camera space
+  const bx = aCam.x + _fd.x * 0.4, by = aCam.y + _fd.y * 0.4, bz = Math.max(0.05, -(aCam.z + _fd.z * 0.4)), u2 = pxUnit(bz);
+  let dx = (RW / 2 + bx / u2) - FH.x, dy = (RH / 2 - by / u2) - FH.y; const L = Math.hypot(dx, dy);
+  if (L < 0.5) { dx = -0.4; dy = -1; } else { dx /= L; dy /= L; }
+  FH.dx = dx; FH.dy = dy; FH.skin = skin; FH.t0 = performance.now(); FH.rot = (Math.random() * 4 | 0);
+}
+function drawFlash(H) {
+  const age = (performance.now() - FH.t0) / 1000; if (age < 0 || age > 0.09) return;
+  const L = FLASH_LOOK[FH.skin] || FLASH_LOOK.guncon, f = age < 0.045 ? 0 : 1, dk = isDark() ? 1.35 : 1;
+  const r = L.r * dk * (f ? 0.7 : 1), cols = L.cols, S = L.spikes, cx = FH.x + FH.dx * r * 0.4, cy = FH.y + FH.dy * r * 0.4;
+  // the star: jagged edge r(a) = r * (0.5 + 0.5 |cos(S a / 2)|^0.5)
+  const ri = Math.ceil(r);
+  for (let y = -ri; y <= ri; y++) for (let x = -ri; x <= ri; x++) {
+    const d = Math.hypot(x, y); if (d > r) continue;
+    const a = Math.atan2(y, x) + FH.rot * 0.39, re = r * (0.5 + 0.5 * Math.pow(Math.abs(Math.cos(a * S / 2)), 0.5)); if (d > re) continue;
+    H.rect(cx + x, cy + y, 1, 1, cols[d < re * 0.3 ? 0 : d < re * 0.55 ? 1 : d < re * 0.8 ? 2 : 3]);
+  }
+  // the tongue along the shot direction, from the star outward
+  const len = r * L.len * (f ? 0.62 : 1), px = -FH.dy, py = FH.dx;
+  for (let i = 0; i <= len; i++) {
+    const q = i / len, hh = r * 0.42 * (1 - Math.pow(q, 1.5)) + (q > 0.3 ? (((i * 7 + f * 3) % 3) - 1) * 0.5 : 0);
+    const bx = cx + FH.dx * (r * 0.6 + i), by = cy + FH.dy * (r * 0.6 + i);
+    for (let j = -Math.ceil(hh); j <= Math.ceil(hh); j++) {
+      const dd = Math.abs(j); if (dd > hh) continue;
+      const k = dd <= hh * 0.28 && q < 0.42 && !f ? 0 : dd <= hh * 0.5 && q < 0.7 ? 1 : dd <= hh * 0.78 ? 2 : 3;
+      H.rect(bx + px * j, by + py * j, 1, 1, cols[k]);
+    }
+  }
+}
+
 function shot(ray, opts) {
   opts = opts || {};
   const g = B.G && B.G.gun, skin = (g && g.skinId) || 'guncon';
   const t = make(localOrigin(ray, _a), opts.look || lookOf(g), skin);
   t.rayO = ray.ray.origin.clone(); t.rayD = ray.ray.direction.clone();
+  try { noteFlash(t.a, ray, skin); } catch (e) {}
   if (isDark()) try { startGlow(t.a, skin); } catch (e) {}       // #92: only when the scene is dark
   return t;
 }
@@ -326,7 +373,7 @@ function hookVersus() {
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hookVersus); else setTimeout(hookVersus, 0);
 
 const FX = B.FX = { shot, land, rivalShot, ricochet, ricochetColors, update, DEFAULT_LOOK, rivalLook: null, timeScale: 1, mesh, live, hookVersus,
-  setDark, setHaze, beam, glowNow, GLOW, HALO, glowMesh };
+  setDark, setHaze, beam, glowNow, GLOW, HALO, glowMesh, drawFlash, HUD_FLASH, FLASH_LOOK };
 Object.defineProperty(FX, 'dark', { get: isDark, enumerable: true });     // #92: true while a dark scene holds a fresh claim
 Object.defineProperty(FX, 'haze', { get: hazeNow, enumerable: true });
 })(window.BLAM);

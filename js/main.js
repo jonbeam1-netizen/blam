@@ -6,7 +6,7 @@
 window.BLAM = window.BLAM || {};
 (function (B) {
 const R = B.R, I = B.Input, H = B.HUD, S = B.Stage, Tg = B.Targets, Save = B.Save, SFX = B.SFX, UI = B.UI, N = B.Net;
-const BUILD = '0.027';                      // bump on every publish (shown on the title status line)
+const BUILD = '0.028';                      // bump on every publish (shown on the title status line)
 const Q = new URLSearchParams(location.search);
 // ?slow=0.25 (dev/testing): single-player stage clock runs at that rate, so slow tools (screenshot -> click
 // takes seconds) can still shoot a target that is really there. Versus always runs on the wall clock.
@@ -413,6 +413,7 @@ function step(dt, draw) {
   // HUD
   H.use(R.hx); R.hx.clearRect(0, 0, R.RW, R.RH);
   if (G.screen) guard('draw', () => G.screen.draw(G.t));
+  if (B.FX && B.FX.drawFlash) guard('flash', () => B.FX.drawFlash(B.HUD));   // #96: the 2D muzzle flash, on top of the HUD
   const tall = UI.tall();                     // portrait phone: text lives on the outer canvas (core/portrait.js)
   if (G.toastMsg) {
     G.toastMsg.t -= dt;

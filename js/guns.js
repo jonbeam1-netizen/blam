@@ -823,7 +823,7 @@ function create(THREE, opts) {
     }
     skin.anim(S, skin.meshes, fx, skin.st, dt);
     ledMat.color.setHex(PAL[S.rp >= 0 ? ((T * 8 | 0) % 2 ? 'amber' : 'rust') : S.empty ? ((T * 3 | 0) % 2 ? 'red' : 'oxblood') : (skin.led || 'lime')]);
-    if (S.fireAge < 0.09) {                                                          // #96: tongue along the bore, ~5 frames at 60 Hz
+    if (S.fireAge < 0.09 && !(window.BLAM && window.BLAM.FX && window.BLAM.FX.HUD_FLASH)) {   // #96: 3D tongue (off while fx.js draws the HUD flash)
       const f = S.fireAge < 0.05 ? 0 : 1, FS = FLASH_SIZE[SKINS[skinIndex].id] || FLASH_SIZE.guncon;
       const dk = (window.BLAM && window.BLAM.FX && window.BLAM.FX.dark) ? 1.35 : 1;   // dark scenes (#92): a bigger lick
       flash.visible = true; flashMat.map = tex[skin.flash][f];
