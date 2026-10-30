@@ -14,7 +14,7 @@ Live link: https://jonbeam1-netizen.github.io/blam/ (hard refresh once: Ctrl+Shi
 ## Deputy Duck (0.009, 0.013)
 - [ ] Laugh on every THIRD miss, with the laugh quack (#58). Does the laugh pose read? (bill stays small, belly bob, wing points at you)
 - [ ] Hits: silent happy hop (#60). Bomb: silent scared face, no relief after (#61). Angry red ONLY when you shoot him (#59).
-- [ ] Pointing at him: one scared quack, relief quack when you leave (#57). No spazzing / repeat quacks at his edge (#68-#70).
+- [ ] Pointing at him: ONE scared quack, ONE relief quack when you leave (#57). 0.016: the scared and relief FILES were cut to a single quack each (they held 3-4 and 2-3 quacks). No spazzing / repeat quacks at his edge (#68-#70).
 - [ ] Practice: he just stands there now, no random heckling (#66).
 - [ ] Menu ta-da / cheer / sad quacks kept (#62).
 - [ ] Rare DUCK CAMEO in a round: a little duck on a balloon/target, +500 when hit (about 1 round in 5). Funny or weird?
@@ -52,6 +52,8 @@ Live link: https://jonbeam1-netizen.github.io/blam/ (hard refresh once: Ctrl+Shi
 - [ ] #77 MOBILE: a crimson FINISH sign left of the tier signs ends practice (touch only). (0.015)
 
 ## Known open
+- [ ] #78 (0.016): balloons and the duck cameo now fly by WHILE targets are up (they start over a busy range and never pause the stream; measured ~90% cross with a plate up).
+- #79 Lights out needs tinkering later (Jon), details to come.
 - [x] #53 free-play results now have AGAIN / BACK signs and no auto-advance (0.015).
 - Duck mood re-pick by ear: http://localhost:8790/review/sfx-fx/index.html (local only).
 - Versus with two real players not tested since 0.010 (deferred decoy penalty, magazine for P2).

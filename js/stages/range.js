@@ -813,7 +813,8 @@ function timeline(c, rng) {
     for (const s of mem) end = Math.max(end, s.t1);
     if (end > TIME - 0.2) return 0;
     for (const s of mem) {                           // room on the range (hidden column members keep their lane; practice's prior)
-      if (s.mo === 'wall' || s.mo === 'balloon') { if (occ.some(o => o.b > s.t0 && o.a < s.t1)) return 0; continue; }
+      if (s.mo === 'balloon') continue;              // #78: balloons fly OVER a busy range (no exclusivity, no lane)
+      if (s.mo === 'wall') { if (occ.some(o => o.b > s.t0 && o.a < s.t1)) return 0; continue; }
       if (laneBusy(s.mo === 'drop' ? 'h' : 'f', s.lane, s.t0, s.t1) || overlap(ptsOf(s), s.t0, s.t1)) return 0;
     }
     const pi = nTrick++;
@@ -825,9 +826,9 @@ function timeline(c, rng) {
     });
     for (const s of reqM.slice().sort((a, b) => a.t0 - b.t0 || (a.col || 0) - (b.col || 0))) aimed(s);
     const book = hold != null ? hold : end;
-    xUntil = Math.max(xUntil, book);
+    if (kind !== 'B') xUntil = Math.max(xUntil, book);   // balloons never block the stream (#78)
     count[kind] = used(kind) + 1; lastTrick = kind;
-    return book;
+    return kind === 'B' ? +(mem[0].t0 + 0.3).toFixed(3) : book;
   }
   // COLUMN (#71): N plates in one slot, the ones behind hidden. First column of the round: a clean 4. Later ones: a
   // clean 4-5, or (col4) a column whose 4th is a decoy.
@@ -996,19 +997,23 @@ function timeline(c, rng) {
     const up = upAt(t);
     if (up.length >= c.live) { t = up.map(o => o.b).sort((a, b) => a - b)[up.length - c.live] + 0.05; continue; }
     const trR = rng(), burR = rng();
-    const duckLate = duckPlan && !duckDone && t > TIME * 0.72 && t < TIME - c.ball - 1.5;
+    // #78 (Jon): balloons and the duck cameo fly by WHILE targets are up, never over an empty range: they start now (not
+    // at clearAt), need at least one plate up, and never block the stream
+    const busy = up.length >= 1 && t < TIME - c.ball - 1.5;
+    const duckLate = duckPlan && !duckDone && t > TIME * 0.72 && busy;
     if (duckLate || (out.length >= 2 && trR < c.trick && t < TIME - 3)) {
       const s = clearAt(t), W = Object.assign({}, TW);
       if (lastTrick) W[lastTrick] *= 0.15;
       for (const k in CAP) if (used(k) >= CAP[k]) W[k] = 0;
+      if (!busy) W.B = 0;
       let e = 0;
-      if (duckLate) e = balloons(s, true);
+      if (duckLate) e = balloons(t, true);
       for (let tries = 0; !e && tries < 3; tries++) {
         const keys = Object.keys(W), k = keys[pickW(keys.map(q => W[q]), rng())];
         if (!W[k]) break;
-        e = TRICKS[k](s); W[k] = 0;
+        e = k === 'B' ? balloons(t) : TRICKS[k](s); W[k] = 0;
       }
-      if (e) { t = e + pause(); continue; }
+      if (e) { t = lastTrick === 'B' ? e : e + pause(); continue; }
     }
     const n = burR < c.burst ? 2 + (rng() < 0.4 ? 1 : 0) : 1;
     let placed = 0;

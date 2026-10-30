@@ -274,21 +274,21 @@
   "duckScared": [
    {
     "file": "duck-scared-1.wav",
-    "dur": 1.2
+    "dur": 0.29
    },
    {
     "file": "duck-scared-2.wav",
-    "dur": 1.18
+    "dur": 0.3
    }
   ],
   "duckRelief": [
    {
     "file": "duck-relief-1.wav",
-    "dur": 1.2
+    "dur": 0.36
    },
    {
     "file": "duck-relief-2.wav",
-    "dur": 1.2
+    "dur": 0.24
    }
   ],
   "duckCheer": [

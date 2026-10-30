@@ -138,6 +138,18 @@ ON HIT (Jon 2026-10-29): a decoy does NOT explode instantly. Short build-up firs
 - [built] Briefing card: the ROOM FOR ERROR line (cap variant: spare SHOTS; other variants: TARGETS you may let go) replaces the tier tip line on both cards.
 - Open for Jon: the duck is a placeholder (duck.js not touched); new sound events `turnTick`, `lightsOut`, `lightsOn`, `duckCameo`, `duckCameoHit` have no sounds yet; BLACKOUT whole-round variant not built.
 
+## 6. BEE HIVE build brief (Fable, 2026-10-30; stage 5)
+**Scene:** a giant honeycomb wall fills the range: hex cells in wax / amber / honey colours, dark cell mouths, a few cells dripping honey (looks only). Beekeeper's yard framing (a wooden hive box edge, a smoker on a post, a sign "B.L.A.M. APIARY"), dusk light, bees drifting in the air. Original art, pixel/dither voxel like the other stages (STYLE.md).
+**Cells:** the comb is a grid of ~7 x 4 hex cells (fewer at Beginner, the same comb at every tier). A cell can be EMPTY, hold a LARVA, or hold a PLATE (target), a BOMB, or a DECOY that flips in from the cell's back wall (the cell is a flip-in slot: the hex plate rotates up out of the cell on its bottom edge, stays, flips back). Plates / bombs / decoys come from BLAM.Props (hex plate, bomb, decoy variants in DECOY_VARIANTS, hidden bomb behind a plate) so every rule from the range carries over: pop windows per tier, aim travel across the comb, decoys that fool you, decoy build-up then bang, spare shots per tier, nothing gated by tier.
+**Larvae:** some cells show a larva curled in the cell with a visible ripen timer (the larva grows / the cell glows warmer). When it ripens it hatches into one of: a BEE (flies off into the swarm), a TARGET plate, or a BOMB. The kind is hidden until it hatches, but the player sees WHICH cell is about to go, so they aim there in advance (anticipation + risk). Hatch kind weights by tier (more bombs up top). No wax caps.
+**Bees:** 6-12 bees crawl on the comb and fly short hops across it, over plates and bombs, as distraction (they can pass in front of a target as you shoot). Shooting a bee = no penalty, no points, a BRIEF FRENZY: all bees speed up and buzz loud for ~2 s, then calm. No anger meter, no escalation. Bees are cheap (a few voxels, 2-3 frame wing flicker).
+**Patterns:** rows of cells popping on a beat across the comb, a column (vertical stack of cells popping bottom to top), snakes winding through the comb, the decoy-on-the-beat trick, lights-out optional (honey-dark + a lantern spotlight) if cheap; otherwise skip lights-out here.
+**Scoring:** hex plate hit = range points by stay; bomb = life; larva-hatched target = +150 bonus; bee = 0.
+**Variants (3):** 1 HONEYCOMB (free fire, mag unlimited), 2 ROYAL JELLY (8 per mag, more larvae), 3 SWARM (12 per mag, many bees + frenzy common).
+**Sound events:** beeBuzz loop bed (quiet), beePass, beeFrenzy, beeHit, larvaHatch, honeyDrip (rare); emit via BLAM.SFX.play, synth placeholders OK (sfx-stage.js may get simple recipes).
+**Briefing icon:** a hex cell with a plate peeking out. **Duck:** the mini duck as usual; a cameo bee lands on his hat during idle (looks only) if cheap.
+**Done when:** registered as stage 'beehive' in the course order after SKY SHOW and in FREE PLAY, 3 variants, all 4 tiers, briefing with ROOM FOR ERROR, practice not required, versus-safe (pure function of seed/tier/variant + hits), no console errors, Beginner and Insane play-checked, screenshots.
+
 ## 3. Open questions for Jon
 1. Approve Alley, Boneyard, Sky Show as the next three, in that order?
 2. Fake-surrender criminal: fun or unfair?
