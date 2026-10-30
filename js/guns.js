@@ -549,7 +549,9 @@ function tongueFrames(THREE, style) {
   return out;
 }
 // tongue length / height per skin (skin space, before the holder scale); Jon: the AQUA PRO one must stay small
-const FLASH_SIZE = { guncon: { len: 0.17, h: 0.075 }, justifier: { len: 0.23, h: 0.085 }, zapper: { len: 0.15, h: 0.07 }, revolver: { len: 0.1, h: 0.05 } };
+// (lengths are ~x1.6 what a side view would need: in first person the bore points mostly into the screen and the tongue
+// foreshortens to about half; the plane spins round the bore every frame to face the camera, see anim())
+const FLASH_SIZE = { guncon: { len: 0.27, h: 0.085 }, justifier: { len: 0.36, h: 0.1 }, zapper: { len: 0.24, h: 0.08 }, revolver: { len: 0.15, h: 0.055 } };
 // Pool of unit cubes (one InstancedMesh, unlit palette colours): shells, sparks, smoke puffs.
 class Particles {
   constructor(THREE, n, parent) {
@@ -700,7 +702,7 @@ function create(THREE, opts) {
   const L0 = LAYOUTS[layoutName], base = new THREE.Vector3(L0.x, L0.y, L0.z);
   let scale = L0.s;
   const P = {}; for (const k of LKEYS) P[k] = L0[k];                             // eased layout parameters
-  let reloadT = 0, reloadDur = 0, flashRot = 0, flashScale = 1;
+  let reloadT = 0, reloadDur = 0, flashRot = 0, flashScale = 1; const _fc = new THREE.Vector3();
   const aim = { x: 0, y: 0 };
   const S = { t: 0, frame: 0, trig: 0, kick: 0, kickV: 0, rp: -1, rpPrev: -1, empty: false, emptyFrame: -1, reloadFrame: -1, fireAge: 9, dryAge: 9, shots: 0 };
   S.cross = a => S.rp >= 0 && S.rpPrev < a && S.rp >= a;
@@ -749,7 +751,7 @@ function create(THREE, opts) {
     if (skin && skin !== sk) holder.remove(skin.root);
     skin = sk; skinIndex = idx; holder.add(sk.root);
     holder.scale.setScalar(sk.size || 1); holder.position.copy(sk.wristV).multiplyScalar(-(sk.size || 1));
-    flash.position.copy(sk.muzzleV); cable.cols = sk.coil; cable.fresh = true; sk.st = {};
+    flash.position.copy(sk.muzzleV); flash.position.z -= 0.02; cable.cols = sk.coil; cable.fresh = true; sk.st = {};   // #96: a hair past the muzzle (bore = -z)
   }
   function settle() {                                                             // jump to the rest pose, let the cable hang
     const L = LAYOUTS[layoutName]; base.set(L.x, L.y, L.z); scale = L.s; for (const k of LKEYS) P[k] = L[k];
@@ -802,7 +804,11 @@ function create(THREE, opts) {
       const dk = (window.BLAM && window.BLAM.FX && window.BLAM.FX.dark) ? 1.35 : 1;   // dark scenes (#92): a bigger lick
       flash.visible = true; flashMat.map = tex[skin.flash][f];
       const len = FS.len * (f ? 0.62 : 1) * flashScale * dk, h = FS.h * (f ? 0.8 : 1) * flashScale * dk;
-      flash.scale.set(h, h, len); flash.rotation.z = flashRot;
+      flash.scale.set(h, h, len);
+      // axial billboard: spin the cross round the bore so plane A's face points at the camera (the gun group is a camera
+      // child, so the camera sits at the group's origin); flashRot only flips which way the jagged edge points
+      flash.rotation.z = 0; flash.updateWorldMatrix(true, false); _fc.set(0, 0, 0); flash.worldToLocal(group.localToWorld(_fc));
+      flash.rotation.z = Math.atan2(_fc.y, _fc.x) + (flashRot >= Math.PI ? Math.PI : 0);
     } else flash.visible = false;
     parts.update(dt);
     chain(); toGroup(skin.cableV, _a); dirGroup(skin.cableDir, _d); _a2.copy(_a).addScaledVector(_d, cable.SEG);
