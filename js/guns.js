@@ -552,6 +552,27 @@ function tongueFrames(THREE, style) {
 // (lengths are ~x1.6 what a side view would need: in first person the bore points mostly into the screen and the tongue
 // foreshortens to about half; the plane spins round the bore every frame to face the camera, see anim())
 const FLASH_SIZE = { guncon: { len: 0.44, h: 0.15 }, justifier: { len: 0.56, h: 0.17 }, zapper: { len: 0.38, h: 0.14 }, revolver: { len: 0.24, h: 0.09 } };   // 0.026: Jon 'barely anything' at 0.27 -> ~x1.65
+// #96 part 2 (0.027): a camera-facing BURST at the tip for the first-person view. The tongue foreshortens to nothing when
+// the bore points into the screen (Jon: 'I see it only when I shoot toward the menu buttons' = the gun swung sideways), so
+// a jagged pixel star (never a disc) sits at the muzzle too, sized by how much the bore points into the screen.
+function burstFrames(THREE, style) {
+  const out = [], N = 16, spikes = style === 'cap' ? 4 : 8;
+  const C = style === 'ray' ? ['bone', 'lime', 'green', 'cyan'] : style === 'cap' ? ['lemon', 'orange', 'rust', 'rust'] : ['bone', 'lemon', 'yellow', 'orange'];
+  for (let f = 0; f < 2; f++) {
+    const cv = document.createElement('canvas'); cv.width = cv.height = N;
+    const g = cv.getContext('2d'), R = (x, y, k) => { g.fillStyle = CSS(k); g.fillRect(x, y, 1, 1); };
+    const rad = f ? 5.2 : 7.6;
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const dx = x + 0.5 - N / 2, dy = y + 0.5 - N / 2, d = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
+      const r = rad * (0.5 + 0.5 * Math.pow(Math.abs(Math.cos(a * spikes / 2)), 0.5));        // jagged star edge
+      if (d > r) continue;
+      R(x, y, d < r * 0.3 ? C[0] : d < r * 0.55 ? C[1] : d < r * 0.8 ? C[2] : C[3]);
+    }
+    const t = new THREE.CanvasTexture(cv); t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; out.push(t);
+  }
+  return out;
+}
+const BURST_SIZE = { guncon: 0.14, justifier: 0.17, zapper: 0.13, revolver: 0.085 };   // holder units at full into-the-screen aim
 // Pool of unit cubes (one InstancedMesh, unlit palette colours): shells, sparks, smoke puffs.
 class Particles {
   constructor(THREE, n, parent) {
@@ -696,13 +717,16 @@ function create(THREE, opts) {
   const flash = new THREE.Group(); flash.name = 'gun-flash'; flash.visible = false;
   const flashA = new THREE.Mesh(tongueGeo, flashMat), flashB = new THREE.Mesh(tongueGeo, flashMat); flashB.rotation.z = Math.PI / 2;
   flashA.renderOrder = flashB.renderOrder = 10; flash.add(flashA); flash.add(flashB); holder.add(flash);
+  const btex = { fire: burstFrames(THREE, 'fire'), ray: burstFrames(THREE, 'ray'), cap: burstFrames(THREE, 'cap') };
+  const burst = new THREE.Sprite(new THREE.SpriteMaterial({ map: btex.fire[0], alphaTest: 0.5, transparent: false, depthTest: false, depthWrite: false, fog: false }));
+  burst.renderOrder = 11; burst.visible = false; burst.name = 'gun-burst'; holder.add(burst);
   const parts = new Particles(THREE, 80, group), cable = new Cable(THREE, group), skins = {};
   for (const m of [parts.mesh, cable.mesh]) m.geometry.boundingBox = new THREE.Box3();   // effects never count toward the gun's bounds
   let skin = null, skinIndex = 0, layoutName = LAYOUTS[menuPark(opts.layout)] ? menuPark(opts.layout) : (String(opts.layout || '').indexOf('mobile') === 0 ? 'mobile' : 'desktop');
   const L0 = LAYOUTS[layoutName], base = new THREE.Vector3(L0.x, L0.y, L0.z);
   let scale = L0.s;
   const P = {}; for (const k of LKEYS) P[k] = L0[k];                             // eased layout parameters
-  let reloadT = 0, reloadDur = 0, flashRot = 0, flashScale = 1; const _fc = new THREE.Vector3();
+  let reloadT = 0, reloadDur = 0, flashRot = 0, flashScale = 1; const _fc = new THREE.Vector3(), _bd = new THREE.Vector3(), _bq = new THREE.Quaternion();
   const aim = { x: 0, y: 0 };
   const S = { t: 0, frame: 0, trig: 0, kick: 0, kickV: 0, rp: -1, rpPrev: -1, empty: false, emptyFrame: -1, reloadFrame: -1, fireAge: 9, dryAge: 9, shots: 0 };
   S.cross = a => S.rp >= 0 && S.rpPrev < a && S.rp >= a;
@@ -809,7 +833,13 @@ function create(THREE, opts) {
       // child, so the camera sits at the group's origin); flashRot only flips which way the jagged edge points
       flash.rotation.z = 0; flash.updateWorldMatrix(true, false); _fc.set(0, 0, 0); flash.worldToLocal(group.localToWorld(_fc));
       flash.rotation.z = Math.atan2(_fc.y, _fc.x) + (flashRot >= Math.PI ? Math.PI : 0);
-    } else flash.visible = false;
+      // the burst: how much the bore points into the screen (camera space -z); big when it does, small when the tongue is side-on
+      _bd.set(0, 0, -1).transformDirection(flash.matrixWorld);
+      if (group.parent) { group.parent.getWorldQuaternion(_bq); _bd.applyQuaternion(_bq.invert()); }
+      const into = Math.max(0, -_bd.z), bs = (BURST_SIZE[SKINS[skinIndex].id] || BURST_SIZE.guncon) * (0.4 + 0.8 * into) * flashScale * dk * (f ? 0.7 : 1);
+      burst.visible = true; burst.material.map = btex[skin.flash][f]; burst.material.rotation = flashRot;
+      burst.scale.set(bs, bs, 1); burst.position.copy(skin.muzzleV); burst.position.z -= 0.02 + len * 0.25;
+    } else { flash.visible = false; burst.visible = false; }
     parts.update(dt);
     chain(); toGroup(skin.cableV, _a); dirGroup(skin.cableDir, _d); _a2.copy(_a).addScaledVector(_d, cable.SEG);
     _b.set(base.x + 0.06, -0.98, base.z + 0.08);
