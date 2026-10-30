@@ -332,10 +332,12 @@ function gunEject() {
 function eject(pl) { if (!pl) return; const st = magState(pl); st.hooked = true; st.pend = Math.min(st.pend + 1, CAS_MAX); }
 const skinKind = () => { const G = B.G; return (G && G.gun && G.gun.skinId) || 'guncon'; };
 const magKind = pl => pl && pl.ammo && pl.ammo.gun ? skinKind() : 'guncon';   // the rival's skin isn't synced: brass
+// H.heartsOff (performance.now() ms, set by a stage): until then the hearts BUZZ DARK (LASER TAG: your vest was tagged)
 function hearts(x, y, n, max, right) {
+  const now = performance.now(), off = H.heartsOff > now, jit = off ? ((((now / 40) | 0) % 2) ? 1 : -1) : 0;
   for (let i = 0; i < max; i++) {
-    const hx = right ? x - 9 - i * 10 : x + i * 10;
-    sprite(HEART, hx, y, 1, i < n ? HEART_KEY : HEART_OFF, i < n ? 'heart' : 'heartoff');
+    const hx = (right ? x - 9 - i * 10 : x + i * 10) + jit, on = i < n && !off;
+    sprite(HEART, hx, y, 1, on ? HEART_KEY : HEART_OFF, on ? 'heart' : 'heartoff');
   }
 }
 // HIT! badge: small and short (0.35 s), sits beside the ammo shell, never at the aim point
@@ -537,6 +539,9 @@ function drawPlay(hs, t) {
   }
   if (hs.label) text3r(hs.label, RW - 4, 4, 'yellow', 1, 'void');
   drawCasings('hx', t);                                  // #72: casings fly over the gun and the strip
+  // a stage's own HUD layer, over the play HUD and under the crosshair (LASER TAG: the aiming dots + stamps): def.drawHud(run, hs, t)
+  const run = B.G && B.G.run;
+  if (run && run.def && run.def.drawHud) { try { run.def.drawHud(run, hs, t); } catch (e) { if (!H.hudErr) { H.hudErr = 1; console.error('[BLAM] stage HUD', e); } } }
 }
 Object.assign(H, { shell, mag: magDraw, magPrep, magGeom, eject, drawCasings, gunEject, casImg, hearts, hitBadge, timerBall, quotaPill, counter, crosshair, reloadPrompt, reloadMarker, markerState, markerSize, markerKind, strip, drawPlay, HIT_LIFE, PCOL });
 

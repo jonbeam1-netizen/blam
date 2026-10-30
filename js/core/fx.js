@@ -10,9 +10,21 @@
      The head moves linearly in SCREEN space (perspective-correct param), so every tracer reads the same speed.
    - RICOCHET (#86): a hard ricochet burst on an environment miss, oriented along the surface normal.
      Colour sets by stage id: B.FX.ricochetColors[stageId] (a stage may set its own), default = white-hot steel.
+   - DARK SCENES (#92, 2026-10-30): FX.setDark(owner, on) / FX.dark (read-only flag). An owner refreshes its claim every
+     frame while its scene is dark (LASER TAG: its whole run; the range: while LIGHTS OUT is on); a claim not refreshed
+     for 0.3 s lapses, so a run that went away can never leave the flag on. While FX.dark, every shot gets a MUZZLE GLOW:
+     a 1-2 frame bloom at the muzzle in the gun's colours (GLOW below: AQUA PRO white-yellow, HOT ROD orange + lit smoke,
+     RAY-85 a lingering green, CANDY SIX a tiny orange pop): ONE additive camera-space quad (one draw call) over the gun's
+     front, a short lift of the post pass's boost, and FX.glowNow { k, col, world } so a stage can light its nearest cover
+     for that frame (LASER TAG's env shader does). Never in normal lighting.
+   - HAZE (#92): FX.setHaze(0..1) (refreshed per frame like the dark flag; LASER TAG's fog bursts): tracers fly wider and
+     drag a soft halo (per gun colour, HALO below) through the haze.
+   - FX.beam(worldFrom, u, v, look): a tracer the other way, from a point in the scene to the screen point (u, v) just in
+     front of the camera (LASER TAG: a tagger's red beam at you).
    API: FX.shot(ray) -> tracer (origin = projected muzzle, or the bottom edge when the gun is off screen)
         FX.land(tracer, worldPoint | null)   (null = nothing hit: fly to the far point)
         FX.rivalShot(by, worldPoint)   FX.ricochet(point, normal, inDir, stageId)   FX.update(dt) (from Tg.updateChips)
+        FX.setDark(owner, on) / FX.dark   FX.setHaze(v) / FX.haze   FX.beam(from, u, v, look)   FX.glowNow
         FX.timeScale (dev: 0.02 freezes a tracer for a screenshot)
    ========================================================================================= */
 window.BLAM = window.BLAM || {};
@@ -60,15 +72,70 @@ function quad(p0, p1, s0, s1, h0, h1, hex) {             // p0/p1 centre points,
   nq++;
 }
 
+// ---------- #92 dark scenes + haze: claims that lapse unless refreshed (a run that went away can't leave them on) ----------
+const darkOwners = {};
+function setDark(owner, on) { darkOwners[owner || 'stage'] = on ? performance.now() : 0; }
+function isDark() { const n = performance.now(); for (const k in darkOwners) if (darkOwners[k] && n - darkOwners[k] < 300) return true; return false; }
+let hazeV = 0, hazeAt = -1e9;
+function setHaze(v) { hazeV = Math.max(0, Math.min(1, +v || 0)); hazeAt = performance.now(); }
+function hazeNow() { return performance.now() - hazeAt < 300 ? hazeV : 0; }
+// the halo a tracer drags through haze (palette names, flight -> fade), per gun skin id
+const HALO = { guncon: ['amber', 'tan', 'chestnut'], justifier: ['orange', 'rust', 'oxblood'], zapper: ['lime', 'green', 'forest'],
+  revolver: ['mist', 'haze', 'steel'], enemy: ['red', 'crimson', 'oxblood'] };
+
+// ---------- #92 MUZZLE GLOW: one additive camera-space quad, pixel-stepped rings in the gun's colours ----------
+// px = radius in game pixels, T = s of life (1-2 frames; RAY-85 lingers), cols = core -> rim, k = peak, env = the colour it
+// throws on the scene (FX.glowNow, read by a dark stage's env shader), smoke = HOT ROD's lit smoke puffs
+const GLOW = {
+  guncon: { px: 30, T: 0.034, cols: ['bone', 'lemon', 'yellow', 'amber'], k: 1.0, env: 'lemon' },
+  justifier: { px: 36, T: 0.04, cols: ['lemon', 'yellow', 'orange', 'rust'], k: 1.05, env: 'orange', smoke: ['orange', 'amber', 'rust', 'orange', 'rust'] },
+  zapper: { px: 32, T: 0.15, cols: ['bone', 'lime', 'green', 'forest'], k: 0.95, env: 'lime' },
+  revolver: { px: 13, T: 0.03, cols: ['lemon', 'orange', 'orange', 'rust'], k: 0.8, env: 'orange' }
+};
+const glowU = { c0: { value: new THREE.Color() }, c1: { value: new THREE.Color() }, c2: { value: new THREE.Color() }, c3: { value: new THREE.Color() }, uK: { value: 0 } };
+const glowMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({
+  uniforms: glowU,
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform vec3 c0; uniform vec3 c1; uniform vec3 c2; uniform vec3 c3; uniform float uK; varying vec2 vUv;
+    void main(){ float r = length(vUv - 0.5) * 2.0; if (r > 1.0) discard;
+      float i = uK * pow(1.0 - r, 1.7);
+      vec3 c = i > 0.62 ? c0 : i > 0.36 ? c1 : i > 0.17 ? c2 : c3;
+      gl_FragColor = vec4(c * min(1.0, i * 2.2 + 0.18), 1.0); }`,
+  transparent: true, depthTest: false, depthWrite: false, fog: false,
+  blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
+  blendEquationAlpha: THREE.AddEquation, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor   // keeps the dither class
+}));
+glowMesh.frustumCulled = false; glowMesh.renderOrder = 1003; glowMesh.visible = false; glowMesh.name = 'fx-muzzle-glow';
+R.camera.add(glowMesh);
+const GL = { look: null, age: 9, world: new THREE.Vector3() };
+const glowNow = { k: 0, col: new THREE.Color(), world: new THREE.Vector3(0, -99, 0) };
+function startGlow(aCam, skin) {
+  const L = GLOW[skin] || GLOW.guncon;
+  GL.look = L; GL.age = 0;
+  ['c0', 'c1', 'c2', 'c3'].forEach((n, i) => glowU[n].value.setHex(PAL[L.cols[i]]));
+  const z = Math.max(0.12, -aCam.z - 0.02);
+  glowMesh.position.set(aCam.x, aCam.y, -z); glowMesh.scale.setScalar(2 * L.px * pxUnit(z));
+  GL.world.copy(aCam).applyMatrix4(STEADY); glowNow.col.setHex(PAL[L.env]); glowNow.world.copy(GL.world);
+  R.postMat.uniforms.boost.value = Math.max(R.postMat.uniforms.boost.value, 0.4);   // the room flashes with it
+  if (L.smoke) for (let i = 0; i < 5; i++) Tg.spawnChip(GL.world, _w.set(rnd(-0.25, 0.25), rnd(0.15, 0.5), rnd(-0.35, 0.05)), rnd(0.012, 0.022), PAL[L.smoke[i]], rnd(0.25, 0.45), -0.03);
+}
+function stepGlow(dt) {
+  const L = GL.look;
+  if (!L || GL.age >= L.T) { if (glowMesh.visible) glowMesh.visible = false; glowNow.k = 0; return; }
+  GL.age += dt;
+  const q = Math.min(1, GL.age / L.T), k = L.k * (q < 0.5 ? 1 : 1 - (q - 0.5) * 1.6);
+  glowU.uK.value = k; glowMesh.visible = k > 0.02; glowNow.k = Math.max(0, k);
+}
+
 // ---------- spawning ----------
 function lookOf(gun) {
   try { if (gun && gun.tracerLook) return gun.tracerLook() || DEFAULT_LOOK; } catch (e) {}
   const T = B.Guns && B.Guns.TRACERS, id = gun && gun.skinId;
   return (T && id && T[id]) || DEFAULT_LOOK;
 }
-function make(aCam, look) {
+function make(aCam, look, skin) {
   if (live.length >= MAXT) live.shift();
-  const t = { a: aCam.clone(), b: null, bW: null, age: 0, look, landed: false, hit: false, impactDone: false, rayO: null, rayD: null };
+  const t = { a: aCam.clone(), b: null, bW: null, age: 0, look, landed: false, hit: false, impactDone: false, rayO: null, rayD: null, hz: hazeNow(), skin: skin || 'guncon' };
   live.push(t); return t;
 }
 // cam-space origin for a local shot: the projected muzzle while it is on screen, else the bottom edge under the aim
@@ -89,8 +156,16 @@ function localOrigin(ray, out) {
 }
 function shot(ray, opts) {
   opts = opts || {};
-  const t = make(localOrigin(ray, _a), opts.look || lookOf(B.G && B.G.gun));
+  const g = B.G && B.G.gun, skin = (g && g.skinId) || 'guncon';
+  const t = make(localOrigin(ray, _a), opts.look || lookOf(g), skin);
   t.rayO = ray.ray.origin.clone(); t.rayD = ray.ray.direction.clone();
+  if (isDark()) try { startGlow(t.a, skin); } catch (e) {}       // #92: only when the scene is dark
+  return t;
+}
+// a beam the other way: from a world point (a tagger's phaser) to the screen point (u, v) just in front of the camera
+function beam(from, u, v, look, depth) {
+  const t = make(toCam(from, _a), look || DEFAULT_LOOK, 'enemy');
+  t.landed = true; t.b = R.screenToCam(u, v, depth || 0.6, new THREE.Vector3()); t.bW = t.b.clone().applyMatrix4(STEADY); setPath(t);
   return t;
 }
 function land(t, point) {
@@ -171,10 +246,10 @@ function sideAt(p, out) {                           // screen-plane side vector 
   out.crossVectors(_sd, p); const l = out.length();
   return l > 1e-6 ? out.multiplyScalar(1 / l) : out.set(1, 0, 0);
 }
-function drawLayer(t, L, uT, uH, f, wave) {
+function drawLayer(t, L, uT, uH, f, wave, wm) {
   if (uH - uT < 1e-4) return;
   const ci = Math.min(L.cols.length - 1, Math.floor(f * L.cols.length)), hex = PAL[L.cols[ci]] != null ? PAL[L.cols[ci]] : PAL.bone;
-  const wpx = Math.max(1, L.w * (1 - 0.45 * f)), segs = wave ? Math.max(2, Math.min(48, Math.ceil((uH - uT) * t.pathPx / 3))) : 1;
+  const wpx = Math.max(1, L.w * (1 - 0.45 * f)) * (wm || 1), segs = wave ? Math.max(2, Math.min(48, Math.ceil((uH - uT) * t.pathPx / 3))) : 1;
   const amp = wave ? wave.amp : 0, wl = wave ? wave.wl : 1, ph = wave ? t.age * (wave.speed || 0) : 0;
   const at = (u, out, so) => {
     pointAt(t, u, out); const z = -out.z, unit = pxUnit(z);
@@ -192,24 +267,32 @@ function drawLayer(t, L, uT, uH, f, wave) {
     _q0.copy(_q1); _o0.copy(_o1); h0 = h1;
   }
 }
+const _halo = { len: Infinity, w: 4, cols: HALO.guncon };
 function update(dt) {
-  if (!live.length) { if (mesh.visible) mesh.visible = false; return; }
   const G = B.G, ts = (G && G.slow < 1 && !(G.run && G.run.versus) ? G.slow : 1) * FX.timeScale;
+  stepGlow(dt * ts);
+  if (!live.length) { if (mesh.visible) mesh.visible = false; return; }
   nq = 0;
   for (let i = 0; i < live.length; i++) {
     const t = live[i];
     if (!t.landed) resolve(t);
     t.age += dt * ts;
-    const lk = t.look, T = lk.T || 0.06, uH = t.age / T;
-    let maxLen = 0; for (const L of lk.layers) if (isFinite(L.len)) maxLen = Math.max(maxLen, L.len);
-    const retract = maxLen / t.pathPx * T, fadeT = Math.max(lk.fade || 0, lk.layers.some(L => !isFinite(L.len)) ? (lk.fade || 0.08) : retract);
+    const lk = t.look, T = lk.T || 0.06, uH = t.age / T, hz = t.hz || 0;
+    let maxLen = 0, maxW = 1; for (const L of lk.layers) { if (isFinite(L.len)) maxLen = Math.max(maxLen, L.len); maxW = Math.max(maxW, L.w); }
+    const retract = maxLen / t.pathPx * T;
+    let fadeT = Math.max(lk.fade || 0, lk.layers.some(L => !isFinite(L.len)) ? (lk.fade || 0.08) : retract);
+    if (hz > 0.05) fadeT = Math.max(fadeT, 0.06 + 0.1 * hz);           // #92: the beam's light hangs in the haze a moment
     const e = t.age - T, f = e > 0 ? Math.min(1, e / Math.max(1e-3, fadeT)) : 0;
     if (e >= 0 && !t.impactDone) { t.impactDone = true; impact(t); }
     if (e > fadeT) { live.splice(i--, 1); continue; }
     _sd.copy(t.b).sub(t.a);
+    if (hz > 0.05) {                                                     // haze: a wide soft halo along the whole path first
+      _halo.w = (maxW + 3) * (0.6 + 0.6 * hz); _halo.cols = HALO[t.skin] || HALO.guncon;
+      drawLayer(t, _halo, 0, Math.min(1, uH), f, null);
+    }
     for (const L of lk.layers) {
       const hU = Math.min(1, uH), tU = isFinite(L.len) ? Math.max(0, uH - L.len / t.pathPx) : 0;
-      if (tU < 1) drawLayer(t, L, tU, hU, f, lk.wave);
+      if (tU < 1) drawLayer(t, L, tU, hU, f, lk.wave, 1 + 0.9 * hz);
     }
   }
   geo.setDrawRange(0, nq * 6);
@@ -242,5 +325,8 @@ function hookVersus() {
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hookVersus); else setTimeout(hookVersus, 0);
 
-const FX = B.FX = { shot, land, rivalShot, ricochet, ricochetColors, update, DEFAULT_LOOK, rivalLook: null, timeScale: 1, mesh, live, hookVersus };
+const FX = B.FX = { shot, land, rivalShot, ricochet, ricochetColors, update, DEFAULT_LOOK, rivalLook: null, timeScale: 1, mesh, live, hookVersus,
+  setDark, setHaze, beam, glowNow, GLOW, HALO, glowMesh };
+Object.defineProperty(FX, 'dark', { get: isDark, enumerable: true });     // #92: true while a dark scene holds a fresh claim
+Object.defineProperty(FX, 'haze', { get: hazeNow, enumerable: true });
 })(window.BLAM);

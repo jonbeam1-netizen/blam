@@ -438,4 +438,116 @@ K.stageBeds.invasion = (ctx, bus) => {
     }
   };
 };
+// ---------- LASER TAG ----------
+// 90s laser tag: square-wave vest chirps, phaser pews with a falling whistle, the vest buzzer, a siren, a robot announcer
+const pls = (v, d = 0.25) => K.pulse(v.ctx, d);
+def('taggerIn', { max: 3, gap: 0.06, pv: 0.7, dv: 0.1, verb: 0.15, pri: 1, gain: 4.8, pick: v => (v.o.team === 'green' ? 1 : 0) },
+  v => {                                   // a red vest arms: a hard two-step power-up chirp
+    tone(v, { wave: pls(v), f: 520, fs: [[0.05, 1040]], a: 0.003, hold: 0.03, d: 0.05, g: 0.05, lp: 4000 });
+    tone(v, { wave: pls(v), f: 780, fs: [[0.04, 1560]], at: 0.07, a: 0.003, hold: 0.02, d: 0.06, g: 0.045, lp: 4000 });
+    return 0.2;
+  },
+  v => { tone(v, { type: 'triangle', f: 660, f2: 990, ft: 0.08, a: 0.005, d: 0.12, g: 0.07 }); tone(v, { type: 'triangle', f: 990, at: 0.09, a: 0.005, d: 0.1, g: 0.05 }); return 0.22; });   // green: a friendly bloop
+def('dotCharge', { max: 4, gap: 0.03, pv: 0, dv: 0.02, verb: 0.05, pri: 2, gain: 5 },
+  v => {                                   // the aiming dot closing: a beep a step higher every sixth of the slide
+    const k = K.clamp(v.o.k | 0, 0, 5), f = 880 * st(k * 2);
+    tone(v, { type: 'square', f, a: 0.002, hold: 0.022 + 0.005 * k, d: 0.02, g: 0.02 + 0.005 * k, lp: 3600, np: true });
+    return 0.08;
+  });
+def('taggerFire', { max: 3, gap: 0.03, pv: 0.5, dv: 0.1, verb: 0.2, pri: 3, gain: 7.5 },
+  v => {                                   // PEW: a sawtooth dive, a descending whistle, a zap of noise
+    tone(v, { type: 'sawtooth', f: 2600, fs: [[0.22, 320]], a: 0.002, d: 0.24, g: 0.08, lp: 5000 });
+    tone(v, { type: 'sine', f: 3400, fs: [[0.35, 900]], a: 0.004, d: 0.35, g: 0.04 });
+    noise(v, { ft: 'bandpass', ff: 3000, ff2: 800, fft: 0.08, q: 2, d: 0.08, g: 0.12 });
+    return 0.42;
+  });
+def('vestDown', { max: 1, cool: 0.2, pv: 0, dv: 0.05, verb: 0.1, pri: 4, gain: 2.4 },
+  v => {                                   // YOUR vest is hit: a harsh low buzzer stuttering off + a power-down sweep
+    for (let k = 0; k < 5; k++) tone(v, { type: 'square', f: 110, at: k * 0.075, a: 0.003, hold: 0.045, d: 0.01, g: 0.1, lp: 1400, np: true });
+    tone(v, { type: 'square', f: 660, f2: 90, ft: 0.45, a: 0.004, d: 0.45, g: 0.045, lp: 2500 });
+    return 0.55;
+  });
+def('tagHit', { max: 3, gap: 0.04, pv: 0.3, dv: 0.08, verb: 0.15, pri: 2, gain: 4.8 },
+  v => {                                   // their vest chirps off: three falling notes (a sensor: brighter, quicker) + a low thunk
+    const s = v.o.zone === 'sensor', b = s ? 1760 : 1320;
+    [0, -5, -12].forEach((n, i) => tone(v, { wave: pls(v), f: b * st(n), at: i * (s ? 0.05 : 0.07), a: 0.002, hold: 0.03, d: 0.03, g: 0.045, lp: 5000 }));
+    tone(v, { type: 'square', f: 140, at: s ? 0.15 : 0.2, a: 0.003, hold: 0.1, d: 0.08, g: 0.035, lp: 900 });
+    return 0.42;
+  });
+def('friendlyFire', { max: 1, cool: 0.3, pv: 0, dv: 0.05, verb: 0.12, pri: 4, gain: 2.2 },
+  v => { for (let k = 0; k < 2; k++) [196, 207].forEach(f => tone(v, { type: 'sawtooth', f, at: k * 0.2, a: 0.005, hold: 0.12, d: 0.04, g: 0.05, lp: 1800, np: true })); return 0.45; });   // the wrong-team buzzer
+def('refWhistle', { max: 1, cool: 0.4, pv: 0.2, dv: 0.05, verb: 0.2, pri: 3, gain: 3.2 },
+  v => {                                   // a pea whistle: shrill, with the pea's fast trill (two blasts on a foul)
+    const n = v.o.foul ? 2 : 1;
+    for (let k = 0; k < n; k++) tone(v, { type: 'sine', f: 2900, at: k * 0.28, a: 0.01, hold: v.o.foul ? 0.14 : 0.24, d: 0.05, g: 0.05, vib: [42, 0.035] });
+    noise(v, { ft: 'bandpass', ff: 3000, q: 4, a: 0.01, hold: 0.15, d: 0.05, g: 0.02 });
+    return 0.62;
+  });
+def('fogBurst', { max: 1, cool: 1, pv: 0.3, dv: 0.1, verb: 0.25, pri: 2, gain: 1.3 },
+  v => {                                   // the fog machine: a pneumatic PSSHHH that rolls off
+    noise(v, { ft: 'bandpass', ff: 5000, ff2: 1800, fft: 1.2, q: 0.7, a: 0.04, hold: 0.5, d: 0.9, g: 0.12 });
+    noise(v, { kind: 'pink', ft: 'lowpass', ff: 600, a: 0.02, hold: 0.3, d: 0.6, g: 0.09 });
+    return 1.5;
+  });
+def('baseOpen', { max: 1, cool: 1, pv: 0, dv: 0.02, verb: 0.3, pri: 3, gain: 5 },
+  v => {                                   // the enemy base: a square siren wailing up and down twice over the shutter's servo
+    tone(v, { type: 'square', f: 520, fs: [[0.4, 980], [0.8, 520], [1.2, 980], [1.6, 520]], a: 0.05, hold: 1.4, d: 0.2, g: 0.028, lp: 2400, np: true });
+    tone(v, { type: 'sawtooth', f: 90, f2: 180, ft: 0.3, a: 0.02, d: 0.3, g: 0.05, lp: 700 });
+    return 1.7;
+  });
+def('baseHit', { max: 1, pv: 0.2, dv: 0.05, verb: 0.3, pri: 4, gain: 0.9 },
+  v => {                                   // the base goes: a zap up, an electronic boom, a falling alarm chime
+    tone(v, { type: 'square', f: 300, f2: 2400, ft: 0.15, a: 0.003, d: 0.16, g: 0.05, lp: 4000 });
+    tone(v, { f: 70, f2: 30, ft: 0.8, at: 0.12, d: 0.9, g: 0.5, drive: 1.6 });
+    noise(v, { kind: 'brown', ft: 'lowpass', ff: 1600, ff2: 150, fft: 0.9, at: 0.12, d: 1.0, g: 0.42 });
+    [0, -3, -7, -12].forEach((n, i) => K.bell(v, { f: 1568 * st(n), at: 0.3 + i * 0.1, d: 0.4, g: 0.05, ratios: [1, 2.76], amps: [1, 0.3] }));
+    return 1.3;
+  });
+def('gameOn', { max: 1, pv: 0, dv: 0.02, verb: 0.25, pri: 4, gain: 1.8 },
+  v => {                                   // the arena announcer: a robot "GAME ON!" (formant voice) + a laser sweep
+    const w = pls(v, 0.3);
+    noise(v, { ft: 'bandpass', ff: 2200, q: 2, d: 0.03, g: 0.08 });                                                       // "g"
+    K.voice(v, { wave: w, f: 150, fs: [[0.2, 140]], at: 0.02, a: 0.01, hold: 0.14, d: 0.04, g: 0.28, formants: [[530, 6, 1], [1840, 8, 0.6], [2480, 10, 0.3]] });    // "GAY"
+    tone(v, { type: 'sine', f: 140, at: 0.2, a: 0.01, hold: 0.05, d: 0.05, g: 0.12, lp: 400, np: true });                   // "m"
+    K.voice(v, { wave: w, f: 145, fs: [[0.3, 118]], at: 0.3, a: 0.01, hold: 0.2, d: 0.1, g: 0.3, formants: [[620, 6, 1], [940, 8, 0.7], [2400, 10, 0.2]] });   // "ON"
+    tone(v, { type: 'sine', f: 120, at: 0.6, a: 0.01, hold: 0.05, d: 0.08, g: 0.1, lp: 380, np: true });                   // "n"
+    tone(v, { type: 'sawtooth', f: 200, f2: 2400, ft: 0.25, at: 0.7, a: 0.004, d: 0.25, g: 0.035, lp: 5000 });
+    return 1.0;
+  });
+// the arena bed: the UV tubes' 120 Hz hum, a muffled 90s beat through the walls, far-off pews now and then. Waits in
+// K.stageBeds; stages/lasertag.js adds it to K.beds (id 'lasertag').
+K.stageBeds.lasertag = (ctx, bus) => {
+  const now = ctx.currentTime, out = ctx.createGain(), srcs = [];
+  out.gain.setValueAtTime(0, now); out.gain.linearRampToValueAtTime(1, now + 2.5); out.connect(bus);
+  const hb = K.filt(ctx, 'bandpass', 240, 1.4); hb.connect(out);
+  [[120, 0.0035], [240, 0.0016], [360, 0.0008]].forEach(([f, g]) => { const o = ctx.createOscillator(), gn = K.gain(ctx, g); o.type = 'sawtooth'; o.frequency.value = f; o.connect(gn).connect(hb); o.start(now); srcs.push(o); });
+  const lfo = ctx.createOscillator(), lg = K.gain(ctx, 60); lfo.frequency.value = 0.13; lfo.connect(lg).connect(hb.frequency); lfo.start(now); srcs.push(lfo);
+  const lp = K.filt(ctx, 'lowpass', 300, 0.8); lp.connect(out);
+  const STEP = 60 / 118 / 2;                                    // eighth notes at 118 BPM
+  const kick = t => { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.setValueAtTime(120, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.03, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0005, t + 0.2); o.connect(g).connect(lp); o.start(t); o.stop(t + 0.22); };
+  const snare = t => { const s = ctx.createBufferSource(), f = K.filt(ctx, 'bandpass', 900, 0.8), g = ctx.createGain(); s.buffer = K.noiseBuf(ctx, 'white');
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.012, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0003, t + 0.12); s.connect(f).connect(g).connect(lp); s.start(t, Math.random()); s.stop(t + 0.14); };
+  const pew = t => { const o = ctx.createOscillator(), g = ctx.createGain(), p = ctx.createStereoPanner ? ctx.createStereoPanner() : null, f0 = 1500 + Math.random() * 900;
+    o.type = 'square'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f0 * 0.25, t + 0.16);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.0025, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
+    const lf = K.filt(ctx, 'lowpass', 2200, 0.7); o.connect(lf).connect(g); if (p) { p.pan.value = Math.random() * 1.6 - 0.8; g.connect(p).connect(out); } else g.connect(out); o.start(t); o.stop(t + 0.18); };
+  let stopped = false, beatT = now + 0.6, step = 0, next = now + 1.5;
+  return {
+    tick(until) {
+      if (stopped) return;
+      if (beatT < ctx.currentTime - 0.5) beatT = ctx.currentTime + 0.1;
+      while (beatT < until) { try { const s = step % 8; if (s === 0 || s === 3 || s === 4) kick(beatT); if (s === 2 || s === 6) snare(beatT); } catch (e) {} beatT += STEP; step++; }
+      if (next < ctx.currentTime - 0.5) next = ctx.currentTime + 1;
+      while (next < until) { try { pew(next); if (Math.random() < 0.4) pew(next + 0.12); } catch (e) {} next += 1.4 + Math.random() * 3.6; }
+    },
+    stop(fade = 1.5) {
+      if (stopped) return; stopped = true;
+      const t = ctx.currentTime, gp = out.gain;
+      gp.cancelScheduledValues(t); gp.setValueAtTime(gp.value, t); gp.linearRampToValueAtTime(0, t + fade);
+      for (const x of srcs) { try { x.stop(t + fade + 0.1); } catch (e) {} }
+      setTimeout(() => { try { out.disconnect(); } catch (e) {} }, (fade + 1) * 1000);
+    }
+  };
+};
 })(window.BLAM);

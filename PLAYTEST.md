@@ -1,7 +1,21 @@
-# B.L.A.M. play-test list (builds 0.008 to 0.020, live 2026-10-31)
+# B.L.A.M. play-test list (builds 0.008 to 0.021, live 2026-10-30)
 
 Everything that changed since you last played a build by ear, in one place. Tick what is good, gripe what is not.
 Live link: https://jonbeam1-netizen.github.io/blam/ (hard refresh once: Ctrl+Shift+R).
+
+## Build 0.021 (2026-10-30, 03:00): LASER TAG (stage 7) + muzzle glow #92
+- [ ] LASER TAG = TAG 1-3 in FREE PLAY (pages 4-5) and in the course pool. 90s black-light arena: neon tape walls, splatter murals, barrels, confetti carpet, UV tubes, the B.L.A.M. LASER TAG neon sign, an LED scoreboard. Does the vibe land?
+- [ ] THE MECHANIC: a red tagger pops, raises the phaser, and a RED DOT slides in from the screen edge to your crosshair; when it lands they fire = red beam, red flash, hearts buzz dark, LIFE -1. Tag them first and they go dark. Dot slide 1.6 s Beginner / 1.2 / 0.9 / 0.6 s Insane, up to 3 dots at once. Fair? Readable at full speed?
+- [ ] INSANE IS HARSH (agent numbers): a slow bot loses all hearts in 39 of 90 Insane runs. If it feels unfair, the Insane slide goes 0.6 -> 0.7 s (one number in lasertag.js TIER table). Your call.
+- [ ] Sensor hit = 300, body hit = 100, +50 QUICK DRAW stamp for a tag in the first 30 % of the slide. GREEN teammates (FRIENDLY FIRE!) and the striped REFEREE (FOUL!) cost a life. Fakes: a tagger who ducks back, a green in a tagger's old spot, a lean from the other side of the wall.
+- [ ] FOG BURSTS 2-3 a round (silhouettes, vests glow, your tracers drag a halo). THE BASE opens 1-2 times a round with a siren: +500. FINALE: the scoreboard scrolls B.L.A.M. and a line-up of figures flashes each letter.
+- [ ] Variants: TAG 1 TEAM GREEN free fire, TAG 2 QUICK DRAW dots 25 % faster + 8 per mag, TAG 3 BLACKOUT fog all round + 12 per mag. No shot cap anywhere.
+- [ ] #92 MUZZLE GLOW: a 1-2 frame bloom at the barrel per gun colour, ONLY in the dark (Laser Tag always, range LIGHTS OUT). Normal lighting unchanged. Check all four guns in the arena.
+- [ ] Sounds are SYNTH placeholders: phaser pew with the falling whistle, dot charge beeps, vest-down buzz, tag chirp, whistle, fog hiss, base siren, GAME ON sting, a quiet arena bed.
+- [ ] HIGH SCORES is now two blocks side by side (23 rows). The duck's hat touches the left block's corner; readable?
+- [ ] 0.021 also carries hud.js hooks (def.drawHud for the dot, HUD.heartsOff for the buzz) and two lines in range.js lights-out for the dark flag.
+- NOT VERIFIED: nothing heard by ear (muted throughout), no real mouse / touch play, portrait layout of Laser Tag and the 23-row portrait high-score table, a real two-browser versus match.
+- Agent-reported rough spots: the dot covers what you aim at in its last frames (crosshair stays on top); 2 of 90 Insane runs overlap two figures on screen; versus desyncs a life if a hit confirms more than 0.6 s after the dot lands; fog is a surface haze without light shafts; figures are ~2.3 m so far ones read; the near-left wall was moved and narrowed to expose the crates and a lean spot.
 
 ## Build 0.020 (2026-10-30 night): INVASION (stage 6) + range / hive fixes #87-#91
 - [ ] INVASION = UFO 1-3 in FREE PLAY (page 4) and in the course pool. Orbit view: Earth below, saucers drop in from deep space. A saucer that LANDS costs a heart (your pick A). No shot cap (8 / 8 / 12 per mag). Three waves, the MOTHERSHIP closes the last (shields pop off like a column, then the core). Round is ~1.5x the others. Fair at Beginner? Survivable at Insane?

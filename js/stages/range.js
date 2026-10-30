@@ -691,9 +691,10 @@ class LightsFx extends T.Target {
   }
   update(lt, run) {
     const S = this.sp, L = this.lo;
-    if ((run && run.state === 'end') || lt >= S.dur + 0.32) { L.u.uOn.value = 0; L.mesh.visible = false; return true; }
+    if ((run && run.state === 'end') || lt >= S.dur + 0.32) { L.u.uOn.value = 0; L.mesh.visible = false; if (B.FX && B.FX.setDark) B.FX.setDark('lightsout', false); return true; }
     if (run && run.taken) S.pops.forEach((p, i) => { if (this.hits[i] < 0 && run.taken.has(S.id + p.d)) this.hits[i] = lt; });
     const amt = lt < 0.16 ? lt / 0.16 : lt > S.dur ? Math.max(0, 1 - (lt - S.dur) / 0.3) : 1;
+    if (B.FX && B.FX.setDark) B.FX.setDark('lightsout', amt > 0.4);      // #92: muzzle glow while the room is dark (lapses by itself)
     if (!this.said && lt >= 0) { this.said = 1; B.SFX.play('lightsOut'); }
     if (this.said === 1 && lt >= S.dur) { this.said = 2; B.SFX.play('lightsOn'); }
     const sp = lt <= S.dur ? this.spot(lt) : null;

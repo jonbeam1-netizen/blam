@@ -423,21 +423,24 @@ UI.screens.scores = {
   draw(t) {
     if (tall()) return;                                                       // portrait: drawPortrait() has the text
     header('HIGH SCORES', 'LOCAL BESTS ON THIS DEVICE');
-    const x0 = 112, y0 = 40, cw = 72;
+    // 0.021: TWO BLOCKS side by side (7 stages = 22 variants + COURSE = 23 rows; one column stopped fitting at 20)
     const rows = [];
     for (const id of S.order) { const d = S.get(id); for (let v = 0; v < d.variants; v++) rows.push([(d.short || 'RANGE') + ' ' + (v + 1), id + ':' + v]); }
     rows.push(['COURSE', 'course']);
-    // rows squeeze from 14 px down to 9 px so every stage variant + COURSE fits above the BACK sign (14 rows max:
-    // 0.007, four stages = 13 variants + COURSE; 12 cut off SKY 3 and COURSE)
-    const n = Math.min(rows.length, 20), rh = Math.max(7, Math.min(14, Math.floor(132 / n)));   // 6 stages: 19 variants + COURSE = 20 rows at 7 px (0.020)
-    H.plate(x0 - 8, y0 - 4, 312, Math.max(152, 26 + n * rh));
-    const ab = ['BEGINNER', 'ADVANCED', 'VERY HARD', 'INSANE'];
-    ab.forEach((n, i) => H.text3c(n, x0 + 92 + i * cw - 30, y0 + 6, 'oxblood', 1, 'bone'));
-    rows.slice(0, n).forEach(([label, key], r) => {
-      const y = y0 + 20 + r * rh;
-      H.rect(x0, y - 3, 296, 1, 'rust');
-      H.text3(label, x0 + 4, y + 1, 'umber', 1, 'bone');
-      for (let i = 0; i < 4; i++) { const b = B.Save.best(key, i); H.text3c(b ? String(b) : '-', x0 + 92 + i * cw - 30, y + 1, b ? 'void' : 'chestnut', 1, 'bone'); }
+    const half = Math.ceil(rows.length / 2), blocks = [rows.slice(0, half), rows.slice(half)];
+    const cw = 36, bw = 34 + 4 * cw, gapB = 14, totalW = bw * 2 + gapB, xL = Math.round((RW - totalW) / 2), y0 = 40;
+    const rh = Math.max(7, Math.min(10, Math.floor(126 / half)));
+    H.plate(xL - 8, y0 - 4, totalW + 16, Math.max(152, 26 + half * rh));
+    const ab = ['BEG', 'ADV', 'V.HARD', 'INSANE'];
+    blocks.forEach((blk, bi) => {
+      const x0 = xL + bi * (bw + gapB);
+      ab.forEach((n, i) => H.text3c(n, x0 + 34 + i * cw + cw / 2, y0 + 6, 'oxblood', 1, 'bone'));
+      blk.forEach(([label, key], r) => {
+        const y = y0 + 20 + r * rh;
+        H.rect(x0, y - 3, bw, 1, 'rust');
+        H.text3(label, x0, y + 1, 'umber', 1, 'bone');
+        for (let i = 0; i < 4; i++) { const b = B.Save.best(key, i); H.text3c(b ? String(b) : '-', x0 + 34 + i * cw + cw / 2, y + 1, b ? 'void' : 'chestnut', 1, 'bone'); }
+      });
     });
     statusLine('BUILD ' + G().BUILD);
   },

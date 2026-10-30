@@ -58,6 +58,19 @@
      shootingStar: a shooting star streaks across (very quiet; opts.u)
      waveStart   : WAVE n begins (opts.n)
      + the ambience bed 'invasion' (quiet space hum)
+   LASER TAG (stage 7):
+     taggerIn    : a tagger (opts.team 'red') or a teammate ('green') pops up (opts.u)
+     dotCharge   : the aiming dot closes on you, one beep per sixth of its slide (opts.u, opts.k 0-5: higher and louder)
+     taggerFire  : a dot landed: the tagger's phaser PEW (opts.u); the life follows (the engine's 'bomb' sound is swapped
+                   for 'vestDown' in that one call, so a laser hit doesn't explode) + 'lifeLost'
+     vestDown    : YOUR vest was tagged: the buzzer + power-down
+     tagHit      : a tagger's vest chirps off (opts.u, opts.zone 'sensor' | 'body'; 'hit' plays too)
+     friendlyFire: a teammate (or the ref) was shot (opts.u; 'bystander' + 'lifeLost' play too)
+     refWhistle  : the referee strolls in, or was shot (opts.foul: two blasts)
+     fogBurst    : the fog machine blasts (a fog burst starts)
+     baseOpen / baseHit : the enemy base opens (siren) / its core is shot (+500)
+     gameOn      : the announcer's "GAME ON!" at the stage start
+     + the ambience bed 'lasertag' (UV-tube hum, a muffled 90s beat, far-off pews)
    Internal (the router plays these itself): duckScared, duckRelief, duckHeckle, duckCheer, duckSad (Deputy Duck's
    pose changes, watched on BLAM.G.duck.pose; duckQuiet(s) mutes the scared / relief ones for s seconds, used by the
    bomb's silent scared face), the title-menu chiptune and a quiet ambience bed per stage.
