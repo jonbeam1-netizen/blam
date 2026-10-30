@@ -136,6 +136,7 @@ function applyVolume() {
 // ---------- SAMPLES: recorded files for the core events (loaded by sfx-samples.js) ----------
 let SAMPLE_GAIN = 0.9;          // the whole sample layer against the synth events (match by ear)
 let SHOT_GAIN = 1.41;           // the gun shots only, on top of SAMPLE_GAIN (+3 dB, #56)
+const SKIN_GAIN = { aquapro: 1.33 };   // per-gun trim by ear (Jon 2026-10-30: AQUA PRO sat quieter; its takes peak 3-4 dB under the others)
 const SKIN_KEYS = ['aquapro', 'hotrod', 'ray85', 'candysix'];   // guns.js SKINS order (the index fallback)
 const SKIN_IDS = { justifier: 'hotrod', guncon: 'aquapro', zapper: 'ray85', revolver: 'candysix' };   // guns.js SKINS ids
 const DUCK_SETS = ['duckScared', 'duckRelief', 'duckHeckle', 'duckCheer', 'duckSad', 'duckHappy', 'duckAngry', 'duckHit'];
@@ -168,7 +169,8 @@ function stopGroup(group, fade) { (live[group] || []).forEach(h => h.stop(fade))
 const ROUTE = {
   shot(o, def, f, d) {
     stopGroup('reload', 0.015);
-    return !!sample('shot', 'shot.' + skinKey(), 'shot', def.pri, { gain: f * SHOT_GAIN, delay: d, pan: panOf(o, def), rate: jit(0.03) });
+    const sk = skinKey();
+    return !!sample('shot', 'shot.' + sk, 'shot', def.pri, { gain: f * SHOT_GAIN * (SKIN_GAIN[sk] || 1), delay: d, pan: panOf(o, def), rate: jit(0.03) });
   },
   reload(o, def, f, d) { return !!sample('reload', 'reload.' + skinKey(), 'reload', def.pri, { gain: f, delay: d, pan: panOf(o, def) }); },
   reloadDone() { return hasSet('reload.' + skinKey()); },          // muted: the reload sample already has the clack

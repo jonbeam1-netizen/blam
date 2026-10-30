@@ -78,6 +78,7 @@ To match the look, reuse its code. Don't eyeball it.
 - **Unlit + baked face shade** `[0.62, 0.92, 1.0, 0.5, 0.8, 0.7]` so the hero pink never goes muddy.
 - Placement: base (0.50, -0.11, -0.86) with mouse, x 0.20 on touch. It follows the aim point (fixed 9 units out) with a slerp lag (12/s), plus a yaw bias of `0.17 + 0.2 x baseX` so its left flank shows.
 - Recoil: a spring (k 260, damping 19, impulse 10) gives z kick x0.14 and pitch x0.8. Flash: a 16x16 pixel-art sprite for 0.06 s at a random 90-degree turn. Each shot ejects an amber shell and lemon/orange sparks out of the right side. Screen shake 0.14 s.
+- **Tracers (#76)**: flat palette ribbons (no textures), pixel widths 1-5 at every depth, drawn in the object dither class so they stay clean; per gun: brass slug, hot orange/lemon streak, wavy green laser, faint cap-gun tick. Data: `BLAM.Guns.TRACERS`; renderer: `core/fx.js`.
 - **Cable**: a 14-point Verlet rope. The top two points are pinned to the grip boot and grip direction, the bottom is pinned below the frame. It is drawn as a 230-cube helix (radius 0.011, pitch 0.024): front half slate, sides navy, back void.
 
 ## 6. Deputy Duck (mascot)

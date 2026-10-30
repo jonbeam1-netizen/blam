@@ -47,7 +47,16 @@ Live link: https://jonbeam1-netizen.github.io/blam/ (hard refresh once: Ctrl+Shi
 - [ ] Hidden bombs behind plates at every tier.
 - [ ] Nothing hidden by tier: every trick exists at Beginner, slower and rarer.
 
-## BEE HIVE, stage 5 (0.018) - NEW, nothing of it heard or felt at full speed yet
+## Build 0.019 additions (2026-10-30, late)
+- [ ] BEE HIVE round 2: BIG detailed bees (30-60, striped, veined wings, a quarter with pollen baskets) crawl and hop over the comb and over plates; tiny bees kept as decoration (NOT shootable). Shoot a big bee = frenzy. SWARM Insane is very crowded: too much?
+- [ ] Larva cycle: wax cap -> cap turns translucent so the larva shows growing -> EXPLODES into target / bomb / decoy -> bees re-cap the cell. No loading ring. Ripen times vary per cell.
+- [ ] Hive miss marks: wax dents / honey splashes instead of green squares. (Root cause of the green was a colour overflow in the bullet-hole decal; fixed for every stage.)
+- [ ] APIARY sign removed; at round end the bees fly up and spell B.L.A.M., then scatter (clock +4 s for it).
+- [ ] TRACERS per gun (#76): AQUA PRO brass slug + muzzle smoke, HOT ROD long hot rifle streak, RAY-85 wavy green laser + green zap, CANDY SIX toy cap gun (cap pop, smoke, faint tick). Hits are still instant.
+- [ ] IN-GAME MISS RICOCHET (#86): the title-marquee white-hot spark burst now happens on every miss on the environment.
+- [ ] AQUA PRO shots +2.5 dB (#85).
+
+## BEE HIVE, stage 5 (0.018)
 - [ ] A honeycomb wall (7x4 live cells, Beginner plays the middle 5 columns) in a wooden hive frame at dusk, APIARY sign, smoker, honey drips.
 - [ ] Plates, bombs, your three decoys and hidden bombs flip UP out of the cells on a hinge, stay, flip back. Same pop windows / aim travel / spare shots as the range.
 - [ ] LARVAE: a grub grows and wriggles, the cell glows umber -> lemon, a ring of six lights fills, then it shakes and hatches into a BEE (flies off), a TARGET (+150 bonus) or a BOMB. Readable? Fun to pre-aim?

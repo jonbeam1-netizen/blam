@@ -44,6 +44,7 @@ function updateChips(dt) {
     chipMesh.setMatrixAt(i, _m4.compose(d.p, _q.setFromEuler(_e.set(d.r.x, d.r.y, d.r.z)), _s3.set(k, k, k)));
   }
   chipMesh.instanceMatrix.needsUpdate = true;
+  if (B.FX && B.FX.update) B.FX.update(dt);                  // shot tracers (core/fx.js) tick with the debris
 }
 function clearChips() { for (let i = 0; i < CHIP_N; i++) { chipD[i].life = 0; chipMesh.setMatrixAt(i, ZERO_M); } chipMesh.instanceMatrix.needsUpdate = true; }
 function sparks(p, n = 5, cols = ['lemon', 'yellow'], speed = 1.5, size = 0.03) {

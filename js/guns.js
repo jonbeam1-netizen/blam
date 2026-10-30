@@ -389,7 +389,8 @@ function buildAquaPro(THREE, mat) {
       else if (S.empty) sz = Math.max(sz, 6);                                                         // locked back
       M.slide.position.z = M.slide.userData.z0 + sz * GU;
       if (S.cross(0.4)) fx.shell();
-    }
+    },
+    onFire(S, M, fx) { fx.smoke(3, null, ['slate', 'steel', 'navy'], 0.22); }   // #76: a short dark puff at the muzzle
   };
 }
 
@@ -489,7 +490,8 @@ function buildCandySix(THREE, mat) {
   for (let k = 0; k < 6; k++) chambers.push([3.4 * GU * Math.cos(k * STEP), 3.4 * GU * Math.sin(k * STEP), 5.6 * GU]);
   return {
     meshes: G.build(THREE, mat, OUTLINE), muzzle: G.pt(-1.2, 8.5), port: G.pt(24, 2), portDir: [1, 2, 0.3],
-    cable: G.pt(37.5, 41.6), cableDir: [0, -1, 0.3], wrist: G.pt(34, 28), coil: ['lime', 'green', 'forest'], flash: 'fire', shells: false,
+    cable: G.pt(37.5, 41.6), cableDir: [0, -1, 0.3], wrist: G.pt(34, 28), coil: ['lime', 'green', 'forest'], flash: 'cap', flashScale: 0.6, shells: false,
+    sparkN: 3, sparkCols: ['red', 'orange', 'coral'],                       // #76: toy cap gun, a tiny orange-red cap pop
     reload: { roll: 0.85, pitch: 0.35, yaw: 0.3, dip: 0.05 }, view: 0.24, size: 1.18,
     setup(root, M) {                                                         // cylinder hangs on a crane that swings out to the left
       const crane = new THREE.Group(); crane.position.set(craneP[0], craneP[1], craneP[2]); root.add(crane);
@@ -513,7 +515,7 @@ function buildCandySix(THREE, mat) {
       if (!(S.rp > 0.3 && S.rp < 0.72)) st.spin += (st.target - st.spin) * Math.min(1, dt * 16);
       crane.rotation.z = swing * 1.55; cyl.rotation.z = st.spin; M.hammer.rotation.x = ham;
     },
-    onFire(S, M, fx, st) { st.target = (st.target || 0) + STEP; fx.smoke(3); },
+    onFire(S, M, fx, st) { st.target = (st.target || 0) + STEP; fx.smoke(4, null, ['bone', 'mist', 'haze'], 0.5); },   // white-grey cap smoke
     dry(S, M, fx, st) { st.target = (st.target || 0) + STEP; }
   };
 }
@@ -528,7 +530,11 @@ function flashFrames(THREE, style) {
     const g = cv.getContext('2d'), R = (x, y, w, h, k) => { g.fillStyle = CSS(k); g.fillRect(x, y, w, h); };
     const ring = (r0, r1, k, keep) => { for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
       const d = Math.hypot(x - 7.5, y - 7.5); if (d >= r0 && d <= r1 && (!keep || keep(x, y))) R(x, y, 1, 1, k); } };
-    if (style === 'ray') {
+    if (style === 'cap') {                          // CANDY SIX toy cap: a tiny orange-red pop, then a wisp of smoke
+      if (f === 0) { R(6, 6, 4, 4, 'orange'); R(7, 5, 2, 6, 'red'); R(5, 7, 6, 2, 'red'); R(7, 7, 2, 2, 'yellow'); R(4, 4, 1, 1, 'coral'); R(11, 11, 1, 1, 'coral'); }
+      else if (f === 1) { ring(0, 2.2, 'orange'); ring(2.2, 3.4, 'red', (x, y) => (x + y) % 2 === 0); R(7, 7, 2, 2, 'yellow'); }
+      else { ring(2.0, 3.8, 'mist', (x, y) => (x + y) % 2 === 0); ring(0, 2.0, 'bone', (x, y) => (x * 3 + y) % 4 !== 0); }
+    } else if (style === 'ray') {
       if (f === 0) { ring(5.6, 7.4, 'cyan'); ring(3.2, 5.6, 'ice'); ring(0, 3.2, 'bone'); R(7, 0, 2, 3, 'lime'); R(7, 13, 2, 3, 'lime'); R(0, 7, 3, 2, 'lime'); R(13, 7, 3, 2, 'lime'); }
       else if (f === 1) { ring(6.0, 7.6, 'ice'); ring(4.6, 6.0, 'cyan'); ring(0, 2.2, 'lime'); }
       else ring(6.2, 7.6, 'lime', (x, y) => (x + y) % 3 === 0);
@@ -635,6 +641,16 @@ const SKINS = [   // order = the GUN sign cycle; index 0 is the default (AQUA PR
   { id: 'justifier', name: 'HOT ROD', desc: 'Long blue enforcer with a pump front grip, chrome muzzle, flame decals and a lucky 7.' },
   { id: 'zapper', name: 'RAY-85', desc: 'Retro ray gun in cream and orange: long ringed barrel, ribbed vent block, charge meter.' },
   { id: 'revolver', name: 'CANDY SIX', desc: 'Candy-green toy six-shooter with a swing-out cylinder and an orange safety tip.' }];
+// #76 per-gun TRACERS (drawn by core/fx.js; the hit itself stays instant hitscan). px = 426x240 game pixels.
+// T = flight time (s), fade = s after arrival (beams), wave = sine wiggle {amp px, wl px, speed rad/s},
+// layers outer -> inner: { len px (Infinity = beam from the muzzle), w px, cols [flight, ..., fade] }, impact: null|'zap'|'puff'
+const TRACERS = {
+  guncon:    { T: 0.06, layers: [{ len: 16, w: 1, cols: ['sand', 'tan'] }, { len: 6, w: 3.5, cols: ['amber', 'tan'] }, { len: 3, w: 2, cols: ['lemon', 'yellow'] }] },  // brass slug
+  justifier: { T: 0.055, layers: [{ len: 84, w: 3, cols: ['orange', 'orange', 'rust'] }, { len: 74, w: 1.5, cols: ['lemon', 'yellow', 'amber'] }, { len: 9, w: 2, cols: ['bone', 'lemon'] }] },  // hot rifle streak
+  zapper:    { T: 0.07, fade: 0.09, wave: { amp: 3.2, wl: 22, speed: 46 }, impact: 'zap',                                       // wavy green laser
+               layers: [{ len: Infinity, w: 5, cols: ['green', 'green', 'forest'] }, { len: Infinity, w: 3, cols: ['lime', 'lime', 'green'] }, { len: Infinity, w: 1, cols: ['bone', 'lime'] }] },
+  revolver:  { T: 0.07, impact: 'puff', layers: [{ len: 10, w: 1, cols: ['mist', 'haze'] }] }                                     // toy cap gun: almost nothing
+};
 const BUILDERS = { justifier: buildHotRod, guncon: buildAquaPro, zapper: buildRay85, revolver: buildCandySix };
 // Camera-space placement.  x/y/z = wrist position, s = scale, follow = slide with an aim left of centre, followR =
 // slide with an aim right of centre (negative on purpose: the gun steps LEFT so a right-hand aim keeps some screen
@@ -674,7 +690,7 @@ function create(THREE, opts) {
   for (const k of ['uFB', 'uFL', 'uFH']) mat.uniforms[k].value.setHex(PAL.lime);
   const group = new THREE.Group(), rig = new THREE.Group(), kick = new THREE.Group(), holder = new THREE.Group();
   group.name = 'BLAM.gun'; group.add(rig); rig.add(kick); kick.add(holder);
-  const tex = { fire: flashFrames(THREE, 'fire'), ray: flashFrames(THREE, 'ray') };
+  const tex = { fire: flashFrames(THREE, 'fire'), ray: flashFrames(THREE, 'ray'), cap: flashFrames(THREE, 'cap') };
   const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex.fire[0], alphaTest: 0.5, transparent: false, depthTest: false, depthWrite: false, fog: false }));
   flash.renderOrder = 10; flash.visible = false; flash.name = 'gun-flash'; holder.add(flash);
   const parts = new Particles(THREE, 80, group), cable = new Cable(THREE, group), skins = {};
@@ -703,10 +719,10 @@ function create(THREE, opts) {
       for (let i = 0; i < n; i++) { _v.copy(_d).multiplyScalar(0.7 + Math.random() * 1.3); _v.x += (Math.random() - 0.5) * 1.2; _v.y += (Math.random() - 0.3) * 1.2;
         parts.spawn(_p, _v, 0.0055, 0.0055, 0.0055, cols[i % cols.length], 0.1 + Math.random() * 0.14, 0.4, 3); }
     },
-    smoke(n, at) {
-      chain(); toGroup(at || skin.muzzleV, _p);
+    smoke(n, at, cols, life) {                                                    // cols / life: optional (#76 per-gun puffs)
+      chain(); toGroup(at || skin.muzzleV, _p); cols = cols || ['haze', 'mist']; life = life || 0.45;
       for (let i = 0; i < n; i++) { _v.set((Math.random() - 0.5) * 0.12, 0.1 + Math.random() * 0.16, -0.05 - Math.random() * 0.12);
-        parts.spawn(_p, _v, 0.011, 0.011, 0.011, i % 2 ? 'mist' : 'haze', 0.45 + Math.random() * 0.3, -0.02, 1.5, 1.8, 0); }
+        parts.spawn(_p, _v, 0.011, 0.011, 0.011, cols[i % cols.length], life + Math.random() * life * 0.66, -0.02, 1.5, 1.8, 0); }
     },
     dropFrom(obj, pts, col) {                                                     // fall straight out of a moving part (revolver shells)
       obj.updateWorldMatrix(true, false); group.updateWorldMatrix(true, false);
@@ -799,10 +815,10 @@ function create(THREE, opts) {
     S.trig = 1;
     if (S.empty && S.emptyFrame !== S.frame) { S.dryAge = 0; S.kickV += 2.5; if (skin.dry) skin.dry(S, skin.meshes, fx, skin.st); return; }
     S.fireAge = 0; S.shots++; S.kickV += 10;
-    flashRot = (Math.random() * 4 | 0) * Math.PI / 2; flashScale = 0.9 + Math.random() * 0.25;
+    flashRot = (Math.random() * 4 | 0) * Math.PI / 2; flashScale = (0.9 + Math.random() * 0.25) * (skin.flashScale || 1);
     if (skin.onFire) skin.onFire(S, skin.meshes, fx, skin.st);
     if (skin.shells) fx.shell();
-    fx.sparks(5, skin.flash === 'ray' ? ['cyan', 'ice', 'lime'] : ['lemon', 'orange', 'yellow']);
+    fx.sparks(skin.sparkN || 5, skin.sparkCols || (skin.flash === 'ray' ? ['cyan', 'ice', 'lime'] : ['lemon', 'orange', 'yellow']));
   }
   const gun = {
     group,
@@ -817,6 +833,9 @@ function create(THREE, opts) {
     reload(seconds) { if (!skin) return; reloadDur = Math.max(0.08, +seconds || 0.12); reloadT = 0; S.rp = 0; S.rpPrev = 0; S.reloadFrame = S.frame; },
     setEmpty(b) { if (b && !S.empty) S.emptyFrame = S.frame; S.empty = !!b; },
     update,
+    // #76: the current skin's tracer look (BLAM.Guns.TRACERS) and the muzzle tip in world space (null when hidden)
+    tracerLook() { return TRACERS[SKINS[skinIndex].id] || null; },
+    muzzlePoint(out) { if (!skin || !group.visible) return null; return gun.muzzleWorldPos(out); },
     muzzleWorldPos(out) { out = out || new THREE.Vector3(); skin.root.updateWorldMatrix(true, false); return skin.root.localToWorld(out.copy(skin.muzzleV)); },
     // #72: the ejection port (world space) + its eject direction (world, unit) for the HUD casings; kind = skin id
     ejectPoint() {
@@ -828,12 +847,12 @@ function create(THREE, opts) {
     dispose() {
       if (group.parent) group.parent.remove(group);
       for (const id in skins) for (const k in skins[id].meshes) skins[id].meshes[k].geometry.dispose();
-      mat.dispose(); ledMat.dispose(); flash.material.dispose(); tex.fire.concat(tex.ray).forEach(t => t.dispose());
+      mat.dispose(); ledMat.dispose(); flash.material.dispose(); tex.fire.concat(tex.ray, tex.cap).forEach(t => t.dispose());
       for (const m of [parts.mesh, cable.mesh]) { m.geometry.dispose(); m.material.dispose(); }
     }
   };
   setSkin(opts.skin !== undefined ? opts.skin : 0); settle();
   return gun;
 }
-BLAM.Guns = { SKINS, create, LAYOUTS };
+BLAM.Guns = { SKINS, create, LAYOUTS, TRACERS };
 })();

@@ -6,7 +6,7 @@
 window.BLAM = window.BLAM || {};
 (function (B) {
 const R = B.R, I = B.Input, H = B.HUD, S = B.Stage, Tg = B.Targets, Save = B.Save, SFX = B.SFX, UI = B.UI, N = B.Net;
-const BUILD = '0.018';                      // bump on every publish (shown on the title status line)
+const BUILD = '0.019';                      // bump on every publish (shown on the title status line)
 const Q = new URLSearchParams(location.search);
 // ?slow=0.25 (dev/testing): single-player stage clock runs at that rate, so slow tools (screenshot -> click
 // takes seconds) can still shoot a target that is really there. Versus always runs on the wall clock.
@@ -134,15 +134,19 @@ G.duckShot = ray => {
   Tg.sparks(p, 6, ['lemon', 'yellow', 'bone'], G.duckMode === 'mini' ? 0.25 : 1.4, G.duckMode === 'mini' ? 0.008 : 0.03);
   return true;
 };
-// bullet hole + chips in the surface colour on the current stage set
-G.envShot = ray => {
-  const env = Object.values(S.defs).map(d => S.env(d.id)).find(e => e.visible);
-  if (!env) return null;
-  const h = ray.intersectObjects(env.userData.shootables || [], false)[0];
+// bullet hole + chips in the surface colour on the current stage set. Lands the shot's tracer (#76) on the wall.
+// opts.ricochet (an in-game miss, #86): + a hard ricochet burst along the surface normal (B.FX.ricochetColors[stage id];
+// the 'ricochet' sample already plays from SFX 'miss', see audio.js ROUTE.miss)
+G.envShot = (ray, opts) => {
+  const fx = B.FX, tr = G.lastTracer; G.lastTracer = null;
+  const id = Object.keys(S.defs).find(k => { const e = S.env(k); return e && e.visible; }), env = id ? S.env(id) : null;
+  const h = env ? ray.intersectObjects(env.userData.shootables || [], false)[0] : null;
+  if (fx) fx.land(tr, h ? h.point : null);
   if (!h) return null;
   const n = h.face.normal.clone().transformDirection(h.object.matrixWorld), col = Tg.surfaceColor(h);
-  Tg.addDecal(h.point, n, new THREE.Color(col).multiplyScalar(1.5).getHex());
+  Tg.addDecal(h.point, n, new THREE.Color(col).multiplyScalar(1.5).setRGB(Math.min(1, new THREE.Color(col).r * 1.5), Math.min(1, new THREE.Color(col).g * 1.5), Math.min(1, new THREE.Color(col).b * 1.5)).getHex());
   for (let k = 0; k < 6; k++) Tg.spawnChip(h.point, new THREE.Vector3(n.x * R.rnd(1, 2.5) + R.rnd(-1, 1), n.y * R.rnd(1, 2.5) + R.rnd(0.5, 2), n.z * R.rnd(1, 2.5) + R.rnd(-1, 1)), R.rnd(0.03, 0.05), col, R.rnd(0.5, 0.9));
+  if (opts && opts.ricochet && fx) fx.ricochet(h.point, n, ray.ray.direction, (G.run && G.run.stage) || id);
   return h;
 };
 // fire the gun (visuals + sound); returns the aim ray
@@ -152,8 +156,13 @@ G.shoot = (u, v) => {
   R.postMat.uniforms.boost.value = 0.22; G.crossHot = 0.09;
   if (Save.settings.shake) G.shake = Math.max(G.shake, 0.14);
   SFX.play('shot', { u, v });
-  return R.rayAt(u, v);
+  const ray = R.rayAt(u, v);
+  // #76 cosmetic tracer from the muzzle; whoever resolves the shot lands it (FX.land), else fx.js finds the wall
+  try { G.lastTracer = B.FX ? B.FX.shot(ray) : null; } catch (e) { G.lastTracer = null; }
+  return ray;
 };
+// land this shot's tracer (playFire): a target / duck point, or null = flew past everything
+const landTracer = p => { const tr = G.lastTracer; G.lastTracer = null; if (tr && B.FX) B.FX.land(tr, p); };
 G.shakeIt = s => { if (Save.settings.shake) G.shake = Math.max(G.shake, s); };
 // touch: the finger hides what it taps, so a near miss (within TOUCH_SLOP CSS px) on a GOOD target still counts.
 // Bombs / bystanders only ever take a precise hit. Leaves the shared ray re-aimed at (u, v).
@@ -210,19 +219,21 @@ G.playFire = (run, u, v, inside, touch) => {
   const send = (k, tid, z) => { if (run.versus) N.sendShot({ st: +run.t.toFixed(3), k, tid, z, a: ammo.infinite ? -1 : ammo.count, ar: 0 }); };
   // shooting the deputy is just for fun (a miss). In practice he stands in the scene under the lanes, so the
   // targets are picked first and he is only hit-tested after a miss: he never blocks a shot at a paddle
-  if (!run.practice && G.duckShot(ray)) { run.me.streak = 0; send('duck', -1); return; }
+  const duckPt = () => G.duck.lastHit && G.duck.lastHit.point ? G.duck.lastHit.point : null;
+  if (!run.practice && G.duckShot(ray)) { landTracer(duckPt()); run.me.streak = 0; send('duck', -1); return; }
   const p = Tg.pick(ray, run.live) || (touch ? touchPick(run, u, v) : null);
   if (p) {
     const tg = p.target;
+    landTracer(p.point);
     if (tg.kind === 'bomb' || tg.kind === 'bystander') { run.applyPenalty(me, tg.kind, tg.id, p.point); send('bomb', tg.id); return; }
     if (run.versus) { tg.shatter(p.point, { tint: S.PCOLS[me] }); send('hit', tg.id, p.zone); }   // optimistic; the host decides who gets it
     else run.applyHit(me, tg.id, run.t, p.point, p.zone);
     return;
   }
   run.me.streak = 0;
-  if (run.practice && G.duckShot(ray)) return;
+  if (run.practice && G.duckShot(ray)) { landTracer(duckPt()); return; }
   // every 3rd miss of the run (a new Run per stage resets it) Deputy Duck laughs at you; the other misses leave him be
-  G.envShot(ray); SFX.play('miss'); run.duckMisses = (run.duckMisses | 0) + 1;
+  G.envShot(ray, { ricochet: true }); SFX.play('miss'); run.duckMisses = (run.duckMisses | 0) + 1;
   if (run.duckMisses % 3 === 0) G.duckReact('laugh', 1.3);
   send('miss', -1);
 };
