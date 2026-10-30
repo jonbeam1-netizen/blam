@@ -331,7 +331,7 @@ const SFX = {
 B.SFX = SFX;
 
 // ---------- event hooks: ambience beds follow the stage ----------
-let bed = null, bedId = '', music = null, duckAuto = true, lastPose = '', duckQuietUntil = 0, lastScaredAt = -1e9;
+let bed = null, bedId = '', music = null, duckAuto = true, lastPose = '', duckQuietUntil = 0, lastScaredAt = -1e9, scareVoiced = false;
 const SCARED_COOL = 2.0;        // #69: one scared quack per scare; no repeat within this many seconds
 const DUCK_POSES = { scared: 'duckScared', relief: 'duckRelief', present: 'duckHeckle', laugh: 'duckHeckle', cheer: 'duckCheer',
   sad: 'duckSad', happy: 'duckHappy', angry: 'duckAngry', hit: 'duckHit', shot: 'duckHit' };
@@ -372,8 +372,8 @@ function watch() {
       const vis = !d.group || d.group.visible !== false;
       const hush = DUCK_HUSH[pose] && performance.now() < duckQuietUntil;
       let ok = duckAuto && vis && lastPose && DUCK_WATCH[pose] && !hush;
-      if (ok && pose === 'scared') { if (now - lastScaredAt < SCARED_COOL) ok = false; else lastScaredAt = now; }
-      if (ok && pose === 'relief' && lastPose !== 'scared') ok = false;   // relief only right after a real scare
+      if (ok && pose === 'scared') { if (now - lastScaredAt < SCARED_COOL) ok = false; else { lastScaredAt = now; scareVoiced = true; } }
+      if (ok && pose === 'relief') { if (lastPose !== 'scared' || !scareVoiced) ok = false; scareVoiced = false; }   // one relief per voiced scare
       if (ok) SFX.duck(pose, true);
       lastPose = pose;
     }

@@ -6,7 +6,7 @@
 window.BLAM = window.BLAM || {};
 (function (B) {
 const R = B.R, I = B.Input, H = B.HUD, S = B.Stage, Tg = B.Targets, Save = B.Save, SFX = B.SFX, UI = B.UI, N = B.Net;
-const BUILD = '0.013';                      // bump on every publish (shown on the title status line)
+const BUILD = '0.015';                      // bump on every publish (shown on the title status line)
 const Q = new URLSearchParams(location.search);
 // ?slow=0.25 (dev/testing): single-player stage clock runs at that rate, so slow tools (screenshot -> click
 // takes seconds) can still shoot a target that is really there. Versus always runs on the wall clock.
@@ -333,7 +333,8 @@ G.stageEnded = run => {
     c.index++;
     G.go('results', { res, best, newRecord, total: c.total, lifeLost, status: G.statusText, next: () => { if (c.lives <= 0) G.gameOver(); else G.nextStage(); } });
   } else {
-    G.go('results', { res, best, newRecord, status: G.statusText, next: () => G.go('free') });
+    G.go('results', { res, best, newRecord, status: G.statusText, next: () => G.go('free'),
+      free: { stage: run.stage, variant: run.variant, tier: run.tier } });   // #53: AGAIN / BACK signs instead of tap-to-continue
   }
 };
 // ---- versus ----

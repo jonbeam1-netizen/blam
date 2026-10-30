@@ -1,0 +1,7 @@
+[
+ {"name":"turntick","dur":0.5,"n":6,"prompt":"loud single mechanical timer tick, one crisp dry metallic click, full volume, close up, very short, no ringing, no hiss, no music"},
+ {"name":"lightsout","dur":1.2,"n":6,"prompt":"loud industrial power cut, a heavy electrical breaker thunk then big lights whining down to silence, full volume, close up, short natural tail, no music"},
+ {"name":"lightson","dur":1.0,"n":6,"prompt":"loud electrical breaker clunk and a bright buzz as big stadium lights flicker back on, full volume, close up, short natural tail, no music"},
+ {"name":"duckcameo","dur":0.7,"n":6,"prompt":"one real duck quack, cheeky and short, full volume, close up, no echo, no music"},
+ {"name":"duckcameohit","dur":0.8,"n":6,"prompt":"a real duck squawk of surprise, short and loud, full volume, close up, no echo, no music"}
+]

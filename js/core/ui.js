@@ -566,11 +566,15 @@ UI.screens.play = {
 // switches the practice rules live (Run.setTier). They are 'keep' signs: they spark, they don't shatter.
 const PRACTICE_SIGNS = { v: 0.6, u: [0.26, 0.42, 0.58, 0.74], s: 0.022 };
 function practiceMenu(run) {
-  const menu = new Menu(S.TIERS.map((T, i) => ({ id: 'tier' + i, text: T.name, keep: true, color: i === run.tier ? T.sign : 'slate',
+  const items = S.TIERS.map((T, i) => ({ id: 'tier' + i, text: T.name, keep: true, color: i === run.tier ? T.sign : 'slate',
     s: PRACTICE_SIGNS.s, u: PRACTICE_SIGNS.u[i], v: PRACTICE_SIGNS.v, z: 1.5,
-    act: () => G().practiceTier(i) })));
+    act: () => G().practiceTier(i) }));
+  // #77 touch has no ESC: a FINISH sign left of the tiers ends the session (-> practice results)
+  if (G().touch) items.push({ id: 'finish', text: 'FINISH', keep: true, color: 'crimson', s: PRACTICE_SIGNS.s, u: 0.1, v: PRACTICE_SIGNS.v, z: 1.5,
+    act: () => { if (run.state !== 'end') run.end('done'); } });
+  const menu = new Menu(items);
   function paint() {
-    menu.items.forEach((it, i) => { const c = i === run.tier ? S.TIERS[i].sign : 'slate'; if (it.sign.opts.color !== c) { it.sign.opts.color = c; it.sign.setText(S.TIERS[i].name); } });
+    S.TIERS.forEach((T, i) => { const it = menu.items[i], c = i === run.tier ? T.sign : 'slate'; if (it.sign.opts.color !== c) { it.sign.opts.color = c; it.sign.setText(T.name); } });
   }
   menu.paint = paint;                                // play.update calls it every frame (a no-op unless the tier changed)
   return menu;
@@ -616,14 +620,19 @@ UI.screens.results = {
     this.a = a; this.t = 0; this.done = false; const g = G();
     g.placeDuck('results'); g.duckPose(a.res.cleared ? 'cheer' : 'sad');
     SFX.play(a.res.cleared ? 'stageClear' : 'stageFail'); if (a.newRecord) SFX.play('newRecord');
+    // #53 free play: AGAIN (same stage / variant / tier, new seed) and BACK (the free-play menu) signs, no auto-advance
+    this.menu = a.free ? new Menu([
+      { text: 'AGAIN', color: 'green', s: 0.045, u: 0.3, v: 0.86, act: () => g.startFree(a.free.stage, a.free.variant, a.free.tier) },
+      { text: 'BACK', color: 'slate', s: 0.045, u: 0.56, v: 0.86, act: () => g.go('free') }
+    ]) : null;
   },
-  exit() {},
-  update(dt) { this.t += dt; if (this.t > 14) this.go(); },
+  exit() { if (this.menu) this.menu.dispose(); this.menu = null; },
+  update(dt, t) { this.t += dt; if (this.menu) this.menu.update(dt, t); else if (this.t > 14) this.go(); },
   go() { if (this.done) return; this.done = true; this.a.next(); },
   draw(t) {
     if (tall()) return;                                                       // portrait: drawPortrait() has the text
     const r = this.a.res;
-    H.dim(0, 0, 356, RH); H.dim(356, 0, RW - 356, 60);
+    H.dim(0, 0, 356, this.menu ? 190 : RH); H.dim(356, 0, RW - 356, 60);    // free play: the signs below stay bright
     if (r.cleared) H.starburst(RW / 2, 30, 34, t * 0.8, 'yellow', 'orange', 14);
     H.text7c(r.cleared ? 'CLEARED!' : 'FAILED!', RW / 2, 14, 5, r.cleared ? 'gold' : 'red', 'void', 2);
     H.plate(18, 66, 196, 118);
@@ -643,10 +652,10 @@ UI.screens.results = {
       if (blink(t, 6)) H.text7c('NEW RECORD!', 288, 168, 1, 'hot', 'void', 2);
     }
     if (this.a.lifeLost) { H.sprite(H.HEART, 30, 192, 2, H.HEART_OFF, 'heartoff'); H.text3('LIFE -1', 52, 196, 'red', 2, 'void'); }
-    if (this.t > 1.0 && blink(t)) H.text3c(G().touch ? 'TAP TO CONTINUE' : 'CLICK OR TAP TO CONTINUE', RW / 2, 224, 'yellow', 1, 'void');
+    if (!this.menu && this.t > 1.0 && blink(t)) H.text3c(G().touch ? 'TAP TO CONTINUE' : 'CLICK OR TAP TO CONTINUE', RW / 2, 224, 'yellow', 1, 'void');
     statusLine(this.a.status || '');
   },
-  fire() { if (this.t > 1.0) this.go(); }
+  fire(u, v, inside) { if (this.menu) { if (this.t > 0.6) menuFire(this, u, v, inside); } else if (this.t > 1.0) this.go(); }
 };
 
 // =========================================================================================
@@ -816,6 +825,8 @@ UI.screens.vsresults = {
 // ---------- duck hover hook: on every screen that shows the big Deputy Duck (all but play, where main.js does the
 // mini HUD duck), he flinches while the crosshair is on him and relaxes when it leaves.  Mouse only (a touch has
 // no hover).  Wraps each screen's update so the hook runs once per frame after the screen has moved things.
+let hovOn = false, hovOffAt = 0;
+const HOV_OFF = 0.22;                              // #68: the crosshair must be off him this long before hover drops (his hop can't toggle it)
 function duckHover() {
   const g = G(), duck = g && g.duck;
   if (!duck || typeof duck.setHover !== 'function') return;
@@ -823,7 +834,11 @@ function duckHover() {
   if (g.duckMode && g.duckMode !== 'mini' && g.duckMode !== 'hidden' && B.Input.mouseIn && !B.Input.touch) {
     try { on = !!duck.hitTest(R.rayAt(B.Input.aim.u, B.Input.aim.v)); } catch (e) { on = false; }
   }
-  try { duck.setHover(on); } catch (e) {}
+  const now = performance.now() / 1000;
+  if (on) hovOffAt = 0;
+  else if (hovOn) { if (!hovOffAt) hovOffAt = now; if (now - hovOffAt < HOV_OFF) on = true; else hovOffAt = 0; }
+  if (on !== hovOn) { try { duck.setHover(on); } catch (e) {} }
+  hovOn = on;
 }
 for (const name in UI.screens) {
   if (name === 'play') continue;

@@ -483,13 +483,14 @@ function crosshair(u, v, hot) {
   rect(x, y, 1, 1, 'red');
 }
 // the bottom strip. box = {x, y, w}; hs = HUD state from main.js (see ENGINE.md); compact = portrait strip.
-// #72: the magazine stands at the strip's left edge (P2: right edge, mirrored), its bottom on the frame bottom
-// (landscape) / by + 45 (portrait); everything that sat right of the old shell now starts 4 px right of the clip.
+// #72: the magazine. Landscape solo / practice: at the strip's RIGHT edge, mirrored, next to the on-screen gun (Jon: the eye is
+// on the gun when shooting); hearts / HIT badge keep the left. Portrait: left edge of the strip. Versus: each clip in its own half.
 function strip(bx, by, w, hs, t, compact) {
   const P = hs.players, me = P[0], mb = compact ? by + 45 : by + 35;
   if (hs.practice) {
     // practice: magazine (no hearts, nothing to lose) | HIT badge ... the middle stays free for Deputy Duck ... | clock + HITS
-    const m = magPrep(me, t), mx = bx + magDraw(m, bx, mb, 0, false, t, magKind(me)).W + 4;
+    const m = magPrep(me, t), mx = compact ? bx + magDraw(m, bx, mb, 0, false, t, magKind(me)).W + 4 : bx;
+    if (!compact) magDraw(m, bx + w - m.g.W, mb, 0, true, t, magKind(me));   // landscape: the clip stands by the gun (right edge)
     hitBadge(mx, by + 1, me.hitAge);
     const cx = compact ? bx + w / 2 + 6 : bx + 100;
     practiceBall(cx, by + 15, hs.practice.secs, t);
@@ -500,7 +501,8 @@ function strip(bx, by, w, hs, t, compact) {
     if (hs.status && compact) text3(hs.status, mx, by + 30, 'lime', 1, 'void');
   } else if (!hs.versus) {
     // solo: magazine | hearts + HIT badge | timer ball | quota pill
-    const m = magPrep(me, t), mx = bx + magDraw(m, bx, mb, 0, false, t, magKind(me)).W + 4;
+    const m = magPrep(me, t), mx = compact ? bx + magDraw(m, bx, mb, 0, false, t, magKind(me)).W + 4 : bx;
+    if (!compact) magDraw(m, bx + w - m.g.W, mb, 0, true, t, magKind(me));   // landscape: the clip stands by the gun (right edge)
     hearts(mx, by + 19, me.lives, me.maxLives);
     hitBadge(mx, by + 1, me.hitAge);
     const cx = compact ? bx + w / 2 + 6 : RW / 2;
