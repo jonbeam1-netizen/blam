@@ -551,7 +551,7 @@ function tongueFrames(THREE, style) {
 // tongue length / height per skin (skin space, before the holder scale); Jon: the AQUA PRO one must stay small
 // (lengths are ~x1.6 what a side view would need: in first person the bore points mostly into the screen and the tongue
 // foreshortens to about half; the plane spins round the bore every frame to face the camera, see anim())
-const FLASH_SIZE = { guncon: { len: 0.27, h: 0.085 }, justifier: { len: 0.36, h: 0.1 }, zapper: { len: 0.24, h: 0.08 }, revolver: { len: 0.15, h: 0.055 } };
+const FLASH_SIZE = { guncon: { len: 0.44, h: 0.15 }, justifier: { len: 0.56, h: 0.17 }, zapper: { len: 0.38, h: 0.14 }, revolver: { len: 0.24, h: 0.09 } };   // 0.026: Jon 'barely anything' at 0.27 -> ~x1.65
 // Pool of unit cubes (one InstancedMesh, unlit palette colours): shells, sparks, smoke puffs.
 class Particles {
   constructor(THREE, n, parent) {
@@ -799,8 +799,8 @@ function create(THREE, opts) {
     }
     skin.anim(S, skin.meshes, fx, skin.st, dt);
     ledMat.color.setHex(PAL[S.rp >= 0 ? ((T * 8 | 0) % 2 ? 'amber' : 'rust') : S.empty ? ((T * 3 | 0) % 2 ? 'red' : 'oxblood') : (skin.led || 'lime')]);
-    if (S.fireAge < 0.07) {                                                          // #96: tongue along the bore, ~4 frames at 60 Hz
-      const f = S.fireAge < 0.035 ? 0 : 1, FS = FLASH_SIZE[SKINS[skinIndex].id] || FLASH_SIZE.guncon;
+    if (S.fireAge < 0.09) {                                                          // #96: tongue along the bore, ~5 frames at 60 Hz
+      const f = S.fireAge < 0.05 ? 0 : 1, FS = FLASH_SIZE[SKINS[skinIndex].id] || FLASH_SIZE.guncon;
       const dk = (window.BLAM && window.BLAM.FX && window.BLAM.FX.dark) ? 1.35 : 1;   // dark scenes (#92): a bigger lick
       flash.visible = true; flashMat.map = tex[skin.flash][f];
       const len = FS.len * (f ? 0.62 : 1) * flashScale * dk, h = FS.h * (f ? 0.8 : 1) * flashScale * dk;
