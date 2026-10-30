@@ -87,6 +87,16 @@
      sorterArm   : the sorter arm swings in to pluck an item (opts.u)
      sheetStamp  : the finale: the press punches B.L.A.M. into the steel sheet ('finale' plays as it rolls out)
      + bombReveal / turnTick (the press's turncoats) as the range's; the ambience bed 'conveyor' (the belt hum, motors, far clanks)
+   DOPPELDUCKS (stage 10):
+     curtain     : the lineup curtain rises (opts.up 1) or drops (opts.up 0: ends in a soft thump)
+     lineupShuffle : behind the dropped curtain the lineup is shuffled (webbed feet scuffling, muffled quacks)
+     tellGlance  : a NERVOUS FAKE gives itself away (opts.u, opts.kind 'glance' | 'sweat' | 'gulp')
+     swapWhistle : THE SWAP telegraph, 0.75 s before two neighbours hand over a hat / glasses (opts.u)
+     fakeRun     : a fake BREAKS FOR IT when the wave's window runs out (opts.u)
+     fakePop     : a fake was shot: a feather poof + a squawk (opts.u; 'hit' plays too)
+     cardsUp     : the finale: the real ducks hold up B. L. A. M. and quack in time ('finale' + 'duckHappy' play too)
+     + duckAngry on friendly fire (a real duck shot: 'bystander' + 'lifeLost' play too); the ambience bed 'doppelducks'
+       (K.stageBeds.lineup: the strip lights' hum, the wall clock ticking, a distant typewriter)
    Internal (the router plays these itself): duckScared, duckRelief, duckHeckle, duckCheer, duckSad (Deputy Duck's
    pose changes, watched on BLAM.G.duck.pose; duckQuiet(s) mutes the scared / relief ones for s seconds, used by the
    bomb's silent scared face), the title-menu chiptune and a quiet ambience bed per stage.

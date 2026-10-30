@@ -1,7 +1,18 @@
-# B.L.A.M. play-test list (builds 0.008 to 0.023, live 2026-10-30)
+# B.L.A.M. play-test list (builds 0.008 to 0.025, live 2026-10-30)
 
 Everything that changed since you last played a build by ear, in one place. Tick what is good, gripe what is not.
 Live link: https://jonbeam1-netizen.github.io/blam/ (hard refresh once: Ctrl+Shift+R).
+
+## Builds 0.024 and 0.025 (2026-10-30 late morning): DOPPELDUCKS (stage 10) + muzzle flash follow-ups
+- [ ] DOPPELDUCKS = DUCKS 1-3 in FREE PLAY (pages 6-7) and in the course pool. The sheriff's lineup room: height chart, the B.L.A.M. COUNTY SHERIFF plaque, a clock, the coffee shelf, a velvet curtain, and top-left the poster of THE REAL DEPUTY (drawn from the same duck meshes as the lineup, so it is always right).
+- [ ] SHOOT THE FAKES: one tell per fake (hat, glasses, moustache, badge, boots, bill, tail), obvious at Beginner, a few pixels at Insane. Shooting a real duck = friendly fire (life -1, -300). Readable at game size? Level-3 tells too subtle?
+- [ ] Waves: the curtain drops and rises with a new layout (line, rows, V, stairs, crowd) and new tells; clear every fake and the curtain drops early. Window 13 s Beginner -> 9.4 s Insane.
+- [ ] Nervous fakes (glance, sweat drop, gulp). BREAK FOR IT: unshot fakes hop down and run when the window ends, shootable 0.5 s for +100. THE SWAP: whistle, then a hat or glasses hand-over so the tell moves. CROWD: back rows step out on a beat; a hidden belly can't be judged until the duck steps out.
+- [ ] Variants: DUCKS 1 LINEUP (12 ducks, 20 at Insane) free fire, DUCKS 2 CROWD (20 ducks) 8 per mag, DUCKS 3 SHUFFLE (constant place trades + swaps) 12 per mag. Finale: four real ducks hold up B.L.A.M. cards and hop.
+- [ ] Agent's open questions: runner worth 100 (built) or 300+100? Insane LINEUP / SHUFFLE at 20 ducks or 12? Is runner farming a problem (a bot that only shoots runners can still clear Insane CROWD)?
+- [ ] #96 MUZZLE FLASH follow-ups (0.024): the first tongue was invisible in first person (the planes ran along the bore, seen edge-on). Now: x1.6 longer, spun round the bore to face the camera every frame, starts past the muzzle, NO depth test, ~4 frames. Measured ~28 x 15 px on the AQUA PRO at the title. Do you see it now at BUILD 0.025? Size / shape?
+- NOT VERIFIED: anything by ear (all muted); no real mouse / touch play; portrait; two-browser versus; the flash by eye (the pane would not draw while hidden).
+- Rough spots (agent): LINE ducks are small (~35 x 50 px, Beginner / Advanced only); draw calls 39-43; the coffee pot reads as a blob; friendly-fire time is local in versus (a real-duck shot within 0.3 s of a swap can cancel it on one tab only).
 
 ## Build 0.023 (2026-10-30 morning): CONVEYOR (stage 9)
 - [ ] CONVEYOR = BELT 1-3 in FREE PLAY (page 6) and in the course pool. A toy factory at night: three belts at different heights and depths with tunnel housings, the press over the middle belt, the sorter arm, racks of toy parts, the B.L.A.M. TOY WORKS sign.

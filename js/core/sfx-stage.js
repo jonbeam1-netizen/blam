@@ -1,5 +1,5 @@
 'use strict';
-/* B.L.A.M. core/sfx-stage.js -- Deputy Duck's voice set and the stage-specific sounds (alley, boneyard, sky show, bee hive, invasion, laser tag, skee ball, conveyor).
+/* B.L.A.M. core/sfx-stage.js -- Deputy Duck's voice set and the stage-specific sounds (alley, boneyard, sky show, bee hive, invasion, laser tag, skee ball, conveyor, doppelducks).
    Recipes only (see sfx-kit.js for the recipe contract). */
 window.BLAM = window.BLAM || {};
 (function (B) {
@@ -705,6 +705,97 @@ K.stageBeds.conveyor = (ctx, bus) => {
   let stopped = false, next = now + 2;
   return {
     tick(until) { if (stopped) return; if (next < ctx.currentTime - 0.5) next = ctx.currentTime + 1; while (next < until) { try { far(next); } catch (e) {} next += 3 + Math.random() * 6; } },
+    stop(fade = 1.5) {
+      if (stopped) return; stopped = true;
+      const t = ctx.currentTime, gp = out.gain;
+      gp.cancelScheduledValues(t); gp.setValueAtTime(gp.value, t); gp.linearRampToValueAtTime(0, t + fade);
+      for (const x of srcs) { try { x.stop(t + fade + 0.1); } catch (e) {} }
+      setTimeout(() => { try { out.disconnect(); } catch (e) {} }, (fade + 1) * 1000);
+    }
+  };
+};
+// ---------- DOPPELDUCKS ----------
+// the sheriff's lineup room: the velvet curtain on its rail, webbed feet scuffling behind it, a nervous fake's tic, a
+// two-tone whistle for THE SWAP, a panicked scramble, a feather poof, the cards going up with a quack in time
+def('curtain', { max: 1, cool: 0.3, pv: 0.3, dv: 0.06, verb: 0.15, pri: 2, gain: 6 },
+  v => {                                   // a velvet swoosh sweeping up (rising) or down, the rings rattling on the rail; down ends in a soft thump
+    const up = !!v.o.up;
+    noise(v, { kind: 'pink', ft: 'bandpass', ff: up ? 700 : 1500, ff2: up ? 1700 : 500, fft: 0.5, q: 0.9, a: 0.08, hold: 0.22, d: 0.25, g: 0.07 });
+    K.grains(v, { n: 10, span: 0.42, f: [2500, 4200], q: 6, d: [0.004, 0.01], g: [0.02, 0.05] });
+    if (!up) { tone(v, { f: 95, f2: 55, ft: 0.08, at: 0.46, a: 0.002, d: 0.14, g: 0.03 }); noise(v, { kind: 'brown', ft: 'lowpass', ff: 500, at: 0.46, a: 0.002, d: 0.15, g: 0.025 }); }
+    return 0.7;
+  });
+def('lineupShuffle', { max: 1, cool: 0.5, pv: 0.4, dv: 0.1, verb: 0.15, pri: 1, gain: 2.5 },
+  v => {                                   // behind the curtain: webbed feet scuffling, an apple box dragged, two muffled quacks
+    for (let k = 0; k < 9; k++) noise(v, { ft: 'bandpass', ff: v.r(500, 900), q: 2, at: k * 0.08 + v.r(0, 0.03), a: 0.003, d: 0.04, g: v.r(0.03, 0.06), lp: 1500, nd: true });
+    noise(v, { kind: 'brown', ft: 'lowpass', ff: 420, at: 0.25, a: 0.05, hold: 0.15, d: 0.1, g: 0.06 });
+    quack(v, 0.2, 380, { g: 0.07, len: 0.1 }); quack(v, 0.52, 450, { g: 0.06, len: 0.09 });
+    return 0.9;
+  });
+def('tellGlance', { max: 2, gap: 0.08, pv: 0.4, dv: 0.08, verb: 0.12, pri: 1, gain: 3 },
+  v => {                                   // a fake's tic (opts.kind): glance = a shifty bip-bip, sweat = a drip plink, gulp = a cartoon GLUNK
+    const k = v.o.kind;
+    if (k === 'sweat') { tone(v, { f: 1900, f2: 2900, ft: 0.05, a: 0.002, d: 0.08, g: 0.12 }); tone(v, { f: 1400, at: 0.09, a: 0.002, d: 0.06, g: 0.05 }); return 0.25; }
+    if (k === 'gulp') { tone(v, { type: 'triangle', f: 330, fs: [[0.08, 180], [0.18, 260]], a: 0.01, hold: 0.05, d: 0.14, g: 0.065, lp: 1400 }); return 0.3; }
+    tone(v, { type: 'triangle', f: 900, f2: 1200, ft: 0.04, a: 0.002, d: 0.05, g: 0.05 }); tone(v, { type: 'triangle', f: 1200, f2: 900, ft: 0.04, at: 0.09, a: 0.002, d: 0.05, g: 0.05 });
+    return 0.22;
+  });
+def('swapWhistle', { max: 1, cool: 0.4, pv: 0.2, dv: 0.05, verb: 0.2, pri: 3, gain: 2.5 },
+  v => {                                   // the telegraph: a two-tone slide whistle, fwee-OO (up, then a drop)
+    tone(v, { f: 1300, fs: [[0.16, 2100], [0.2, 2050]], a: 0.02, hold: 0.14, d: 0.06, g: 0.06, vib: [11, 0.015] });
+    tone(v, { f: 1900, fs: [[0.2, 1150]], at: 0.26, a: 0.015, hold: 0.12, d: 0.1, g: 0.06, vib: [11, 0.015] });
+    noise(v, { ft: 'bandpass', ff: 3000, q: 2, a: 0.02, hold: 0.3, d: 0.1, g: 0.01 });
+    return 0.6;
+  });
+def('fakeRun', { max: 2, gap: 0.06, pv: 0.6, dv: 0.1, verb: 0.1, pri: 2, gain: 2.5 },
+  v => {                                   // BREAK FOR IT: a panicked quack and a flurry of webbed feet scrambling off
+    quack(v, 0, 560, { up: 1.35, hold: 0.06, len: 0.14, down: 0.8, g: 0.12 });
+    for (let k = 0; k < 10; k++) noise(v, { ft: 'bandpass', ff: v.r(700, 1200), q: 3, at: 0.06 + k * 0.055, a: 0.002, d: 0.025, g: 0.06 * (1 - k / 12), nd: true });
+    noise(v, { kind: 'pink', ft: 'bandpass', ff: 900, ff2: 2400, fft: 0.4, q: 1.2, at: 0.05, a: 0.04, d: 0.35, g: 0.025 });
+    return 0.7;
+  });
+def('fakePop', { max: 2, gap: 0.05, pv: 0.6, dv: 0.1, verb: 0.12, pri: 2, gain: 3 },
+  v => {                                   // a fake shot: a feather POOF and a squawk
+    noise(v, { kind: 'pink', ft: 'highpass', ff: 1800, a: 0.003, d: 0.18, g: 0.08 });
+    noise(v, { ft: 'bandpass', ff: 4200, q: 1.5, at: 0.02, a: 0.01, d: 0.3, g: 0.02 });
+    quack(v, 0.03, 520, { up: 1.25, len: 0.11, down: 0.65, g: 0.1 });
+    return 0.45;
+  });
+def('cardsUp', { max: 1, pv: 0, dv: 0.03, verb: 0.25, pri: 4, gain: 1.7 },
+  v => {                                   // the finale: four cards flap up and the line quacks in time, B - L - A - M, then a ta-da quack chord
+    for (let k = 0; k < 4; k++) {
+      noise(v, { ft: 'bandpass', ff: 1800, q: 1.4, at: k * 0.16, a: 0.002, d: 0.05, g: 0.06 });
+      quack(v, k * 0.16 + 0.02, [392, 440, 494, 523][k], { len: 0.1, g: 0.08 });
+    }
+    for (const f of [523, 659, 784]) quack(v, 0.72, f, { hold: 0.2, len: 0.22, down: 0.95, up: 1.05, g: 0.06 });
+    return 1.3;
+  });
+// the lineup room bed: the strip lights' hum, the wall clock ticking, a distant typewriter now and then (a ding at a
+// line's end). Waits in K.stageBeds; stages/doppelducks.js adds it to K.beds (id 'doppelducks').
+K.stageBeds.lineup = (ctx, bus) => {
+  const now = ctx.currentTime, out = ctx.createGain(), srcs = [];
+  out.gain.setValueAtTime(0, now); out.gain.linearRampToValueAtTime(1, now + 2.5); out.connect(bus);
+  const loop = (kind, type, f, q, g) => { const s = ctx.createBufferSource(), fl = K.filt(ctx, type, f, q), gn = K.gain(ctx, g); s.buffer = K.noiseBuf(ctx, kind); s.loop = true; s.connect(fl).connect(gn).connect(out); s.start(now, Math.random() * 1.5); srcs.push(s); return { f: fl, g: gn }; };
+  loop('pink', 'lowpass', 500, 0.7, 0.035);                                 // room tone
+  const bz = K.filt(ctx, 'bandpass', 240, 3); bz.connect(out);
+  [[120, 0.01], [240, 0.0065], [360, 0.0025]].forEach(([f, g]) => { const o = ctx.createOscillator(), gn = K.gain(ctx, g); o.type = 'sawtooth'; o.frequency.value = f; o.connect(gn).connect(bz); o.start(now); srcs.push(o); });
+  const click = (t, f, g, d = 0.012) => {   // one short filtered click (a clock tick, a typebar)
+    const s = ctx.createBufferSource(), fl = K.filt(ctx, 'bandpass', f, 3), gn = ctx.createGain();
+    gn.gain.setValueAtTime(0, t); gn.gain.linearRampToValueAtTime(g, t + 0.001); gn.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    s.buffer = K.noiseBuf(ctx, 'white'); s.connect(fl).connect(gn).connect(out); s.start(t, Math.random()); s.stop(t + d + 0.02);
+  };
+  const ding = t => { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = 2350; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.012, t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6); o.connect(g).connect(out); o.start(t); o.stop(t + 0.65); };
+  let stopped = false, tickN = 0, nextTick = now + 0.5, nextType = now + 3;
+  return {
+    tick(until) {
+      if (stopped) return;
+      const c = ctx.currentTime; if (nextTick < c - 0.5) nextTick = c + 0.2; if (nextType < c - 0.5) nextType = c + 2;
+      while (nextTick < until) { try { click(nextTick, tickN++ & 1 ? 2600 : 3300, 0.04); } catch (e) {} nextTick += 1; }
+      while (nextType < until) {               // a typed burst: 6-14 keys, a ding at the end sometimes
+        try { const n = 6 + Math.floor(Math.random() * 9); let t = nextType; for (let k = 0; k < n; k++) { click(t, 1600 + Math.random() * 1400, 0.02 + Math.random() * 0.012, 0.02); t += 0.07 + Math.random() * 0.08; } if (Math.random() < 0.4) ding(t + 0.1); } catch (e) {}
+        nextType += 3 + Math.random() * 5;
+      }
+    },
     stop(fade = 1.5) {
       if (stopped) return; stopped = true;
       const t = ctx.currentTime, gp = out.gain;
