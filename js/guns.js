@@ -691,7 +691,7 @@ function create(THREE, opts) {
   group.name = 'BLAM.gun'; group.add(rig); rig.add(kick); kick.add(holder);
   const tex = { fire: tongueFrames(THREE, 'fire'), ray: tongueFrames(THREE, 'ray'), cap: tongueFrames(THREE, 'cap') };
   // #96: two crossed planes along the bore (-z in skin space), base at the muzzle; DEPTH-TESTED so the gun occludes it
-  const flashMat = new THREE.MeshBasicMaterial({ map: tex.fire[0], alphaTest: 0.5, transparent: false, depthTest: true, depthWrite: false, fog: false, side: THREE.DoubleSide });
+  const flashMat = new THREE.MeshBasicMaterial({ map: tex.fire[0], alphaTest: 0.5, transparent: false, depthTest: false, depthWrite: false, fog: false, side: THREE.DoubleSide });   // no depth test: it starts past the muzzle and points away, so nothing of the gun should hide it
   const tongueGeo = new THREE.PlaneGeometry(1, 1); tongueGeo.rotateY(Math.PI / 2); tongueGeo.translate(0, 0, -0.5);   // x (u) -> -z, from the origin
   const flash = new THREE.Group(); flash.name = 'gun-flash'; flash.visible = false;
   const flashA = new THREE.Mesh(tongueGeo, flashMat), flashB = new THREE.Mesh(tongueGeo, flashMat); flashB.rotation.z = Math.PI / 2;
@@ -799,8 +799,8 @@ function create(THREE, opts) {
     }
     skin.anim(S, skin.meshes, fx, skin.st, dt);
     ledMat.color.setHex(PAL[S.rp >= 0 ? ((T * 8 | 0) % 2 ? 'amber' : 'rust') : S.empty ? ((T * 3 | 0) % 2 ? 'red' : 'oxblood') : (skin.led || 'lime')]);
-    if (S.fireAge < 0.05) {                                                          // #96: 2-frame tongue along the bore
-      const f = S.fireAge < 0.025 ? 0 : 1, FS = FLASH_SIZE[SKINS[skinIndex].id] || FLASH_SIZE.guncon;
+    if (S.fireAge < 0.07) {                                                          // #96: tongue along the bore, ~4 frames at 60 Hz
+      const f = S.fireAge < 0.035 ? 0 : 1, FS = FLASH_SIZE[SKINS[skinIndex].id] || FLASH_SIZE.guncon;
       const dk = (window.BLAM && window.BLAM.FX && window.BLAM.FX.dark) ? 1.35 : 1;   // dark scenes (#92): a bigger lick
       flash.visible = true; flashMat.map = tex[skin.flash][f];
       const len = FS.len * (f ? 0.62 : 1) * flashScale * dk, h = FS.h * (f ? 0.8 : 1) * flashScale * dk;
