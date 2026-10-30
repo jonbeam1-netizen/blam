@@ -332,7 +332,7 @@ B.SFX = SFX;
 
 // ---------- event hooks: ambience beds follow the stage ----------
 let bed = null, bedId = '', music = null, duckAuto = true, lastPose = '', duckQuietUntil = 0, lastScaredAt = -1e9, scareVoiced = false;
-const SCARED_COOL = 2.0;        // #69: one scared quack per scare; no repeat within this many seconds
+const SCARED_COOL = 0.25;       // #69: one scared quack per aim (Jon: every aim quacks); this only debounces his startle hop
 const DUCK_POSES = { scared: 'duckScared', relief: 'duckRelief', present: 'duckHeckle', laugh: 'duckHeckle', cheer: 'duckCheer',
   sad: 'duckSad', happy: 'duckHappy', angry: 'duckAngry', hit: 'duckHit', shot: 'duckHit' };
 // poses the watcher voices itself; happy / angry / shot / laugh are main.js's business (laugh plays duckHeckle there)
@@ -374,6 +374,7 @@ function watch() {
       let ok = duckAuto && vis && lastPose && DUCK_WATCH[pose] && !hush;
       if (ok && pose === 'scared') { if (now - lastScaredAt < SCARED_COOL) ok = false; else { lastScaredAt = now; scareVoiced = true; } }
       if (ok && pose === 'relief') { if (lastPose !== 'scared' || !scareVoiced) ok = false; scareVoiced = false; }   // one relief per voiced scare
+      if (ok && (lastPose === 'scared' || lastPose === 'relief') && pose !== 'relief') ok = false;   // a return to the rest pose (ta-da on the title) is not a new line
       if (ok) SFX.duck(pose, true);
       lastPose = pose;
     }
