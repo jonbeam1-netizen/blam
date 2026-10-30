@@ -649,7 +649,7 @@ const BUILDERS = { justifier: buildHotRod, guncon: buildAquaPro, zapper: buildRa
 // '-away' slides it below the frame (briefing / results, where Deputy Duck stands bottom-right).
 // The rig eases between layouts.
 const LAYOUTS = {
-  desktop: { x: 0.5, y: -0.35, z: -1.0, s: 0.64, near: 2.4, nearR: 1.5, roll: 0.06, follow: 0.07, followR: -0.2, lift: 0.03, rollX: 0.06, rollY: 0.03 },
+  desktop: { x: 0.42, y: -0.36, z: -1.0, s: 0.8, near: 2.4, nearR: 1.5, roll: 0.06, follow: 0.07, followR: -0.2, lift: 0.03, rollX: 0.06, rollY: 0.03 },
   mobile:  { x: 0.12, y: -0.36, z: -1.0, s: 0.62, near: 2.2, nearR: 1.6, roll: 0.08, follow: 0.1, followR: -0.1, lift: 0.03, rollX: 0.06, rollY: 0.04 }
 };
 LAYOUTS['desktop-low'] = Object.assign({}, LAYOUTS.desktop, { x: 0.74, y: -0.38, follow: 0.035, followR: 0.06 });
@@ -818,6 +818,13 @@ function create(THREE, opts) {
     setEmpty(b) { if (b && !S.empty) S.emptyFrame = S.frame; S.empty = !!b; },
     update,
     muzzleWorldPos(out) { out = out || new THREE.Vector3(); skin.root.updateWorldMatrix(true, false); return skin.root.localToWorld(out.copy(skin.muzzleV)); },
+    // #72: the ejection port (world space) + its eject direction (world, unit) for the HUD casings; kind = skin id
+    ejectPoint() {
+      if (!skin) return null; skin.root.updateWorldMatrix(true, false);
+      const pos = skin.root.localToWorld(new THREE.Vector3().copy(skin.portV));
+      const dir = new THREE.Vector3(skin.portDir[0], skin.portDir[1], skin.portDir[2]).transformDirection(skin.root.matrixWorld);
+      return { pos, dir, kind: SKINS[skinIndex].id };
+    },
     dispose() {
       if (group.parent) group.parent.remove(group);
       for (const id in skins) for (const k in skins[id].meshes) skins[id].meshes[k].geometry.dispose();

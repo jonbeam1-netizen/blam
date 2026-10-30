@@ -151,6 +151,187 @@ function shell(x, y, p, ammo, mirror, t) {
   else if (ammo && ammo.empty && ((t * 4) | 0) % 2 === 0) text3c('EMPTY', x + 24, y - 7, 'red', 1, 'void');
   else if (ammo && ammo.flash > 0) text3c('EMPTY', x + 24, y - 7, 'red', 1, 'void');
 }
+// ---------- MAGAZINE (#72, 2026-10-29): replaces the number-on-a-bullet shell in the play HUD ----------
+// A vertical clip with one brass round per round left, readable at a glance. Rounds lie on their side (P1 points
+// right, P2 mirrored), 12x4 px on a 5 px pitch; up to 8 per column, 9-16 rounds = two columns, caps up to 32 =
+// three / four columns (a small count sits above the clip past 16). They go top-down as you shoot. The last 3 glow
+// warm (a 1.4 Hz pulse through 4 palette steps + a halo, never on/off). Empty: hollow (just the navy spring) with
+// the outline blinking red <-> bone at 2 Hz, plus the old RELOAD letters above it. Reload: the old clip drops out of
+// the well and a full one rises in (MAG_REL s, easeOutBack), a lemon outline when it seats. Play is never held up
+// (the reload itself is instant). Per-player state lives in a WeakMap keyed on the player object (a new Run = fresh
+// state); count changes are read off the ammo each frame, so the rival's display-only ammo animates too.
+// Casings: HUD.eject(player) (main.js playFire, every real shot) queues one; the next draw pops it from the gun's
+// ejection port (desktop: gun.ejectPoint() projected to HUD px) or, on touch / portrait / for the rival, from the
+// top of the clip. Max CAS_MAX alive, CAS_LIFE s, spin = 8 cached rotation frames per gun.
+const RND_W = 12, RND_H = 4, RND_P = 5, MAG_REL = 0.34, MAG_SEAT = 0.14;
+// round colours per heat level (0 = cold brass; 1-3 = the last-3 glow), rows top to bottom
+const MAG_RND = [
+  { rim: ['yellow', 'amber', 'amber', 'rust'], gr: 'rust', cs: ['lemon', 'yellow', 'yellow', 'amber'], tip: ['sand', 'orange', 'rust', 'chestnut'], halo: null },
+  { rim: ['lemon', 'yellow', 'amber', 'rust'], gr: 'orange', cs: ['lemon', 'lemon', 'yellow', 'orange'], tip: ['lemon', 'orange', 'orange', 'rust'], halo: 'oxblood' },
+  { rim: ['lemon', 'yellow', 'yellow', 'orange'], gr: 'orange', cs: ['bone', 'lemon', 'yellow', 'orange'], tip: ['lemon', 'yellow', 'orange', 'rust'], halo: 'rust' },
+  { rim: ['bone', 'lemon', 'yellow', 'orange'], gr: 'amber', cs: ['bone', 'bone', 'lemon', 'yellow'], tip: ['bone', 'lemon', 'orange', 'red'], halo: 'orange' }];
+const magGeoms = {};
+function magGeom(cap) {
+  cap = Math.max(1, Math.min(32, cap | 0));
+  const g = magGeoms[cap]; if (g) return g;
+  const cols = cap <= 8 ? 1 : cap <= 16 ? 2 : cap <= 24 ? 3 : 4, rows = Math.ceil(cap / cols);
+  const iw = cols * (RND_W + 1) + 1, ih = rows * RND_P + 1;          // interior (1 px pad around the rounds)
+  return (magGeoms[cap] = { cap, cols, rows, iw, ih, W: iw + 10, H: ih + 8 });
+}
+// clip body: cols 0-1 baseplate overhang, 2 outline, 3-4 wall, interior, wall, outline, overhang. Rows: 0 outline,
+// 1-2 feed lips, interior, a dark seam, a 3-row baseplate in the player colour, outline. oc = outline colour.
+function magBody(g, mirror, oc, p) {
+  const { W, H, iw, ih } = g, py0 = 3 + ih, C = PCOL[p];
+  return pixImg('magb' + g.cols + 'x' + g.rows + (mirror ? 'm' : '') + oc + p, W, H, (x, y) => {
+    const X = mirror ? W - 1 - x : x;
+    if (y >= py0) {
+      if (y === H - 1 || X === 0 || X === W - 1) return oc;
+      if (y === py0) return X <= 2 || X >= W - 3 ? oc : 'void';
+      if (y === py0 + 2 && Math.abs(X - W / 2 + 0.5) < 1) return C[0];   // rivet
+      return y === py0 + 1 ? C[0] : y === py0 + 2 ? C[1] : C[2];
+    }
+    if (X < 2 || X > W - 3) return null;
+    if (X === 2 || X === W - 3 || y === 0) return oc;
+    if (X === 3) return 'haze'; if (X === 4) return 'steel';
+    if (X === W - 5) return 'slate'; if (X === W - 4) return 'navy';
+    const ix = X - 5, iy = y - 3;
+    if (y <= 2) return ix < 3 || ix >= iw - 3 ? (y === 1 ? 'haze' : 'slate') : 'void';   // feed lips over the top round
+    if (ix === 0 || iy === 0) return 'void';
+    return (ix + 2 * iy) % 9 === 0 ? 'navy' : 'midnight';                 // the spring shows where rounds are spent
+  });
+}
+function rndImg(lvl, mirror) {
+  const R0 = MAG_RND[lvl];
+  return pixImg('rnd' + lvl + (mirror ? 'm' : ''), RND_W, RND_H, (x, y) => {
+    const X = mirror ? RND_W - 1 - x : x;
+    if (X === 0) return R0.rim[y]; if (X === 1) return R0.gr; if (X <= 7) return R0.cs[y];
+    if ((y === 0 || y === 3) && X === RND_W - 1) return null;          // rounded nose
+    return R0.tip[y];
+  });
+}
+// one clip at (x, top) with n rounds
+function magAt(g, x, top, n, mirror, oc, p, lvl) {
+  draw(magBody(g, mirror, oc, p), x, top);
+  n = Math.min(n, g.cols * g.rows);
+  const halo = MAG_RND[lvl].halo, img = rndImg(lvl, mirror);
+  for (let i = 0; i < n; i++) {
+    const r = (i / g.cols) | 0, c = i % g.cols, ry = 2 + g.ih - RND_H - r * RND_P;
+    const rx = mirror ? g.W - 6 - c * (RND_W + 1) - RND_W : 6 + c * (RND_W + 1);
+    if (halo) rect(x + rx - 1, top + ry - 1, RND_W + 2, RND_H + 2, halo);
+    draw(img, x + rx, top + ry);
+  }
+}
+const MAGS = new WeakMap();
+function magState(pl) {
+  let s = MAGS.get(pl);
+  if (!s) MAGS.set(pl, s = { last: null, max: 0, pend: 0, relAt: -9, old: 0, hooked: false });
+  return s;
+}
+// read the player's ammo, spot shots / reloads, pick the clip size: { st, g, n, inf, am }
+function magPrep(pl, t) {
+  const am = pl && pl.ammo, st = magState(pl || {}), inf = !am || !!am.infinite;
+  const n = inf ? 8 : Math.max(0, am.count | 0);
+  if (!inf) {
+    let mx = isFinite(am.max) ? am.max | 0 : 0;
+    if (!mx) { const r = B.G && B.G.run, a = r && r.cfg && r.cfg.ammo; if (a && (a.mag || a.cap)) mx = (a.mag || a.cap) | 0; }   // the rival's display-only ammo has no max
+    st.max = Math.max(st.max, mx, n);
+    if (st.last != null && n > st.last) { st.relAt = t; st.old = Math.max(0, st.last - (st.hooked ? st.pend : 0)); }   // a reload
+    else if (st.last != null && n < st.last && !st.hooked) st.pend += Math.min(3, st.last - n);                     // the rival fired
+    st.last = n;
+  }
+  return { st, g: magGeom(inf ? 8 : st.max), n, inf, am };
+}
+const easeBack = q => { const k = 1.3, u = q - 1; return 1 + (k + 1) * u * u * u + k * u * u; };
+// draw the clip with its bottom at yb (left edge x); p = player colour, mirror = P2's half; pops queued casings
+function magDraw(m, x, yb, p, mirror, t, kind) {
+  const { st, g, n, inf, am } = m, top = yb - g.H, cx = x + g.W / 2;
+  const hot = !inf && n > 0 && n <= 3 && g.cap > 3;
+  const lvl = hot ? Math.min(3, Math.floor((Math.sin(t * Math.PI * 2 * 1.4) * 0.5 + 0.5) * 4)) : 0;
+  const empty = !inf && n === 0, blink = ((t * 4) | 0) % 2 ? 'bone' : 'red', e = t - st.relAt;
+  if (e >= 0 && e < MAG_REL) {                                          // the swap: old clip drops out, a full one rises in
+    const q = e / MAG_REL, d = g.H + 2;
+    ctx.save(); ctx.beginPath(); ctx.rect(Math.round(x) - 1, Math.round(top) - 14, g.W + 2, g.H + 14); ctx.clip();
+    if (q < 0.45) magAt(g, x, top + Math.pow(q / 0.45, 2) * d, st.old, mirror, 'void', p, 0);
+    if (q > 0.38) magAt(g, x, top + (1 - easeBack(Math.min(1, (q - 0.38) / 0.62))) * d, n, mirror, 'void', p, lvl);
+    ctx.restore();
+  } else magAt(g, x, top, n, mirror, empty ? blink : e >= 0 && e < MAG_REL + MAG_SEAT ? 'lemon' : 'void', p, lvl);
+  // labels above the clip (same words as the old shell)
+  const ly = top - 7;
+  if (inf) sprite(INF, cx - 9, top - 12, 2, { X: 'bone' }, 'inf');
+  else if (am && am.kick > 0) text3c('RELOAD', cx, ly, 'yellow', 1, 'void');
+  else if (am && am.magEmpty) text3c('RELOAD', cx, ly, blink, 1, 'void');
+  else if (am && am.empty && ((t * 4) | 0) % 2 === 0) text3c('EMPTY', cx, ly, 'red', 1, 'void');
+  else if (am && am.flash > 0) text3c('EMPTY', cx, ly, 'red', 1, 'void');
+  else if (g.cap > 16) text3c(String(n), cx, ly, hot ? 'orange' : 'bone', 1, 'void');
+  // casings queued by HUD.eject / the rival's count drops
+  const layer = ctx === R.hx ? 'hx' : 'ox';
+  for (; st.pend > 0; st.pend--) {
+    const ep = am && am.gun && layer === 'hx' ? gunEject() : null;
+    if (ep) spawnCasing('hx', ep.kind, ep.x, ep.y, ep.dx * (80 + Math.random() * 30), ep.dy * 60 - 120 - Math.random() * 40, RH - 3);
+    else spawnCasing(layer, kind || 'guncon', mirror ? x + 4 : x + g.W - 5, top + 2, (mirror ? -1 : 1) * (45 + Math.random() * 30), -(120 + Math.random() * 40), yb - 3);
+  }
+  return g;
+}
+// ---------- casings ----------
+const CAS_ART = {   // lying on their side, rim on the left (skin ids: guncon AQUA PRO, justifier HOT ROD, zapper RAY-85, revolver CANDY SIX)
+  guncon: { rows: ['RLLLLLL', 'RYYYYYY', 'RAAAAAA', 'RTTTTTT'], key: { R: 'rust', L: 'lemon', Y: 'yellow', A: 'amber', T: 'orange' } },                 // brass pistol case 7x4
+  justifier: { rows: ['RLLLLLLL...', 'RYYYYYYYYYY', 'RAAAAAAAAAA', 'RTTTTTTT...'], key: { R: 'rust', L: 'lemon', Y: 'yellow', A: 'amber', T: 'orange' } },   // longer bottlenecked rifle case 11x4
+  zapper: { rows: ['hbbObbh', 'hblOlbh', 'hslOlsh', 'hssOssh', 'hrrOrrh'], key: { h: 'haze', b: 'bone', l: 'lemon', s: 'sand', O: 'orange', r: 'rust' }, glow: 1 },   // spent energy cell 7x5, cream + glowing band
+  revolver: { rows: ['Mbggbgg', 'Mppbppb', 'Mpbppbp', 'MbPPbPP'], key: { M: 'plum', g: 'bubblegum', p: 'pink', P: 'magenta', b: 'bone' } }                    // candy-striped case 7x4
+};
+function casImg(kind, k) {
+  const A = CAS_ART[kind] || CAS_ART.guncon, w = A.rows[0].length, h = A.rows.length, D = Math.ceil(Math.hypot(w, h)) + 2;
+  return cached('cas|' + kind + '|' + k, D, D, g => {
+    const an = k * Math.PI / 4, cs = Math.cos(an), sn = Math.sin(an), c = D / 2, grid = new Array(D * D).fill(null);
+    for (let y = 0; y < D; y++) for (let x = 0; x < D; x++) {
+      const dx = x + 0.5 - c, dy = y + 0.5 - c, sx = Math.floor(cs * dx + sn * dy + w / 2), sy = Math.floor(-sn * dx + cs * dy + h / 2);
+      const ch = sx >= 0 && sx < w && sy >= 0 && sy < h ? A.rows[sy][sx] : '.';
+      if (ch !== '.') grid[y * D + x] = ch === 'O' && A.glow ? (k & 1 ? 'lemon' : 'orange') : A.key[ch];   // the cell's band flickers
+    }
+    const nb = (xx, yy) => xx >= 0 && yy >= 0 && xx < D && yy < D && grid[yy * D + xx];
+    for (let y = 0; y < D; y++) for (let x = 0; x < D; x++) {
+      const v = grid[y * D + x];
+      if (v) prect(g, x, y, 1, 1, v);
+      else if (nb(x - 1, y) || nb(x + 1, y) || nb(x, y - 1) || nb(x, y + 1)) prect(g, x, y, 1, 1, 'void');
+    }
+  });
+}
+const CAS = [], CAS_MAX = 8, CAS_LIFE = 0.8, casT = { hx: null, ox: null };
+function spawnCasing(layer, kind, x, y, vx, vy, floor) {
+  if (CAS.length >= CAS_MAX) CAS.shift();
+  CAS.push({ layer, kind, x, y, vx, vy, a: Math.random() * 6.28, va: (vx >= 0 ? 1 : -1) * (18 + Math.random() * 12), age: 0, floor, b: 0 });
+}
+// step + draw one layer's casings ('hx' = the game HUD, 'ox' = the portrait strip); t = game clock
+function drawCasings(layer, t) {
+  const last = casT[layer]; casT[layer] = t;
+  const dt = last == null ? 0 : Math.max(0, Math.min(0.05, t - last));
+  for (let i = CAS.length - 1; i >= 0; i--) {
+    const c = CAS[i]; if (c.layer !== layer) continue;
+    c.age += dt; if (c.age > CAS_LIFE) { CAS.splice(i, 1); continue; }
+    c.vy += 900 * dt; c.x += c.vx * dt; c.y += c.vy * dt; c.a += c.va * dt;
+    if (c.y > c.floor && c.vy > 0) { c.y = c.floor; c.vy = c.b < 2 ? -c.vy * 0.35 : 0; c.vx *= 0.55; c.va *= 0.5; c.b++; }   // bounce on the frame bottom
+    if (c.age > CAS_LIFE - 0.18 && ((c.age * 30) | 0) % 2) continue;    // fade = a quick flicker out (the HUD has no alpha)
+    const img = casImg(c.kind, ((Math.round(c.a / (Math.PI / 4)) % 8) + 8) % 8);
+    draw(img, c.x - img.width / 2, c.y - img.height / 2);
+  }
+}
+// the on-screen gun's ejection port in HUD px + its screen direction (desktop landscape only), or null
+let _ep = null;
+function gunEject() {
+  const G = B.G, gun = G && G.gun;
+  if (!gun || typeof gun.ejectPoint !== 'function' || G.touch || R.frame.portrait || !R.camera) return null;
+  const e = gun.ejectPoint(); if (!e) return null;
+  _ep = _ep || e.pos.clone();
+  _ep.copy(e.pos).project(R.camera); if (_ep.z > 1) return null;
+  const x0 = (_ep.x + 1) / 2 * RW, y0 = (1 - _ep.y) / 2 * RH;
+  _ep.copy(e.pos).addScaledVector(e.dir, 0.06).project(R.camera);
+  let dx = (_ep.x + 1) / 2 * RW - x0, dy = (1 - _ep.y) / 2 * RH - y0; const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
+  return { x: x0, y: y0, dx, dy, kind: e.kind };
+}
+// main.js playFire: a real shot by this player (one casing)
+function eject(pl) { if (!pl) return; const st = magState(pl); st.hooked = true; st.pend = Math.min(st.pend + 1, CAS_MAX); }
+const skinKind = () => { const G = B.G; return (G && G.gun && G.gun.skinId) || 'guncon'; };
+const magKind = pl => pl && pl.ammo && pl.ammo.gun ? skinKind() : 'guncon';   // the rival's skin isn't synced: brass
 function hearts(x, y, n, max, right) {
   for (let i = 0; i < max; i++) {
     const hx = right ? x - 9 - i * 10 : x + i * 10;
@@ -301,40 +482,45 @@ function crosshair(u, v, hot) {
   for (const [a, b, w, h] of bars) rect(a, b, w, h, c);
   rect(x, y, 1, 1, 'red');
 }
-// the bottom strip. box = {x, y, w}; hs = HUD state from main.js (see ENGINE.md); compact = portrait strip
+// the bottom strip. box = {x, y, w}; hs = HUD state from main.js (see ENGINE.md); compact = portrait strip.
+// #72: the magazine stands at the strip's left edge (P2: right edge, mirrored), its bottom on the frame bottom
+// (landscape) / by + 45 (portrait); everything that sat right of the old shell now starts 4 px right of the clip.
 function strip(bx, by, w, hs, t, compact) {
-  const P = hs.players, me = P[0];
+  const P = hs.players, me = P[0], mb = compact ? by + 45 : by + 35;
   if (hs.practice) {
-    // practice: shell (no hearts, nothing to lose) | HIT badge ... the middle stays free for Deputy Duck ... | clock + HITS
-    shell(bx, by, 0, me.ammo, false, t);
-    hitBadge(bx + 51, by + 1, me.hitAge);
+    // practice: magazine (no hearts, nothing to lose) | HIT badge ... the middle stays free for Deputy Duck ... | clock + HITS
+    const m = magPrep(me, t), mx = bx + magDraw(m, bx, mb, 0, false, t, magKind(me)).W + 4;
+    hitBadge(mx, by + 1, me.hitAge);
     const cx = compact ? bx + w / 2 + 6 : bx + 100;
     practiceBall(cx, by + 15, hs.practice.secs, t);
     text3c(mmss(hs.practice.secs), cx, by - 9, 'lime', 1, 'void');
     pill(cx + 20, by + 8, 30, 14, 'blue', 'cyan', 'deepblue'); text3c(String(me.hits), cx + 35, by + 10, 'bone', me.hits > 99 ? 1 : 2);
     text3c('HITS', cx + 35, by + 1, 'mist', 1, 'void');
-    if (hs.practice.streak > 1) text3('STREAK ' + hs.practice.streak, bx + 1, by + 21, 'yellow', 1, 'void');
-    if (hs.status && compact) text3(hs.status, bx, by + 30, 'lime', 1, 'void');
+    if (hs.practice.streak > 1) text3('STREAK ' + hs.practice.streak, mx, by + 21, 'yellow', 1, 'void');
+    if (hs.status && compact) text3(hs.status, mx, by + 30, 'lime', 1, 'void');
   } else if (!hs.versus) {
-    // solo: shell + hearts | HIT badge | timer ball | quota pill
-    shell(bx, by, 0, me.ammo, false, t);
-    hearts(bx + 1, by + 19, me.lives, me.maxLives);
-    hitBadge(bx + 51, by + 1, me.hitAge);
+    // solo: magazine | hearts + HIT badge | timer ball | quota pill
+    const m = magPrep(me, t), mx = bx + magDraw(m, bx, mb, 0, false, t, magKind(me)).W + 4;
+    hearts(mx, by + 19, me.lives, me.maxLives);
+    hitBadge(mx, by + 1, me.hitAge);
     const cx = compact ? bx + w / 2 + 6 : RW / 2;
     timerBall(cx, by + 15, hs.timeFrac, hs.secs, t);
     quotaPill(cx + 22, by + 8, me.hits, hs.quota);
-    if (hs.status) text3(hs.status, bx, by + 30, 'lime', 1, 'void');
-    if (compact) text3('SCORE ' + String(hs.score).padStart(6, '0') + (hs.best ? '   BEST ' + hs.best : ''), bx, by + 38, 'bone', 1, 'void');
+    if (hs.status) text3(hs.status, mx, by + 30, 'lime', 1, 'void');
+    if (compact) text3('SCORE ' + String(hs.score).padStart(6, '0') + (hs.best ? '   BEST ' + hs.best : ''), mx, by + 38, 'bone', 1, 'void');
   } else {
-    // versus: two mirrored halves (P1 red left, P2 blue right), timer in the middle
+    // versus: two mirrored halves (P1 red left, P2 blue right), timer in the middle; each clip in its own half
     const L = P[0], Rp = P[1], right = bx + w;
     const cx = compact ? bx + w / 2 : RW / 2;
-    shell(bx, by, 0, L.ammo, false, t); hearts(bx + 1, by + 19, L.lives, L.maxLives);
-    counter(bx + 51, by + 1, L.hits, 0); hitBadge(bx + 51, by - 15, L.hitAge);
-    if (compact) text3(L.name, bx + 1, by - 8, 'coral', 1, 'void'); else text3(L.name, bx + 83, by + 6, 'coral', 1, 'void');
-    shell(right - 48, by, 1, Rp.ammo, true, t); hearts(right - 1, by + 19, Rp.lives, Rp.maxLives, true);
-    counter(right - 79, by + 1, Rp.hits, 1); hitBadge(right - 82, by - 15, Rp.hitAge);
-    if (compact) text3r(Rp.name, right - 1, by - 8, 'ice', 1, 'void'); else text3r(Rp.name, right - 83, by + 6, 'ice', 1, 'void');
+    const ml = magPrep(L, t), lx = bx + magDraw(ml, bx, mb, 0, false, t, magKind(L)).W + 4;
+    hearts(lx, by + 19, L.lives, L.maxLives);
+    counter(lx, by + 1, L.hits, 0); hitBadge(lx, by - 15, L.hitAge);
+    if (compact) text3(L.name, lx, by - 8, 'coral', 1, 'void'); else text3(L.name, lx + 32, by + 6, 'coral', 1, 'void');
+    const mr = magPrep(Rp, t), rx = right - mr.g.W;
+    magDraw(mr, rx, mb, 1, true, t, magKind(Rp));
+    hearts(rx - 4, by + 19, Rp.lives, Rp.maxLives, true);
+    counter(rx - 32, by + 1, Rp.hits, 1); hitBadge(rx - 35, by - 15, Rp.hitAge);
+    if (compact) text3r(Rp.name, rx - 4, by - 8, 'ice', 1, 'void'); else text3r(Rp.name, rx - 36, by + 6, 'ice', 1, 'void');
     timerBall(cx, by + 15, hs.timeFrac, hs.secs, t);
     if (hs.status) text3c(hs.status, cx, by + 32, 'lime', 1, 'void');
   }
@@ -348,8 +534,9 @@ function drawPlay(hs, t) {
     if (hs.best) text3('BEST  ' + String(hs.best).padStart(6, '0'), 4, 11, 'haze', 1, 'void');
   }
   if (hs.label) text3r(hs.label, RW - 4, 4, 'yellow', 1, 'void');
+  drawCasings('hx', t);                                  // #72: casings fly over the gun and the strip
 }
-Object.assign(H, { shell, hearts, hitBadge, timerBall, quotaPill, counter, crosshair, reloadPrompt, reloadMarker, markerState, markerSize, markerKind, strip, drawPlay, HIT_LIFE, PCOL });
+Object.assign(H, { shell, mag: magDraw, magPrep, magGeom, eject, drawCasings, gunEject, casImg, hearts, hitBadge, timerBall, quotaPill, counter, crosshair, reloadPrompt, reloadMarker, markerState, markerSize, markerKind, strip, drawPlay, HIT_LIFE, PCOL });
 
 // =========================================================================================
 // Panels and icons for the briefing card / results / menus
@@ -546,7 +733,7 @@ function drawOuter(fr, t, hs) {
         text7('B.L.A.M.', Math.round(o.OW / 2 - w / 2), Math.max(3, Math.round(topH / 2 - 16)), 2, 'gold', 'void', 2);
       }
       const sy = gy + gh + 22, sw = Math.min(o.OW - 8, 230), sx = Math.round((o.OW - sw) / 2);
-      if (hs && hs.players && sy + 46 < o.OH) strip(sx, sy, sw, Object.assign({}, hs, { status: hs.status }), t, true);
+      if (hs && hs.players && sy + 46 < o.OH) { strip(sx, sy, sw, Object.assign({}, hs, { status: hs.status }), t, true); drawCasings('ox', t); }
       else if (hs && hs.menuLine) text3c(hs.menuLine, o.OW / 2, sy, 'lime', 1, 'void');
     }
     if (hs && hs.toast) text3c(hs.toast, o.OW / 2, Math.max(2, gy - 20), 'yellow', 1, 'void');   // toasts sit just above the game rect

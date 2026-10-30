@@ -194,8 +194,9 @@ const ROUTE = {
 DUCK_SETS.forEach(n => {
   ROUTE[n] = (o, def, f, d) => {
     if (!hasSet(n)) return false;
-    const now = ctx.currentTime;  // one duck line at a time: cut any synth duck line too (gently: ~60 ms)
-    active.forEach(x => { if (!x.stop && x.end > now && /^duck/.test(x.name)) steal(x, now, 0.02); });
+    const now = ctx.currentTime;  // #70: duck lines never overlap. A new line while one plays is skipped (swallowed, no
+    if (n !== 'duckHit' && active.some(x => x.end > now && /^duck/.test(x.name))) return true;   // synth fallback); only
+    active.forEach(x => { if (!x.stop && x.end > now && /^duck/.test(x.name)) steal(x, now, 0.02); });   // the hit cuts in
     return !!sample('duck', n, n, def.pri, { gain: f, delay: d, pan: panOf(o, def), rate: jit(0.05) });
   };
 });
@@ -330,7 +331,8 @@ const SFX = {
 B.SFX = SFX;
 
 // ---------- event hooks: ambience beds follow the stage ----------
-let bed = null, bedId = '', music = null, duckAuto = true, lastPose = '', duckQuietUntil = 0;
+let bed = null, bedId = '', music = null, duckAuto = true, lastPose = '', duckQuietUntil = 0, lastScaredAt = -1e9;
+const SCARED_COOL = 2.0;        // #69: one scared quack per scare; no repeat within this many seconds
 const DUCK_POSES = { scared: 'duckScared', relief: 'duckRelief', present: 'duckHeckle', laugh: 'duckHeckle', cheer: 'duckCheer',
   sad: 'duckSad', happy: 'duckHappy', angry: 'duckAngry', hit: 'duckHit', shot: 'duckHit' };
 // poses the watcher voices itself; happy / angry / shot / laugh are main.js's business (laugh plays duckHeckle there)
@@ -369,7 +371,10 @@ function watch() {
     if (pose && pose !== lastPose) {
       const vis = !d.group || d.group.visible !== false;
       const hush = DUCK_HUSH[pose] && performance.now() < duckQuietUntil;
-      if (duckAuto && vis && lastPose && DUCK_WATCH[pose] && !hush) SFX.duck(pose, true);
+      let ok = duckAuto && vis && lastPose && DUCK_WATCH[pose] && !hush;
+      if (ok && pose === 'scared') { if (now - lastScaredAt < SCARED_COOL) ok = false; else lastScaredAt = now; }
+      if (ok && pose === 'relief' && lastPose !== 'scared') ok = false;   // relief only right after a real scare
+      if (ok) SFX.duck(pose, true);
       lastPose = pose;
     }
   } catch (e) { if (SFX.debug) console.warn('SFX watch', e); }

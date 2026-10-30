@@ -6,7 +6,7 @@
 window.BLAM = window.BLAM || {};
 (function (B) {
 const R = B.R, I = B.Input, H = B.HUD, S = B.Stage, Tg = B.Targets, Save = B.Save, SFX = B.SFX, UI = B.UI, N = B.Net;
-const BUILD = '0.012';                      // bump on every publish (shown on the title status line)
+const BUILD = '0.013';                      // bump on every publish (shown on the title status line)
 const Q = new URLSearchParams(location.search);
 // ?slow=0.25 (dev/testing): single-player stage clock runs at that rate, so slow tools (screenshot -> click
 // takes seconds) can still shoot a target that is really there. Versus always runs on the wall clock.
@@ -205,6 +205,7 @@ G.playFire = (run, u, v, inside, touch) => {
   if (run.practice && G.practiceMenu && Tg.pick(R.rayAt(u, v), G.practiceMenu.items.map(i => i.sign))) { G.practiceMenu.fire(G.shoot(u, v)); return; }
   const ray = G.shoot(u, v), me = run.local;
   ammo.use();
+  if (H.eject) H.eject(run.me);                   // #72: a brass casing out of the gun (HUD)
   if (!run.versus) run.me.shots++;
   const send = (k, tid, z) => { if (run.versus) N.sendShot({ st: +run.t.toFixed(3), k, tid, z, a: ammo.infinite ? -1 : ammo.count, ar: 0 }); };
   // shooting the deputy is just for fun (a miss). In practice he stands in the scene under the lanes, so the
@@ -420,7 +421,8 @@ function step(dt, draw) {
   R.render();
 }
 // per-frame play extras: duck hover hook (the mini HUD duck under the crosshair) + ARCADE hover-to-reload
-let duckHoverOn = false, dwellAt = 0;
+let duckHoverOn = false, dwellAt = 0, duckHoverOffAt = 0;
+const DUCK_HOVER_OFF = 0.22;                     // #68: the crosshair must be off him this long before hover drops (his startle hop can't toggle it)
 function onFrameNow(run) {                       // the mouse rests on the frame (or the edge zone)
   const p = I.ptr; return p.over && !I.touch && (!p.inside || inEdge(run, p.u));
 }
@@ -428,7 +430,13 @@ function playExtras(run) {
   if (typeof G.duck.setHover === 'function') {
     let on = false;
     if ((G.duckMode === 'mini' || G.duckMode === 'practice') && I.mouseIn && !I.touch) { try { on = !!G.duck.hitTest(R.rayAt(I.aim.u, I.aim.v)); } catch (e) { on = false; } }
-    if (on || duckHoverOn) { try { G.duck.setHover(on); } catch (e) {} }
+    const tNow = performance.now() / 1000;
+    if (on) duckHoverOffAt = 0;
+    else if (duckHoverOn) {                      // hysteresis: a miss only counts once it has lasted DUCK_HOVER_OFF s
+      if (!duckHoverOffAt) duckHoverOffAt = tNow;
+      if (tNow - duckHoverOffAt < DUCK_HOVER_OFF) on = true; else duckHoverOffAt = 0;
+    }
+    if (on !== duckHoverOn) { try { G.duck.setHover(on); } catch (e) {} }
     duckHoverOn = on;
   }
   // ARCADE hover reload: the pointer has to stay on the frame for DWELL s (wall clock, sampled per frame) while

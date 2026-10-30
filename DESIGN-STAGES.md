@@ -71,7 +71,9 @@ and the duck heckling from the corner. NO light flicker, NO camera flash, NO fal
   - **GALLERY WHEELS**: spinning drums with plates on the rim; each plate shows for a moment per pass; a plate can flip to a decoy between passes.
   - **CARD TABLE**: plates lie face down like cards and flip up a row at a time; the decoy tell gets a split second to read.
   - **SHELF STACK**: plates stacked in columns on shelves, cleared top down; a hidden bomb in the stack makes only the part above it safe.
-  - **WINDOWS**: a tenement front with blinds that snap up on a plate, a decoy or a bomb (Elevators pacing, range catalogue).
+  - **LASER TAG** (Jon 2026-10-29): black-lit neon room, glowing targets.
+- **SHUFFLE CUPS** (2026-10-29): cups slide and swap, guess which hides the target; shoot the right cup.
+- **WINDOWS**: a tenement front with blinds that snap up on a plate, a decoy or a bomb (Elevators pacing, range catalogue).
 
 ## 4. Decoy redesign brief (#67, Jon 2026-10-29)
 Goal: a bomb disguised as a target that FOOLS you at a glance (corner of the eye while shooting) but is OBVIOUSLY a bomb once you look, and silly: cheap paint, cardboard, paper. Build several variants in the look test; Jon picks one or MORE (several can ship together, mixed at random). The current decoy (thin sloppy plate strokes on the bomb, wobble tell) STAYS as variant A in case he prefers it.
@@ -88,6 +90,53 @@ ON HIT (Jon 2026-10-29): a decoy does NOT explode instantly. Short build-up firs
 - **Range, built 2026-10-29** (range.js, see ENGINE.md "Range rework 2026-10-29"): the on-hit build-up is in (0.3 s: freeze, `prop.unmask(k)` over 0.16 s, swell + flaring fuse, then the bang; `bombReveal` at the shot, boom + LIFE -1 at the bang). Flips both ways: flip bombs (bomb -> plate) and TURNCOATS (plate -> bomb after a wobble + fuse-tick telegraph). No tier gates: decoys, flip bombs, turncoats, hidden bombs and pattern rows (columns of 4-5 shot front first, rows of 3-5 in step) at every tier. Insane now has fewer targets (about 23 spawns, 15 real) and a 37 % bomb share. The range spawns decoys with `P.decoy(o)` only; the variant pick is props.js's.
 - **Round 1 review (Jon 2026-10-29)**: picks A (sloppy paint), C (cardboard), E (held up, his favourite). B, D, F PARKED (code kept, `K` in the viewer shows them). Notes: far away a decoy must pass for a plate at a glance, the tell when you look is the SKULL through the ring gaps (gaps a bit wider than a real plate's, plate near normal size, fuse on top); the far pass must KEEP TRUE COLOURS on everything that is not plate (arms, legs, cardboard, tape, iron): round 1 sank them to navy and he saw only a regular target. A: far look good, up close more paint coverage (thick, complete, messy strokes, rings bare). C: a cardboard hex RIM with an open middle, the bomb inside carries A's thin paint; tape-y duct tape (one satin band, torn ends, uneven width, a lifting end, faint weave). E: plate almost normal size, arms / mittens / legs / red shoes coloured at far; the joke stays (it does not quite cover the bomb).
 - **Round 2, built 2026-10-29** (props.js variants `a2`, `c2`, `e2`; the viewer shows each NEXT TO its round-1 version, far and near rows, picks per version). Shipped game unchanged (`DECOY_VARIANTS` default `['a']`) until Jon picks.
+
+## 5. Difficulty spec for the RANGE (Jon + Fable, 2026-10-29; build only on Jon's go)
+
+**What hard means (Jon):** pace, placement and deception, not count. A target is hard because it is up briefly, because it is far from where you were just aiming, and because something fakes you out at the moment you commit. Shots are a secondary lever, always visible, never zero spare. Every tier has every mechanic: Insane is the same game, faster and meaner. Point Blank charm: fun, cheeky, keeps the shooter on their toes.
+
+**The dials per tier** (Beginner -> Advanced -> Very Hard -> Insane)
+- Pop window (how long a target stays shootable): ~1.3 s -> 1.0 -> 0.7 -> 0.45 s. Pops up and down fast at the top.
+- Aim travel: next target spawns far from the last one you were made to aim at, alternating side and height; small hops at Beginner, corner to corner at Insane. NEVER next to the plate you are already on (unless a trick says so, see rhythm fakes).
+- Count: Beginner can have LOTS of targets (count is not difficulty). Higher tiers do not need fewer; they need pace.
+- Spare shots over the quota: 8 -> 5 -> 3 -> 2 as the baseline (Jon: 3-4 the least for some). A level MAY run 0 spare, but only if its briefing card says so loudly ('NO ROOM FOR ERROR' / 'ROOM FOR ERROR: 3') so the player is warned, never a surprise.
+- Reload-aware pacing: the stream knows the magazine size and reload time. After the shooter's mag runs dry it never pops a must-have target with a window shorter than the reload (e.g. 6-round mag: the 7th target waits or stays up long enough).
+- Deception rate (decoys, fakes, tricks): rare -> common. Beginner bombs still try to trick.
+- Pauses: short anticipation pauses after a burst of targets or a trick; the silence is part of the pacing.
+
+**Patterns and tricks** (all tiers, speed and frequency by tier)
+- SNAKE: a chain of targets pops one after another along a path (around the range, up one lane and down the next); the LAST one is sometimes a decoy or a bomb. Slow at Beginner, fast at Insane.
+- COLUMN (#71): 4-5 plates stacked PERFECTLY behind the front one, invisible until the front is shot; shoot and the next is standing there. The first reveal is the surprise every time. Trick: run a clean column of 4, then later a column whose 4th is a decoy.
+- ROW: 3-5 across the lanes popping on a beat; trick: the beat continues but the next pop is a decoy. Or go OFF beat after teaching a rhythm.
+- PING-PONG: targets alternate right next to each other, left-right-left-right, then a bomb takes the next slot.
+- WEAVING WALLS (Jon): two walls of plates travel down the lanes, one each side, then move inward and weave past each other to the other side.
+- SWING-INS: the from-the-side swinging targets must stay in the mix (Jon likes them; check they did not get crowded out by the pattern spawner).
+- BALLOONS: a target or bomb floats across the range hanging from a balloon; sometimes a whole line of them; rarely Deputy Duck is tied to one (Jon: funny). DUCK CAMEO: Deputy Duck rarely appears in a random level and counts as a target.
+- THE WALL: 8 plates pop at once for a second, a couple decoys; pick fast.
+- COUNT PLATES: plates numbered 1-4 shot in order: parked as a later level idea, not a range trick.
+- BONUS: the rare Deputy Duck cameo tied to a target IS the bonus pick-up (no separate gold plate).
+- SHUFFLE: becomes its OWN STAGE idea (cups: guess which cup has the target), not a range trick.
+- DROPPED: bomb swap (a target/bomb trade as you aim) = unfair. Quick draw = not actually hard.
+
+**Turncoats (target flips into a bomb): make fair or remove.** Today the plate rotates and a shot during the turn counts as a bomb, which feels like a cheat. Rule: a visible telegraph first (fuse lights + plate shakes + a tick sound, ~0.4 s at Beginner, ~0.25 s at Insane); during the flip itself the plate is NOT shootable at all (no hit, no bomb); after the flip it is a plain bomb. If it still reads unfair in play, remove turncoats.
+
+**LIGHTS OUT (#73):** the range lights cut; a spotlight shows targets. Spotlight behaviours, picked with weights so it is not predictable but never nonsensical: (a) glides from target to target; (b) snaps off and on over a different target; (c) lights an EMPTY spot and waits for a target to swing up into it, then cuts; (d) after a hit it usually jumps to the next target, sometimes it stays or goes somewhere else; (e) decoys under the light where a target is expected. It is a SHORT EVENT (2-4 s, 2-4 pops under the light, lights back up), never a whole round in the main game. Frequency: Beginner ~1 round in 4, once, slow; Advanced ~half the rounds, once; Very Hard most rounds, once or twice; Insane every round, up to twice, meaner (empty spots, a hit left unlit). Guardrails: never in the first seconds of a round, never during a reload, decoys under the light follow the normal fairness rules. A whole-round version = a future range VARIANT 'BLACKOUT' that the briefing card announces.
+
+**Briefing card:** must show the room for error for the round (spare shots) clearly, as a line of its own.
+
+**Shots visible (#72):** a real magazine on the HUD with rounds in it, casings fly out per shot, the last rounds glow, reload swaps the clip.
+
+**Charm:** the duck's laugh on misses and the rare duck cameo. Cheeky result stamps = later, only if they fit (Jon: gameplay first).
+
+**Later stage ideas from this talk:** LASER TAG (black-lit neon room, #74), SHUFFLE CUPS.
+
+**BUILT 2026-10-29 (range.js only; ENGINE.md "Range difficulty spec build 2026-10-29" has the numbers):**
+- [built] Dials per tier: pop window 1.3 / 1.0 / 0.7 / 0.45 s (entrance / exit faster at the top too), aim travel (next plate placed by screen distance from the last plate you were made to aim at, alternating side and height, small hops at Beginner, ~corner to corner at Insane, never next to a plate already up), count NOT a difficulty lever (Beginner ~45 spawns / 40 real, Insane ~37 / 30), spare shots 8 / 5 / 3 / 2 (never 0), reload-aware pacing (magazine variants), anticipation pauses after bursts and tricks, deception rising by tier. Every mechanic at every tier.
+- [built] COLUMN (#71) hidden PERFECTLY (members invisible behind the front, same slot; shot, the next is just standing there; unshot, the column drops unseen; first column of a round clean, later ones may hide a decoy 4th). ROW on a beat (decoy on the beat, off beat after the first row taught it). SNAKE (around the range: floor row then ceiling rail; or zig-zag depths), last one sometimes a bomb / decoy. PING-PONG then a bomb in the next slot. WEAVING WALLS (two racks cross and weave). THE WALL (8 at once, decoys). BALLOONS (single or a line) + the DEPUTY DUCK CAMEO (placeholder voxel duck on a balloon, ~1 round in 5, +500 bonus). Swing-ins stay ~55 % of singles.
+- [built] TURNCOATS FAIR: telegraph 0.4 -> 0.25 s (fuse tick + shake + sound), NOT shootable during the flip, a plain bomb after. Flip bombs also unshootable mid-flip.
+- [built] LIGHTS OUT (#73): short event (2-4 pops, 2-4 s), Beginner ~1 round in 4 (planned 25 %, measured 32 % over 120 runs), Advanced ~half, Very Hard most (some twice), Insane every round (60 % twice); spotlight glides / snaps / lights an empty spot then cuts / after a hit jumps on, stays or wanders off; decoys under the light; never in the first 6.5 s, only with >= 5 rounds in the magazine.
+- [built] Briefing card: the ROOM FOR ERROR line (cap variant: spare SHOTS; other variants: TARGETS you may let go) replaces the tier tip line on both cards.
+- Open for Jon: the duck is a placeholder (duck.js not touched); new sound events `turnTick`, `lightsOut`, `lightsOn`, `duckCameo`, `duckCameoHit` have no sounds yet; BLACKOUT whole-round variant not built.
 
 ## 3. Open questions for Jon
 1. Approve Alley, Boneyard, Sky Show as the next three, in that order?
