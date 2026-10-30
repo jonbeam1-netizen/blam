@@ -40,7 +40,9 @@ geo.setIndex(new THREE.BufferAttribute(idx, 1));
 // transparent so it sorts into the transparent pass AFTER the env meshes (MAT.env is transparent with NoBlending and would
 // paint over a non-depth-writing opaque strip); depthWrite off so the layers of one tracer stack without z-fighting
 const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, transparent: true, opacity: 1, depthWrite: false, side: THREE.DoubleSide }));
-mesh.frustumCulled = false; mesh.renderOrder = 5; mesh.visible = false; mesh.name = 'fx-tracers';
+// renderOrder 1002: AFTER the range's LIGHTS OUT multiply quad (1000, a camera child at 1.55) and its fuse sparks (1001), so
+// tracers keep their colour in the dark (#91); depth still sorts them against the gun (1.0) and the mini duck (1.4).
+mesh.frustumCulled = false; mesh.renderOrder = 1002; mesh.visible = false; mesh.name = 'fx-tracers';
 R.camera.add(mesh);
 
 const MAXT = 24, live = [];

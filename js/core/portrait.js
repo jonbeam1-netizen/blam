@@ -116,11 +116,11 @@ SC.scores.drawPortrait = function (t, L) {
   const rows = [];
   for (const id of S.order) { const d = S.get(id); for (let v = 0; v < d.variants; v++) rows.push([(d.short || 'RANGE') + ' ' + (v + 1), id + ':' + v]); }
   rows.push(['COURSE', 'course']);
-  const n = Math.min(rows.length, 17), w = Math.min(L.W - 6, 206), x0 = Math.round(L.cx - w / 2), y0 = shelf(L) - 2, cw = (w - 50) / 4;
-  H.plate(x0, y0, w, 22 + n * 10);
+  const n = Math.min(rows.length, 20), w = Math.min(L.W - 6, 206), x0 = Math.round(L.cx - w / 2), y0 = shelf(L) - 2, cw = (w - 50) / 4, rh = n > 17 ? 9 : 10;   // 6 stages: 20 rows (0.020)
+  H.plate(x0, y0, w, 22 + n * rh);
   ['BEG', 'ADV', 'V.HARD', 'INSANE'].forEach((a, i) => H.text3c(a, x0 + 46 + cw * i + cw / 2, y0 + 7, 'oxblood', 1, 'bone'));
   rows.slice(0, n).forEach(([label, key], r) => {
-    const y = y0 + 18 + r * 10;
+    const y = y0 + 18 + r * rh;
     H.rect(x0 + 4, y - 2, w - 8, 1, 'rust'); H.text3(label, x0 + 6, y + 1, 'umber', 1, 'bone');
     for (let i = 0; i < 4; i++) { const b = B.Save.best(key, i); H.text3c(b ? String(b) : '-', x0 + 46 + cw * i + cw / 2, y + 1, b ? 'void' : 'chestnut', 1, 'bone'); }
   });

@@ -110,6 +110,10 @@ function scr(x, y, z) {
 }
 const halfW = z => (CAMP.z - z) * PCS * R.TAN_H * R.ASPECT;   // half the view width (world) at depth z, roughly
 const PLATE_R = 0.62;                                  // a plate's circumradius (hex, apothem 0.53)
+// #90 aim travel: vertical px count x AIM_KY, the full depth range adds AIM_KZ px; the side preference has a dead zone
+// round the centre (the middle lane is on neither side); OUTER_MAX singles in a row on lane 1 / 5 at most; MID_SHARE of
+// the singles in the middle lane at least (a soft pull: the slot gets a bonus while the share is short)
+const AIM_KY = 1.8, AIM_KZ = 90, SIDE_DZ = 24, OUTER_MAX = 2, MID_SHARE = 0.22;
 
 // ---------- motions (#34) ----------
 // every paddle's pose is a pure function of its local time lt (versus-safe) and, for a column member, the extra stay
@@ -132,7 +136,8 @@ function pose(sp, lt, out, ext) {
     const sw = sp.swing, stay = sp.stay + e;
     if (lt < sw) {                                                          // entrance
       const p = lt / sw, b = 1 - E.outBack(p);
-      if (mo === 'drop') o.rx = -(Math.PI / 2) * b;
+      if (sp.rail) o.ry = sp.side * (Math.PI / 2) * b;                      // #89 on a shared rail: spins in from edge-on
+      else if (mo === 'drop') o.rx = -(Math.PI / 2) * b;
       else if (mo === 'pop') o.y = -POP_D * b;
       else { o.ry = sp.side * (Math.PI / 2) * b; o.x += sp.side * SIDE_DX * (1 - E.outCubic(p)); }
       o.shootable = lt >= sp.readyAt; return o;
@@ -140,7 +145,8 @@ function pose(sp, lt, out, ext) {
     const tau = lt - sw;
     if (tau < stay) {                                                       // hold, settling
       const w = Math.exp(-4.5 * tau);
-      if (mo === 'drop') o.rx = 0.22 * w * Math.sin(9 * tau);              // pendulum
+      if (sp.rail) o.ry = sp.side * -0.18 * w * Math.sin(14 * tau);
+      else if (mo === 'drop') o.rx = 0.22 * w * Math.sin(9 * tau);         // pendulum
       else if (mo === 'pop') o.rx = 0.1 * w * Math.sin(18 * tau);
       else o.ry = sp.side * -0.18 * w * Math.sin(14 * tau);
       o.shootable = true; return o;
@@ -149,6 +155,7 @@ function pose(sp, lt, out, ext) {
     if (q < lv) {                                                           // exit
       const p = q / lv, ee = E.inCubic(p);
       if (mo === 'pop') o.y = -POP_D * ee;
+      else if (sp.rail) o.ry = -sp.side * (Math.PI / 2) * ee;              // ...and on round to edge-on again
       else o.rx = -(Math.PI / 2) * ee;                                      // drop: swings back up; side: falls back
       o.shootable = p < 0.7; return o;
     }
@@ -250,6 +257,39 @@ const DECOY_ARM = 0.3, DECOY_UNMASK = 0.16;
 // at once, shootable, and its stay runs on for sp.revW s from that moment (this.ext, pure in the reveal time). If the
 // front drops unshot, the whole column drops with it, unseen. No tell: the first reveal is a surprise every time.
 const COL_GAP = 0.05;
+// SHOT-DRIVEN SEQUENCES (#88, Jon 2026-10-30): a ROW on a beat and a PING-PONG no longer run purely on the clock. Member i > 0
+// is RELEASED by the hit on the member before it (REL_LEAD s after that hit, + an off beat's extra and the reload allowance:
+// sp.chX), so the player is inside the rhythm when the decoy / bomb takes the slot. TIMEOUT FALLBACK: the clock schedule of
+// the old build (t0 + chR) is the LATEST a member pops; a hit can only bring it earlier. A member after a bomb / decoy (or
+// after a plate nobody hit) keeps the beat from that member's actual pop (chS s later). A ping-pong member also waits until
+// the member that used its slot before (chF steps back) is gone (shot: FOLD_T s of fold; else its scheduled life).
+// The spawn's t0 is the EARLIEST it can pop (the engine creates it invisible); the pose runs on lt - (release - t0).
+// Versus-safe like the column: the release is a pure function of the timeline + the SHARED hit stage times (recorded by
+// points(), which only Run.applyHit calls, with the hit's stage time: the host's on both screens).
+// Spawn fields (members i > 0): chD (id delta to the member before), chS (schedule delay after its pop), chX (delay after a
+// hit on it), chF (slot reuse: steps back, 0 none), chR (the fallback: scheduled pop - t0).
+const REL_LEAD = 0.1, FOLD_T = 0.4;
+const HIT = new WeakMap();                                             // spawn -> the stage time it was hit (points())
+const hitOf = s => HIT.get(s);
+function releaseAt(sp, get, hitT) {
+  const ch = [sp];
+  for (let q = sp; q.chD; ) { q = get(q.id - q.chD); if (!q) break; ch.unshift(q); }
+  const A = [ch[0].t0 + (ch[0].chD ? ch[0].chR || 0 : 0)];
+  for (let j = 1; j < ch.length; j++) {
+    const m = ch[j], h = hitT(ch[j - 1]);
+    let a = A[j - 1] + m.chS;
+    if (h != null) a = Math.min(a, h + m.chX);
+    if (m.chF && j >= m.chF) { const o = ch[j - m.chF], ho = hitT(o), gone = A[j - m.chF] + lifeOf(o); a = Math.max(a, ho != null ? Math.min(ho + FOLD_T, gone) : gone); }
+    A.push(Math.max(m.t0, Math.min(a, m.t0 + m.chR)));
+  }
+  return A[A.length - 1];
+}
+// THE SHARED RAIL (#89): a hanging ROW / PING-PONG hangs from ONE clothesline-style bar (strings at its ends and, 4+ lanes,
+// one in the middle) instead of a hanger per lane: the bar swings in from the ceiling RAIL_IN s before the first plate,
+// the plates SPIN in from edge-on on it (about their own post: no swinging posts to cross in perspective), and the bar
+// swings back up RAIL_OUT s after the last member is gone (shot or left: a pure function of the hits, like the release).
+// The rail is a cosmetic timeline spawn (sp.fx 'rail', kind 'fx', no hit parts): l0 / l1 lanes, z, mem (id deltas).
+const RAIL_IN = 0.45, RAIL_SW = 0.4, RAIL_OUT = 0.35, RAIL_TOP = 5.0;
 // balloons + Deputy Duck cameo (bonus target) + the weave rack rods: small voxel meshes built here, shared geometry
 const GLOW_T = MAT.glow.clone(); GLOW_T.transparent = true;            // fuse sparks drawn AFTER the lights-out overlay
 function glowUp(m) { if (m) { m.material = GLOW_T; m.renderOrder = 1001; } }
@@ -339,6 +379,7 @@ class Paddle extends T.Target {
       const st = sharedMesh(stringGeo(0.25 - top), MAT.obj); st.position.y = top; this.prop.pivot.add(st);
       this.bal = sharedMesh(balloonGeo((sp.b && sp.b.ci) | 0), MAT.obj); this.bal.position.y = 0.25 + 9 * 0.06; this.prop.pivot.add(this.bal);
     }
+    if (sp.rail && this.prop.base) this.prop.base.visible = false;   // #89: the shared rail is the hanger
     if (mo === 'wall' && sp.w) {                      // a rod from the hanger clamp up into the ceiling
       const len = 5.05 - (sp.w.y + FACE_H);
       if (len > 0.05) this.group.add(sharedMesh(rodGeo(len), MAT.obj));
@@ -358,6 +399,12 @@ class Paddle extends T.Target {
     }
   }
   update(lt, run) {
+    if (this.sp.chD) {                                // #88 a shot-driven member: waits (invisible) for its release
+      const s0 = this.sp, A = run && run.timeline ? releaseAt(s0, id => run.timeline[id], hitOf) : s0.t0 + s0.chR;
+      this.relR = A - s0.t0;
+      if (lt < this.relR && this.alive) { this.group.visible = false; this.shootable = false; this.lastLt = 0; return false; }
+      lt -= this.relR;
+    }
     if (this.revealLt >= 0) return this.updateReveal(lt);
     if (this.armLt >= 0 && this.alive) return this.updateArm(lt);
     const sp = this.sp, pr = this.prop;
@@ -379,12 +426,17 @@ class Paddle extends T.Target {
         return p >= 1 || P.done;
       }
       const p = Math.min(1, (lt - this.deadLt) / 0.4);
+      if (sp.rail) {                                                        // on the rail: the empty post spins away, stays on the bar
+        this.group.visible = p < 1; pr.hide(); if (this.fb) this.fb.hide();
+        this.turn(0, P.ry - sp.side * (Math.PI / 2) * E.inCubic(p), 0);
+        return p >= 1 || P.done;
+      }
       this.group.visible = true; pr.hide(); if (this.fb) this.fb.hide(); this.sink((p - 0.55) / 0.45);
       this.turn(-(Math.PI / 2) * E.inCubic(p), P.ry, P.rz);
       return p >= 1 || P.done;
     }
     this.group.visible = P.visible;
-    if (!P.shootable && lt > sp.swing && !this.bal) this.sink((lt - (lifeOf(sp) + this.ext - 0.1)) / 0.1);
+    if (!P.shootable && lt > sp.swing && !this.bal && !sp.rail) this.sink((lt - (lifeOf(sp) + this.ext - 0.1)) / 0.1);
     this.turn(P.rx, P.ry, P.rz);
     this.shootable = P.shootable;
     let fuse = 1;
@@ -451,12 +503,12 @@ class Paddle extends T.Target {
   arm(point, st) {
     if (!this.sp.decoy || this.revealLt >= 0 || !this.alive) return -1;
     if (this.armLt < 0) {
-      this.armLt = st != null ? st - this.sp.t0 : this.lastLt; this.shootable = false; this.boomPoint = point || null;
+      this.armLt = st != null ? st - this.sp.t0 - (this.relR || 0) : this.lastLt; this.shootable = false; this.boomPoint = point || null;
       this.group.updateMatrixWorld(true);
       if (this.prop.spark) T.sparks(new THREE.Vector3().setFromMatrixPosition(this.prop.spark.matrixWorld), 8, ['lemon', 'yellow', 'orange'], 1.5, 0.035);
       B.SFX.play('bombReveal', { u: R.toPx(this.group.position)[0] / R.RW });
     }
-    return +(this.sp.t0 + this.armLt + DECOY_ARM).toFixed(4);
+    return +(this.sp.t0 + (this.relR || 0) + this.armLt + DECOY_ARM).toFixed(4);
   }
   // the revealed bomb: springs to attention where the plate stood (lane centre, floor height, the stop it was scooting
   // to; an outBack hop over HB_GRACE), its lit fuse sparking hot and big for the beat, drops. Shot: it folds away like
@@ -511,6 +563,58 @@ class Paddle extends T.Target {
     T.burst(c, 1);
     this.shatter(point || c, { power: 1.7, max: 60 });
     this.cur.pivot.scale.setScalar(1);
+  }
+}
+
+// #89 the shared rail of a hanging row / ping-pong (cosmetic, kind 'fx'): pivots on the ceiling at RAIL_TOP
+function railGeo(l0, l1) {
+  const key = 'rail' + l0 + l1;
+  return GEO[key] || (GEO[key] = (() => {
+    const v = new Vox(), Z = B.Props.POST_Z, yb = HANG_Y - RAIL_TOP, x0 = LANES[l0] - 0.75, x1 = LANES[l1] + 0.75;
+    v.bx(x0, yb, Z - 0.05, x1, yb + 0.1, Z + 0.05, PAL.chestnut);                       // the bar (wood, like the hanger blocks)
+    v.bx(x0, yb + 0.085, Z + 0.05, x1, yb + 0.1, Z + 0.056, PAL.tan);                   // its lit top edge
+    for (const ex of [x0 - 0.05, x1 - 0.06]) v.bx(ex, yb - 0.03, Z - 0.06, ex + 0.11, yb + 0.12, Z + 0.06, PAL.slate);   // end caps
+    const strings = [x0 + 0.12, x1 - 0.12]; if (l1 - l0 >= 3) strings.push((LANES[l0] + LANES[l1]) / 2 + 1.2);
+    for (const sx of strings) {
+      v.bx(sx - 0.028, yb + 0.09, Z - 0.028, sx + 0.028, 0.06, Z + 0.028, PAL.steel);   // the string up into the ceiling
+      v.bx(sx - 0.14, -0.13, Z - 0.09, sx + 0.14, -0.02, Z + 0.09, PAL.slate);         // its trolley
+      for (const q of [-1, 1]) v.bx(sx + q * 0.09 - 0.03, -0.03, Z - 0.05, sx + q * 0.09 + 0.03, 0.05, Z + 0.05, PAL.haze);
+    }
+    for (let l = l0; l <= l1; l++) {                                                     // a hanger block per lane
+      const lx = LANES[l];
+      v.bx(lx - 0.2, yb - 0.07, Z - 0.12, lx + 0.2, yb, Z + 0.12, PAL.chestnut);
+      v.bx(lx - 0.2, yb - 0.012, Z + 0.12, lx + 0.2, yb, Z + 0.123, PAL.tan);
+      for (const q of [-1, 1]) v.bx(lx + q * 0.125 - 0.025, yb - 0.19, Z - 0.06, lx + q * 0.125 + 0.025, yb - 0.07, Z + 0.06, PAL.steel);
+    }
+    return v.geo();
+  })());
+}
+class RailFx extends T.Target {
+  constructor(sp) {
+    super('fx'); this.sp = sp;
+    this.mesh = sharedMesh(railGeo(sp.l0, sp.l1), MAT.obj); this.group.add(this.mesh);
+    this.group.position.set(0, RAIL_TOP, sp.z); this.group.visible = false;
+  }
+  meshes() { return []; }
+  // stage time the bar starts back up: the last member gone (shot: its fold; else its pop + life), pure in the hits
+  exitAt(run) {
+    const S = this.sp; if (!run || !run.timeline) return S.t1 - RAIL_OUT;
+    let e = 0;
+    for (const d of S.mem) {
+      const m = run.timeline[S.id + d]; if (!m) continue;
+      const A = m.chD ? releaseAt(m, id => run.timeline[id], hitOf) : m.t0, h = hitOf(m), gone = A + lifeOf(m);
+      e = Math.max(e, h != null ? Math.min(h + FOLD_T, gone) : gone);
+    }
+    return e;
+  }
+  update(lt, run) {
+    const q = this.sp.t0 + lt - this.exitAt(run);
+    let rx = 0;
+    if (lt < RAIL_SW) rx = -(Math.PI / 2) * (1 - E.outBack(lt / RAIL_SW));
+    else if (lt < RAIL_IN + 0.3) rx = 0.05 * Math.exp(-7 * (lt - RAIL_SW)) * Math.sin(16 * (lt - RAIL_SW));   // settles before the first plate
+    if (q > 0) { if (q >= RAIL_OUT) { this.group.visible = false; return true; } rx = -(Math.PI / 2) * E.inCubic(q / RAIL_OUT); }
+    this.group.rotation.x = rx; this.group.visible = lt >= 0;
+    return false;
   }
 }
 
@@ -699,7 +803,8 @@ function timeline(c, rng) {
   const DIAG = Math.hypot(R.RW, R.RH), CX = R.RW / 2, HY = scr(0, 2.15, zOf(2))[1];
   const magN = c.ammo && c.ammo.mag && !c.ammo.autoReload ? c.ammo.mag : 0;
   const readyAt = +(c.swing * 0.15).toFixed(3), kinds = c.kinds || [1, 0, 0, 0];
-  let bombs = 0, req = 0, lastShot = -9, lastAim = null, xUntil = 0, nTrick = 0, lastTrick = '', nLights = 0;
+  let bombs = 0, req = 0, lastShot = -9, lastAim = null, lastAimK = 2, xUntil = 0, nTrick = 0, lastTrick = '', nLights = 0;
+  let outerRun = 0, nSingle = 0, nMid = 0;           // #90: singles in a row on an outer lane; singles / of them in the middle lane
   const count = {}, used = k => count[k] || 0;
   const magLeft = () => magN ? magN - (req % magN || (req ? magN : 0)) : Infinity;
   const boundary = g => magN && g > 0 && g % magN === 0;
@@ -738,9 +843,19 @@ function timeline(c, rng) {
       const pts = ptsOf(sp); if (overlap(pts, a, b)) continue;
       const p = pts[0]; let s = 0;
       if (lastAim) {
-        s = Math.abs(Math.hypot(p[0] - lastAim[0], p[1] - lastAim[1]) - D) / DIAG;
-        if ((p[0] < CX) === (lastAim[0] < CX)) s += 0.35 * c.alt;
+        // #90 the hop counts VERTICAL (x AIM_KY: hang vs floor, a reach the wrist feels more than a sideways swing) and
+        // DEPTH travel (AIM_KZ px for the full far-near range: the plate changes size and height) as well as the
+        // sideways px, so a middle-lane plate at the other height / depth answers a big hop (Insane is no longer
+        // edge-to-edge tennis). The side preference ignores the middle lane (dead zone round the centre).
+        const eff = Math.hypot(p[0] - lastAim[0], AIM_KY * (p[1] - lastAim[1])) + AIM_KZ * Math.abs(k - lastAimK) / 4;
+        s = Math.abs(eff - D) / DIAG;
+        const sd = x => x < CX - SIDE_DZ ? -1 : x > CX + SIDE_DZ ? 1 : 0;
+        if (sd(p[0]) * sd(lastAim[0]) > 0) s += 0.35 * c.alt;
         if ((p[1] < HY) === (lastAim[1] < HY)) s += 0.2 * c.alt;
+      }
+      if (o.single) {                                // #90: at most OUTER_MAX singles in a row on an outer lane; a middle share
+        if ((lane === 0 || lane === 4) && outerRun >= OUTER_MAX) s += 2.5;
+        if (lane === 2 && nSingle >= 2 && nMid < MID_SHARE * (nSingle + 1)) s -= 0.3;
       }
       for (const q of occ) if (!q.ghost && q.a <= t + 0.3 && q.b > t) for (const r of q.pts) if (Math.hypot(p[0] - r[0], p[1] - r[1]) < c.adj * DIAG + r[2]) s += 2;
       cands.push([s, sp, pts, a, b]);
@@ -754,7 +869,7 @@ function timeline(c, rng) {
     out.push(sp); occ.push({ a, b, layer: sp.mo === 'drop' ? 'h' : 'f', lane: sp.lane, pts, bomb: !!sp.bomb && !sp.hidden, ghost: !!ghost });
     if (sp.bomb) bombs++;
   }
-  const aimed = (sp, pts) => { req++; lastAim = (pts || ptsOf(sp))[0]; lastShot = sp.t0 + sp.readyAt + 0.3; };
+  const aimed = (sp, pts) => { req++; lastAim = (pts || ptsOf(sp))[0]; lastAimK = sp.k; lastShot = sp.t0 + sp.readyAt + 0.3; };
   const trailing = () => { let n = 0; for (let i = out.length - 1; i >= 0 && out[i].bomb && !out[i].hidden; i--) n++; return n; };
   const lastPlain = () => { const s = out[out.length - 1]; return !!s && s.bomb && !s.flip && !s.hidden && !s.decoy; };
   // ---- one single at t (bomb roll + mix rules, turncoats, the reload rule); returns the end time or -1
@@ -766,7 +881,7 @@ function timeline(c, rng) {
       let ty = pickW(kinds, tyR); if (ty === 0 && lastPlain()) ty = 3;
       kind = ['plain', 'flip', 'hidden', 'decoy'][ty];
     } else if (turnR < (c.turn || 0)) turn = true;
-    const o = { D: rng.range(c.hop[0], c.hop[1]) * DIAG, side: sideR < 0.5 ? -1 : 1 };
+    const o = { D: rng.range(c.hop[0], c.hop[1]) * DIAG, side: sideR < 0.5 ? -1 : 1, single: true };
     const willReq = !kind || kind === 'hidden';
     if (willReq && boundary(req)) {                  // a full magazine went: wait for the reload, then stay up long enough
       t = Math.max(t, lastShot + c.rel);
@@ -787,6 +902,7 @@ function timeline(c, rng) {
     commit(sp, cd[2], cd[3], cd[4]);
     if (willReq) aimed(sp, cd[2]);
     count.single = used('single') + 1; if (sp.mo === 'side' || sp.mo === 'scoot') count.swingIn = used('swingIn') + 1;
+    nSingle++; if (sp.lane === 2) nMid++; outerRun = sp.lane === 0 || sp.lane === 4 ? outerRun + 1 : 0;
     return sp.t1;
   }
   // ---- TRICKS. Each builds its members (t0 / timing), then finish() runs the reload rule, commits them and books the range.
@@ -825,10 +941,30 @@ function timeline(c, rng) {
       else commit(s, ptsOf(s), a, b, !!s.col);
     });
     for (const s of reqM.slice().sort((a, b) => a.t0 - b.t0 || (a.col || 0) - (b.col || 0))) aimed(s);
+    if (kind === 'R' || kind === 'P') shotDriven(mem, kind === 'R' ? c.beat : c.pp, kind === 'P' ? 2 : 0);
     const book = hold != null ? hold : end;
     if (kind !== 'B') xUntil = Math.max(xUntil, book);   // balloons never block the stream (#78)
     count[kind] = used(kind) + 1; lastTrick = kind;
     return kind === 'B' ? +(mem[0].t0 + 0.3).toFixed(3) : book;
+  }
+  // #88: turn a committed sequence (mem in pop order, t0 = the clock schedule) shot-driven: member i keeps its schedule as
+  // the fallback (chR), its spawn t0 becomes the earliest it can pop (the one before hit at its readyAt), see releaseAt
+  function shotDriven(mem, base, slotBack) {
+    const S = mem.map(m => m.t0);
+    for (let i = 1; i < mem.length; i++) {
+      const m = mem[i], p = mem[i - 1], dS = +(S[i] - S[i - 1]).toFixed(3);
+      m.chS = dS; m.chX = +(REL_LEAD + Math.max(0, dS - base)).toFixed(3); m.chF = slotBack; m._chP = p;
+      const e = Math.floor((p.t0 + Math.min(dS, p.readyAt + m.chX)) * 1000) / 1000;
+      m.chR = +(S[i] - e).toFixed(3); m.t0 = e;
+    }
+  }
+  // #89: the shared rail spawn of a hanging row / ping-pong (members built with rail: true, RAIL_IN s after t)
+  function addRail(t, mem, e) {
+    if (!e) return e;
+    const ls = mem.map(m => m.lane), t1 = +(Math.max(...mem.map(m => m.t1)) + RAIL_OUT).toFixed(3);
+    out.push({ id: 0, t0: +t.toFixed(3), t1, fx: 'rail', lane: 2, l0: Math.min(...ls), l1: Math.max(...ls), z: +(mem[0].z0 + B.Props.POST_Z).toFixed(3), mem: [], _mem: mem });
+    xUntil = Math.max(xUntil, t1);
+    return Math.max(e, t1);
   }
   // COLUMN (#71): N plates in one slot, the ones behind hidden. First column of the round: a clean 4. Later ones: a
   // clean 4-5, or (col4) a column whose 4th is a decoy.
@@ -852,15 +988,17 @@ function timeline(c, rng) {
     const r = rng(), sub = !used('R') ? 'beat' : r < 0.2 ? 'beat' : r < 0.6 ? 'decoy' : 'off';
     const N = sub === 'off' ? rng.int(4, 5) : rng.int(3, 5), l0 = rng.int(0, 5 - N), beat = c.beat;
     const stay = Math.max(c.win, beat * 1.2), dm = sub === 'decoy' ? rng.int(2, N - 1) : -1, early = rng() < 0.5;
-    const mem = []; let tt = t;
+    const rail = mo === 'drop', mem = []; let tt = t + (rail ? RAIL_IN : 0);
     for (let i = 0; i < N; i++) {
       const lane = dir > 0 ? l0 + i : l0 + N - 1 - i;
       if (i && sub === 'off' && i === 3) tt += early ? beat * 0.45 : beat * 1.9; else if (i) tt += beat;
       const s = mk(tt, mo, lane, k, { stat: true, stay, fside: dir > 0 ? -1 : 1 });
+      if (rail) s.rail = true;
       if (i === dm) { s.bomb = true; s.decoy = true; }
       mem.push(s);
     }
-    return finish(mem, 'seq', 'R', sub);
+    const e = finish(mem, 'seq', 'R', sub);
+    return rail ? addRail(t, mem, e) : e;
   }
   // SNAKE: a chain along a path; 'loop' = across the floor row and back along the ceiling rail, 'zig' = across the lanes
   // up one depth and down the next. The last one is sometimes a decoy or a plain bomb.
@@ -888,13 +1026,15 @@ function timeline(c, rng) {
   // PING-PONG: two slots right next to each other, left-right-left-right, then a bomb takes the next slot on the beat.
   function pingpong(t) {
     const mo = rng() < 0.6 ? 'pop' : 'drop', l = rng.int(0, 3), k = rng.int(1, 3), N = rng.int(4, 6), dt = c.pp, s0 = rng() < 0.5 ? 0 : 1;
-    const stay = Math.max(0.2, 2 * dt - 0.06 - c.swing - c.lv), mem = [];
+    const stay = Math.max(0.2, 2 * dt - 0.06 - c.swing - c.lv), mem = [], rail = mo === 'drop', t1 = t + (rail ? RAIL_IN : 0);
     for (let i = 0; i <= N; i++) {
-      const s = mk(t + i * dt, mo, l + ((i + s0) & 1), k, { stat: true, stay, fside: ((i + s0) & 1) ? 1 : -1 });
+      const s = mk(t1 + i * dt, mo, l + ((i + s0) & 1), k, { stat: true, stay, fside: ((i + s0) & 1) ? 1 : -1 });
+      if (rail) s.rail = true;
       if (i === N) { s.bomb = true; if (rng() < 0.2 + 0.07 * tier) s.decoy = true; }
       mem.push(s);
     }
-    return finish(mem, 'seq', 'P', mem[N].decoy ? 'decoy' : 'bomb');
+    const e = finish(mem, 'seq', 'P', mem[N].decoy ? 'decoy' : 'bomb');
+    return rail ? addRail(t, mem, e) : e;
   }
   // WEAVING WALLS: two racks of three plates come down the outer lanes, then cross to the other side, passing each other
   // (A a little behind, B a little in front, their plates at offset heights so they weave through).
@@ -1030,6 +1170,8 @@ function timeline(c, rng) {
   for (const s of out) {
     if (s._ahead) { s.aheadD = s.id - s._ahead.id; delete s._ahead; }
     if (s._pops) { s.pops.forEach((p, i) => { p.d = s._pops[i].id - s.id; }); delete s._pops; }
+    if (s._chP) { s.chD = s.id - s._chP.id; delete s._chP; }
+    if (s._mem) { s.mem = s._mem.map(m => m.id - s.id); delete s._mem; }
   }
   // the quota is a share of the REAL targets (turncoats and column members count; flip / hidden bombs and the duck are
   // a bonus, never counted); the cap variant gets quota + spare shots
@@ -1044,6 +1186,7 @@ const STEP_PTS = [300, 200, 150, 120, 100];
 // step points by the stop it was hit at (a column member counts its stop), +100 a flipped flip bomb, +50 a turncoat hit
 // before it turned; balloons 200, weaving walls 150, Deputy Duck 500
 function points(sp, lt) {
+  HIT.set(sp, +(sp.t0 + lt).toFixed(4));                               // #88: the shared hit stage time (only Run.applyHit calls this)
   if (sp.duck) return 500;
   if (sp.mo === 'balloon') return 200;
   if (sp.mo === 'wall') return 150;
@@ -1099,6 +1242,6 @@ function decor() {
   };
 }
 B.Stage.register({ id: 'range', name: 'SHOOTING RANGE', short: 'RANGE', variants: 4, variantNames: VARIANT_NAMES, penalty: -300,
-  buildEnv, config, practiceConfig, timeline, makeTarget: sp => sp.fx === 'lights' ? new LightsFx(sp) : new Paddle(sp), points, briefing, drawIcon, decor,
-  pose, LANES, TIER_P, lifeOf, spanOf, faceAt, scr, isReal, isReq, FLIP_T });
+  buildEnv, config, practiceConfig, timeline, makeTarget: sp => sp.fx === 'lights' ? new LightsFx(sp) : sp.fx === 'rail' ? new RailFx(sp) : new Paddle(sp), points, briefing, drawIcon, decor,
+  pose, LANES, TIER_P, lifeOf, spanOf, faceAt, scr, isReal, isReq, FLIP_T, releaseAt });
 })(window.BLAM);

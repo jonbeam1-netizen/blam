@@ -108,7 +108,7 @@ ON HIT (Jon 2026-10-29): a decoy does NOT explode instantly. Short build-up firs
 - SNAKE: a chain of targets pops one after another along a path (around the range, up one lane and down the next); the LAST one is sometimes a decoy or a bomb. Slow at Beginner, fast at Insane.
 - COLUMN (#71): 4-5 plates stacked PERFECTLY behind the front one, invisible until the front is shot; shoot and the next is standing there. The first reveal is the surprise every time. Trick: run a clean column of 4, then later a column whose 4th is a decoy.
 - ROW: 3-5 across the lanes popping on a beat; trick: the beat continues but the next pop is a decoy. Or go OFF beat after teaching a rhythm.
-- PING-PONG: targets alternate right next to each other, left-right-left-right, then a bomb takes the next slot.
+- PING-PONG: targets alternate right next to each other, left-right-left-right, then a bomb takes the next slot. (#88, Jon 2026-10-30: SHOT-DRIVEN, the next pop is released by hitting the previous one, so the player is inside the rhythm when the bomb takes the slot; timeout fallback. Same for beat rows. Columns already work this way.)
 - WEAVING WALLS (Jon): two walls of plates travel down the lanes, one each side, then move inward and weave past each other to the other side.
 - SWING-INS: the from-the-side swinging targets must stay in the mix (Jon likes them; check they did not get crowded out by the pattern spawner).
 - BALLOONS: a target or bomb floats across the range hanging from a balloon; sometimes a whole line of them; rarely Deputy Duck is tied to one (Jon: funny). DUCK CAMEO: Deputy Duck rarely appears in a random level and counts as a target.
@@ -174,6 +174,33 @@ ON HIT (Jon 2026-10-29): a decoy does NOT explode instantly. Short build-up firs
 - [built] #83 The sign is gone. Finale: when the comb is done the bees fly up and spell B.L.A.M. (one bee a letter pixel) for ~2.5 s, then scatter; the clock gets 4 s more for it (49 / 44 / 40 / 36 shown) and the stage ends with FINISH!.
 - [built] #84 Comb, frame, dusk, honey drips, the director, variants, the briefing line and every rule kept. Also fixed: a versus-safety bug (a sort with a random comparator gave other timelines as the browser warmed up).
 - Open for Jon: does the bee B.L.A.M. read at game speed (legible in stills, the B and M are busy)? Is SWARM Insane too crowded over the plates? Draw calls +5 on average (Beginner 30 -> 36, SWARM Insane 29 -> 34), triangles about double.
+
+## 7. INVASION build brief (Fable + Jon, 2026-10-30 night; stage 6) -- GO given 2026-10-30
+Jon picked INVASION from the candidate list ("sounds sick"). Talked through and settled in this order: view = ORBIT; landing cost = A, a HEART per saucer that reaches Earth (B "reinforcements" rejected as too complex for a first read); NO SHOT CAP (magazine + reload only, no spare-shot line); LONGER round in THREE WAVES with a mothership closer; shooting stars = looks only; comets SCRATCHED (Jon changed his mind); sign = a B.L.A.M. satellite in the backdrop + city lights spelling B.L.A.M. on clear.
+
+**Scene (orbit view):** the gun is mounted on a satellite. The bottom third of the screen is Earth's curve (blue / white voxel globe, slow turn, city lights on the night side, a thin atmosphere rim). Above it black space, a dense star field, the moon off to one side. Tin-toy feel to everything (STYLE.md, pixel / dither voxel; original art, nothing lifted). SHOOTING STARS: a quick streak somewhere in the star field every 10-20 s, random position and angle, never shootable, never wired to anything. A B.L.A.M. SATELLITE drifts slowly past in the background now and then (letters along its solar panels, a little dish turning), looks only, not shootable. The first real "defend" stage: targets come at you and letting one through costs you.
+
+**Targets:** tin SAUCERS in three sizes, wobbling side to side as they descend, a glowing dome on top. Hit zones: dome = full points, rim = fewer (hit-zone API in ENGINE.md). They appear far out and small at the top of the screen and drift down toward the planet, growing as they come. One that gets past hits the atmosphere, flares orange = a LANDING, costs a HEART (same cost as a bomb; stage.js `kind` bystander/bomb semantics or a stage-side life hook, whichever the engine allows without a core rewrite; see "landing" below). Formations reuse the pattern logic of the range/hive: a V, a row on a beat, a snake spiral, ping-pong pairs. Aim travel rules as the range (next saucer far from the last; never right next to one already up unless a trick says so).
+
+**Bombs and decoys:** the catalogue carries over in saucer form: a BOMB saucer wears a skull-painted hull (shoot it = life, after the 0.3 s build-up where it fits), a DECOY saucer wears a cardboard dome you can read up close (far pass as a saucer, Jon's decoy rules in section 4), TURNCOAT saucers flip hull colour after the fuse-tick telegraph (unshootable during the flip). Bombs and decoys NEVER land (they veer off / burn up harmlessly before Earth): a landing is only ever a real saucer you failed to shoot, so the player is never punished twice.
+
+**Rule:** THREE WAVES per round, each wave a quota of saucers; the MOTHERSHIP closes the third wave. No shot cap: ammo = magazine + reload (variant table below). Difficulty = descent speed, saucers up at once, formation tightness, mothership shields. Insane sends FEWER saucers coming faster in tight formations. The round is about 1.5x a normal round. Every mechanic at every tier.
+
+**Twist 1, MOTHERSHIP:** a big saucer at the end of the round; its shield plates pop off one at a time like a range column (shoot the front one and the next is standing there), then the exposed core. Its hits count toward the quota. Variant 3 has two bosses per round (one mid-round, one closing).
+
+**Twist 2, ABDUCTION BEAM:** a saucer stops short of Earth and beams down a cone of light; while beaming it is still (an easy shot) but the beam is lifting DEPUTY DUCK (placeholder voxel duck as in range.js; duck.js untouched). Shoot it before he is aboard = the +500 duck cameo bonus (`duckCameo`, `duckCameoHit` events). If he is taken: no penalty, the saucer flies off with him (cheeky, not punishing). About 1 round in 4.
+
+**Landing:** a real saucer whose descent ends unshot = LIFE -1 with the engine's bomb-style shake, LIFE -1 and the duck scared pose, plus an orange atmosphere flare at the impact spot on the globe and a new SFX event `landing {u}`. Descent is slow at Beginner (landings rare) and fast at Insane (the real threat).
+
+**Finale:** on clear the mothership blows and the city lights on Earth's night side light up spelling B.L.A.M. across the dark half, then fade back to normal cities (FIN_SLOT style, as Sky Show / Bee Hive).
+
+**Variants (3):** 1 FIRST WAVE (standard, magazine 8, auto-reload off as the other stages' magazine variants), 2 BLITZ (shorter and faster, more saucers at once, magazine 8), 3 MOTHERSHIP (two bosses per round, bigger shields, magazine 12). None has a shot cap. The briefing card's tip line is the stage's own (e.g. "DON'T LET THEM LAND!"), not a ROOM FOR ERROR line.
+
+**Sound events (emit via BLAM.SFX.play, synth recipes in sfx-stage.js like the hive's):** `saucerIn {u}` (warble), `saucerHit {u}`, `landing {u}`, `beamOn {u}` / `beamOff {u}`, `mothershipIn`, `shieldPop {u, n}`, `coreHit`, `shootingStar` (very quiet, optional), ambience bed `invasion` (quiet space hum) via K.stageBeds like beehive.
+
+**Briefing icon:** a saucer with a glowing dome; dont icon: skull-hulled saucer. **Duck:** the mini duck as usual.
+
+**Done when:** registered as stage 'invasion' after BEE HIVE (script tag after beehive.js, `?v=` matching the others) so it lands in the course pool and FREE PLAY, 3 variants, all 4 tiers, briefing card, versus-safe (pure function of seed/tier/variant + hits), no console errors, Beginner and Insane play-checked, screenshots, ENGINE.md "INVASION (stage 6)" section with the dials, one browser tab reused and closed.
 
 ## 3. Open questions for Jon
 1. Approve Alley, Boneyard, Sky Show as the next three, in that order?

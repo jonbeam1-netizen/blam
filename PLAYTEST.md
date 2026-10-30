@@ -1,7 +1,23 @@
-# B.L.A.M. play-test list (builds 0.008 to 0.013, live 2026-10-30)
+# B.L.A.M. play-test list (builds 0.008 to 0.020, live 2026-10-31)
 
 Everything that changed since you last played a build by ear, in one place. Tick what is good, gripe what is not.
 Live link: https://jonbeam1-netizen.github.io/blam/ (hard refresh once: Ctrl+Shift+R).
+
+## Build 0.020 (2026-10-30 night): INVASION (stage 6) + range / hive fixes #87-#91
+- [ ] INVASION = UFO 1-3 in FREE PLAY (page 4) and in the course pool. Orbit view: Earth below, saucers drop in from deep space. A saucer that LANDS costs a heart (your pick A). No shot cap (8 / 8 / 12 per mag). Three waves, the MOTHERSHIP closes the last (shields pop off like a column, then the core). Round is ~1.5x the others. Fair at Beginner? Survivable at Insane?
+- [ ] Saucer looks: tin toys in 3 sizes, dome = full points, rim = half. Far saucers are 10-14 px: hittable enough?
+- [ ] Abduction beam (~1 round in 4): a big saucer stops and lifts Deputy Duck; shoot it before he is aboard = +500; taken = nothing lost. Funny?
+- [ ] Shooting stars (looks only), the B.L.A.M. satellite drifting past, city lights spelling B.L.A.M. on clear. The gun can cover the last letter when you aim far right.
+- [ ] Bomb saucers (skull hull), decoy saucers (cardboard dome), turncoats (hull flips after the fuse tick). None of them ever lands.
+- [ ] Sounds are SYNTH placeholders: theremin warble, tin clang, landing, beam, mothership hum, WAVE n sting, space-hum bed. duckCameo / duckCameoHit got a synth sound too (so the range cameo now makes a noise).
+- [ ] #87 HIVE Insane / Very Hard: less waiting between pops? (Insane dead time 47 % -> 39 % of the round, more targets, quota follows.)
+- [ ] #88 Ping-pong and beat rows (range AND hive) are SHOT-DRIVEN: hit one and the next pops 0.1 s later, the bomb takes the slot you are heading to. A passive player gets the old cadence. Does the rhythm feel like yours now?
+- [ ] #89 Hanging rows and hanging ping-pongs hang from ONE wooden rail (bar swings in, plates spin in edge-on). Strings no longer cross.
+- [ ] #90 Range Insane uses the middle lane again (6 % -> 24 % of singles); hive middle columns 20 % -> 43 %. Still tennis?
+- [ ] #91 Tracers stay bright during LIGHTS OUT.
+- [ ] HIGH SCORES now 20 rows at 7 px (6 stages). Readable?
+- NOT DONE: #92 muzzle glow in the dark (weekly budget; Saturday). NOT VERIFIED: a real frame rate on INVASION, a two-browser versus match, touch / portrait on the new stage, any sound by ear (everything was tested muted).
+- Agent-reported rough spots: the mothership can sway across a descending saucer in 1-2 % of rounds; an unshot mothership just leaves (no penalty, no finale, its quota hits are lost); escorts count as real saucers and CAN land; a versus landing costs BOTH players a heart; Insane deception is 16 % of saucers (range: 37 %); hanging loop-snakes still cross posts (not on a rail); hive ping-pongs never appear on the magazine variants (pre-existing); range lanes 2 and 4 are the least used at Insane; the FASTEST stat counts the wait before a shot-driven pop.
 
 ## Sound (0.008, 0.010)
 - [ ] Real samples for every core event: gun shots and reloads per skin, target break + ding, ricochets, bombs, Deputy Duck.

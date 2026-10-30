@@ -1,5 +1,5 @@
 'use strict';
-/* B.L.A.M. core/sfx-stage.js -- Deputy Duck's voice set and the stage-specific sounds (alley, boneyard, sky show, bee hive).
+/* B.L.A.M. core/sfx-stage.js -- Deputy Duck's voice set and the stage-specific sounds (alley, boneyard, sky show, bee hive, invasion).
    Recipes only (see sfx-kit.js for the recipe contract). */
 window.BLAM = window.BLAM || {};
 (function (B) {
@@ -321,6 +321,114 @@ K.stageBeds.beehive = (ctx, bus) => {
   let stopped = false;
   return {
     tick() {},
+    stop(fade = 1.5) {
+      if (stopped) return; stopped = true;
+      const t = ctx.currentTime, gp = out.gain;
+      gp.cancelScheduledValues(t); gp.setValueAtTime(gp.value, t); gp.linearRampToValueAtTime(0, t + fade);
+      for (const x of srcs) { try { x.stop(t + fade + 0.1); } catch (e) {} }
+      setTimeout(() => { try { out.disconnect(); } catch (e) {} }, (fade + 1) * 1000);
+    }
+  };
+};
+// ---------- INVASION ----------
+// a theremin-ish warble: a sine with a wide slow vibrato gliding, through a soft band (the classic flying-saucer whine)
+const warble = (v, o) => tone(v, { type: o.type || 'sine', f: o.f, fs: o.fs, at: o.at, a: o.a || 0.06, hold: o.hold || 0, d: o.d || 0.3, g: o.g || 0.05, vib: o.vib || [6.5, 0.06], lp: o.lp || 3800 });
+def('saucerIn', { max: 3, gap: 0.08, pv: 1.5, dv: 0.12, verb: 0.25, pri: 0, gain: 2.2 },
+  v => { const f = [1250, 1000, 820][v.o.size | 0] || 1000; warble(v, { f: f * 1.3, fs: [[0.18, f], [0.5, f * 1.1]], a: 0.05, hold: 0.15, d: 0.35, g: 0.045 }); return 0.6; },
+  v => { const f = [1150, 920, 760][v.o.size | 0] || 920; warble(v, { f: f * 0.8, fs: [[0.25, f * 1.2], [0.55, f]], a: 0.08, hold: 0.12, d: 0.35, g: 0.04, vib: [8, 0.05] }); return 0.65; });
+def('saucerHit', { max: 4, gap: 0.03, pv: 0.8, dv: 0.12, verb: 0.15, pri: 2, gain: 6.5 },
+  v => {                                   // a tin clang + the glass dome tinkling + a small pop
+    const f = [900, 700, 540][v.o.size | 0] || 700;
+    K.fm(v, { f, ratio: 2.7, index: 3, d: 0.25, g: 0.18 });
+    noise(v, { ft: 'bandpass', ff: 1800, q: 1.2, d: 0.08, g: 0.25 });
+    K.pings(v, { n: 5, at: 0.02, span: 0.25, f: [3500, 7000], gmax: 0.05 });
+    tone(v, { f: 260, f2: 80, ft: 0.15, d: 0.16, g: 0.2 });
+    return 0.45;
+  },
+  v => {
+    const f = [820, 640, 500][v.o.size | 0] || 640;
+    K.fm(v, { f, ratio: 3.1, index: 2.5, d: 0.3, g: 0.16 });
+    warble(v, { f: 1400, fs: [[0.25, 300]], a: 0.005, d: 0.25, g: 0.04, vib: [18, 0.08] });   // the saucer's whine dying
+    K.pings(v, { n: 4, at: 0.03, span: 0.22, f: [4000, 8000], gmax: 0.045 });
+    noise(v, { ft: 'lowpass', ff: 1500, d: 0.1, g: 0.25 });
+    return 0.45;
+  });
+def('landing', { max: 2, gap: 0.1, pv: 0.5, dv: 0.1, verb: 0.3, pri: 3, gain: 0.85 },
+  v => {                                   // a whoosh down into the air, a muffled boom, the fizz of the fireball
+    noise(v, { ft: 'bandpass', ff: 2600, ff2: 400, fft: 0.3, q: 1.4, a: 0.08, d: 0.25, g: 0.2 });
+    tone(v, { f: 70, f2: 32, ft: 0.5, at: 0.22, d: 0.55, g: 0.55, drive: 1.5 });
+    noise(v, { kind: 'brown', ft: 'lowpass', ff: 900, ff2: 150, fft: 0.6, at: 0.22, d: 0.6, g: 0.5 });
+    noise(v, { kind: 'crackle', hp: 2500, at: 0.3, a: 0.05, hold: 0.2, d: 0.5, g: 0.2 });
+    return 1.1;
+  });
+def('beamOn', { max: 1, cool: 0.5, pv: 0.3, dv: 0.08, verb: 0.3, pri: 2, gain: 3.5 },
+  v => {                                   // the tractor beam powers up: a rising shimmering pulse chord
+    [0, 7, 12].forEach((n, i) => tone(v, { wave: K.pulse(v.ctx, 0.3), f: 330 * st(n), fs: [[0.6, 330 * st(n) * 1.5]], at: i * 0.04, a: 0.25, hold: 0.5, d: 0.4, g: 0.025, vib: [11 + i * 3, 0.02], lp: 2600 }));
+    noise(v, { ft: 'bandpass', ff: 1500, ff2: 5000, fft: 0.9, q: 3, a: 0.3, hold: 0.4, d: 0.3, g: 0.04 });
+    return 1.2;
+  });
+def('beamOff', { max: 1, cool: 0.3, pv: 0.3, dv: 0.08, verb: 0.2, pri: 2, gain: 2.5 },
+  v => { tone(v, { wave: K.pulse(v.ctx, 0.3), f: 900, f2: 160, ft: 0.35, a: 0.005, d: 0.35, g: 0.25, lp: 2400 }); noise(v, { ft: 'bandpass', ff: 3000, ff2: 600, fft: 0.3, q: 2, d: 0.3, g: 0.2 }); return 0.45; });
+def('mothershipIn', { max: 1, cool: 2, pv: 0.2, dv: 0.05, verb: 0.35, pri: 4, gain: 1.9 },
+  v => {                                   // a deep wobbling drone swells in under a two-tone alarm
+    [55, 55.6, 82.5].forEach(f => tone(v, { type: 'sawtooth', f, a: 0.6, hold: 1.0, d: 0.9, g: 0.06, vib: [3.2, 0.015], lp: 420 }));
+    for (let k = 0; k < 4; k++) tone(v, { type: 'square', f: k & 1 ? 660 : 880, at: 0.1 + k * 0.28, a: 0.01, hold: 0.16, d: 0.06, g: 0.03, lp: 2400 });
+    warble(v, { f: 300, fs: [[1.2, 520], [2.2, 420]], at: 0.3, a: 0.4, hold: 0.8, d: 0.7, g: 0.04, vib: [5, 0.08] });
+    return 2.4;
+  });
+def('shieldPop', { max: 3, gap: 0.04, pv: 0.2, dv: 0.08, verb: 0.15, pri: 2, gain: 4 },
+  v => {                                   // a heavy clunk, then a ping that climbs as fewer plates are left
+    const n = Math.max(0, v.o.n | 0), f = 523 * st(Math.max(0, 10 - n * 2));
+    K.fm(v, { f: 180, ratio: 1.4, index: 2.5, d: 0.18, g: 0.25 });
+    noise(v, { ft: 'lowpass', ff: 1200, d: 0.08, g: 0.3 });
+    K.bell(v, { f, at: 0.04, d: 0.35, g: 0.09, ratios: [1, 2.76, 5.4], amps: [1, 0.35, 0.1] });
+    return 0.45;
+  });
+def('coreHit', { max: 1, pv: 0.2, dv: 0.05, verb: 0.35, pri: 4, gain: 0.95 },
+  v => {                                   // a zap up the scale, the reactor goes: a long layered boom with crackle
+    tone(v, { type: 'square', f: 300, f2: 2400, ft: 0.18, a: 0.005, d: 0.2, g: 0.05, lp: 4000 });
+    tone(v, { f: 60, f2: 24, ft: 1.2, at: 0.15, d: 1.3, g: 0.75, drive: 2 });
+    noise(v, { hp: 900, at: 0.15, d: 0.06, g: 0.45, drive: 2 });
+    noise(v, { kind: 'brown', ft: 'lowpass', ff: 1400, ff2: 120, fft: 1.4, at: 0.15, d: 1.5, g: 0.75 });
+    noise(v, { kind: 'crackle', hp: 1800, at: 0.35, a: 0.15, hold: 0.5, d: 1.0, g: 0.3 });
+    return 2.0;
+  });
+def('shootingStar', { max: 1, cool: 4, pv: 1.0, dv: 0.1, verb: 0.4, pri: 0, gain: 1.6 },
+  v => { tone(v, { f: 5200, f2: 2600, ft: 0.4, a: 0.02, d: 0.4, g: 0.012 }); K.pings(v, { n: 3, at: 0.05, span: 0.3, f: [5000, 8000], gmax: 0.01 }); return 0.6; });
+def('waveStart', { max: 1, cool: 1, pv: 0, dv: 0.02, verb: 0.2, pri: 3, gain: 6 },
+  v => {                                   // a retro four-blip fanfare, a step higher every wave
+    const b = 523 * st(((v.o.n | 0) - 1) * 2);
+    [0, 4, 7, 12].forEach((n, i) => tone(v, { wave: K.pulse(v.ctx, 0.25), f: b * st(n), at: i * 0.09, a: 0.004, hold: i === 3 ? 0.14 : 0.04, d: 0.08, g: 0.045, lp: 4200, np: true }));
+    return 0.6;
+  });
+// the range's duck cameo events had no voice yet; the beam cameo needs one (kept if another file defines them first)
+if (!K.lib.duckCameo) def('duckCameo', { max: 1, cool: 1, pv: 0.6, dv: 0.1, verb: 0.15, pri: 2, gain: 4.5 },
+  v => { quack(v, 0, 470, { up: 1.3, len: 0.1 }); tone(v, { type: 'triangle', f: 700, f2: 1500, ft: 0.5, at: 0.12, a: 0.03, d: 0.5, g: 0.04, vib: [9, 0.03] }); return 0.7; });   // quack + wheee
+if (!K.lib.duckCameoHit) def('duckCameoHit', { max: 1, cool: 0.5, pv: 0.4, dv: 0.1, verb: 0.15, pri: 3, gain: 2 },
+  v => { quack(v, 0, 560, { up: 1.3, down: 1.05, len: 0.09 }); quack(v, 0.11, 660, { up: 1.3, down: 1.1, len: 0.12 }); K.pings(v, { n: 4, at: 0.05, span: 0.3, f: [2500, 4500], gmax: 0.04 }); return 0.5; });
+// the orbit ambience bed (a quiet space hum: low drones, a filtered solar wind, a far radio blip now and then).
+// Like the hive's: it waits in K.stageBeds and stages/invasion.js adds it to K.beds (id 'invasion').
+K.stageBeds.invasion = (ctx, bus) => {
+  const now = ctx.currentTime, out = ctx.createGain(), srcs = [];
+  out.gain.setValueAtTime(0, now); out.gain.linearRampToValueAtTime(1, now + 3); out.connect(bus);
+  const lp = K.filt(ctx, 'lowpass', 260, 0.8); lp.connect(out);
+  [[55, 0.012], [82.6, 0.006], [110.3, 0.003]].forEach(([f, g]) => { const o = ctx.createOscillator(), gn = K.gain(ctx, g); o.type = 'triangle'; o.frequency.value = f; o.connect(gn).connect(lp); o.start(now); srcs.push(o); });
+  const lfo = (rate, depth, param, base) => { const o = ctx.createOscillator(), gn = K.gain(ctx, depth); o.frequency.value = rate; param.value = base; o.connect(gn).connect(param); o.start(now); srcs.push(o); };
+  lfo(0.05, 90, lp.frequency, 260);
+  const s = ctx.createBufferSource(), fl = K.filt(ctx, 'bandpass', 700, 0.6), gn = K.gain(ctx, 0.02);
+  s.buffer = K.noiseBuf(ctx, 'pink'); s.loop = true; s.connect(fl).connect(gn).connect(out); s.start(now, Math.random() * 1.5); srcs.push(s);
+  lfo(0.031, 300, fl.frequency, 700); lfo(0.07, 0.01, gn.gain, 0.02);
+  let stopped = false, next = now + 4 + Math.random() * 6;
+  const blip = t => {                      // a far satellite's beep-boop
+    const n = 2 + ((Math.random() * 3) | 0), f0 = 900 + Math.random() * 900;
+    for (let k = 0; k < n; k++) {
+      const o = ctx.createOscillator(), g = ctx.createGain(), a = t + k * 0.13; o.type = 'sine'; o.frequency.value = f0 * (k & 1 ? 0.75 : 1);
+      g.gain.setValueAtTime(0, a); g.gain.linearRampToValueAtTime(0.006, a + 0.01); g.gain.linearRampToValueAtTime(0, a + 0.09);
+      o.connect(g).connect(out); o.start(a); o.stop(a + 0.12);
+    }
+  };
+  return {
+    tick(until) { if (stopped) return; if (next < ctx.currentTime - 0.5) next = ctx.currentTime + 2; while (next < until) { try { blip(next); } catch (e) {} next += 6 + Math.random() * 9; } },
     stop(fade = 1.5) {
       if (stopped) return; stopped = true;
       const t = ctx.currentTime, gp = out.gain;

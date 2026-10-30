@@ -47,6 +47,17 @@
      rocketFizzle: a rocket fizzles out unshot (opts.u)
      chain       : a chain burst (opts.n link number, opts.u)
      finale      : the B.L.A.M. finale launches
+   INVASION (stage 6):
+     saucerIn    : a saucer warps in far out (opts.u, opts.size 0-2)
+     saucerHit   : a saucer is shot to bits (opts.u, opts.size; 'hit' plays too)
+     landing     : a saucer reached the atmosphere unshot (opts.u; the life follows as 'bomb' + 'lifeLost')
+     beamOn / beamOff : the abduction beam switches on / off (opts.u); duckCameo / duckCameoHit as the range's
+     mothershipIn: the mothership arrives (opts.u)
+     shieldPop   : a mothership shield plate is shot off (opts.u, opts.n = plates left in front of the core)
+     coreHit     : the mothership core is shot (the ship blows; 'finale' follows on a clear)
+     shootingStar: a shooting star streaks across (very quiet; opts.u)
+     waveStart   : WAVE n begins (opts.n)
+     + the ambience bed 'invasion' (quiet space hum)
    Internal (the router plays these itself): duckScared, duckRelief, duckHeckle, duckCheer, duckSad (Deputy Duck's
    pose changes, watched on BLAM.G.duck.pose; duckQuiet(s) mutes the scared / relief ones for s seconds, used by the
    bomb's silent scared face), the title-menu chiptune and a quiet ambience bed per stage.

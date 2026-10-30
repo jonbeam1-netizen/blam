@@ -764,6 +764,28 @@ P.warm();
 const HATCH_GAP = 0.1, BEE_OUT = 1.3;                          // larva burst -> item entrance; a hatched bee's fly-out
 const HB_GRACE = 0.15, HB_BEAT = 0.6;                          // hidden bomb: spring-up grace, live beat
 const DECOY_ARM = 0.3, DECOY_UNMASK = 0.16;                    // the decoy build-up (as the range)
+// SHOT-DRIVEN SEQUENCES (#88, the range's rule on the comb): a ROW on a beat, a beat COLUMN and a PING-PONG member i > 0 is
+// RELEASED by the hit on the one before it (REL_LEAD s after the hit, + an off beat's extra / the reload allowance: chX),
+// never later than the old clock schedule (t0 + chR, the timeout fallback for a passive player); after a bomb / decoy or an
+// unshot plate the beat runs on from that member's actual pop (chS); a ping-pong member waits until its cell's previous
+// item is gone (chF steps back; shot: FOLD_T). The spawn's t0 is the earliest it can pop; the pose runs on lt - (release - t0).
+// Pure in the timeline + the SHARED hit stage times (points() records them; only Run.applyHit calls it): versus-safe.
+const REL_LEAD = 0.1, FOLD_T = 0.2;
+const HIT = new WeakMap(), RELT = new WeakMap();               // spawn -> its hit stage time / its current release offset
+const hitOf = s => HIT.get(s);
+function releaseAt(sp, get, hitT) {
+  const ch = [sp];
+  for (let q = sp; q.chD; ) { q = get(q.id - q.chD); if (!q) break; ch.unshift(q); }
+  const A = [ch[0].t0 + (ch[0].chD ? ch[0].chR || 0 : 0)];
+  for (let j = 1; j < ch.length; j++) {
+    const m = ch[j], h = hitT(ch[j - 1]);
+    let a = A[j - 1] + m.chS;
+    if (h != null) a = Math.min(a, h + m.chX);
+    if (m.chF && j >= m.chF) { const o = ch[j - m.chF], ho = hitT(o), gone = A[j - m.chF] + lifeOf(o); a = Math.max(a, ho != null ? Math.min(ho + FOLD_T, gone) : gone); }
+    A.push(Math.max(m.t0, Math.min(a, m.t0 + m.chR)));
+  }
+  return A[A.length - 1];
+}
 // the pose of a cell's item: a pure function of (spawn, local time, ext = the extra stay a deep-cell member earned)
 //   larva (lt < ripen) -> hatch burst -> [bee fly-out | the item BURSTS out standing: pop = its scale, 0.15 -> 1
 //   easeOutBack, no flip] / a plain item's entrance: flips up out of the cell on its bottom edge -> stay (settling
@@ -895,6 +917,12 @@ class Cell extends T.Target {
     this.group.visible = false;
   }
   update(lt, run) {
+    if (this.sp.chD) {                                 // #88 a shot-driven member: waits (invisible) for its release
+      const s0 = this.sp, A = run && run.timeline ? releaseAt(s0, id => run.timeline[id], hitOf) : s0.t0 + s0.chR;
+      this.relR = A - s0.t0; RELT.set(s0, this.relR);
+      if (lt < this.relR && this.alive) { this.group.visible = false; this.shootable = false; this.lastLt = 0; this.liftZ = 0; return false; }
+      lt -= this.relR;
+    }
     if (this.revealLt >= 0) return this.updateReveal(lt);
     if (this.armLt >= 0 && this.alive) return this.updateArm(lt);
     const sp = this.sp;
@@ -999,12 +1027,12 @@ class Cell extends T.Target {
   arm(point, st) {
     if (!this.sp.decoy || this.revealLt >= 0 || !this.alive) return -1;
     if (this.armLt < 0) {
-      this.armLt = st != null ? st - this.sp.t0 : this.lastLt; this.shootable = false; this.boomPoint = point || null;
+      this.armLt = st != null ? st - this.sp.t0 - (this.relR || 0) : this.lastLt; this.shootable = false; this.boomPoint = point || null;
       this.group.updateMatrixWorld(true);
       if (this.prop.spark) T.sparks(new THREE.Vector3().setFromMatrixPosition(this.prop.spark.matrixWorld), 8, ['lemon', 'yellow', 'orange'], 1.5, 0.035);
       B.SFX.play('bombReveal', { u: uOf(this.C.x, this.C.y, ZM) });
     }
-    return +(this.sp.t0 + this.armLt + DECOY_ARM).toFixed(4);
+    return +(this.sp.t0 + (this.relR || 0) + this.armLt + DECOY_ARM).toFixed(4);
   }
   // the hidden bomb: springs up in the cell where the plate stood, sparks hot for the beat, flips back in
   updateReveal(lt) {
@@ -1086,6 +1114,8 @@ function makeTarget(sp, run) {
 // quota share of the real targets | rel = the reach-for-reload the pacing allows on the magazine variants (s) |
 // cols = live comb columns (Beginner: the middle five) | bees = tiny bees (big ones: config)
 // =========================================================================================
+// #87 (Jon 2026-10-30, 'sitting there waiting for targets' at Insane): Very Hard gap 0.5-0.9 -> 0.35-0.65, pause 0.9-1.4 -> 0.7-1.0;
+// Insane gap 0.45-0.8 -> 0.25-0.5, pause 1.0-1.5 -> 0.6-0.9, live 2 -> 3. Dead time between pops is not what hard means here.
 const TIER_P = [
   { time: 45, win: 1.3,  swing: 0.5,  lv: 0.32, live: 4, gap: [0.5, 0.95], burst: 0.25, bgap: [0.3, 0.45], pause: [0.6, 1.0],
     hop: [0.12, 0.38], alt: 0.25, adj: 0.12, decep: 0.18, kinds: [0.45, 0.2, 0.35], bombCap: 0.2,
@@ -1095,11 +1125,11 @@ const TIER_P = [
     hop: [0.3, 0.55], alt: 0.45, adj: 0.15, decep: 0.25, kinds: [0.4, 0.22, 0.38], bombCap: 0.27,
     trick: 0.18, beat: 0.5, snake: 0.55, pp: 0.6, wall: 1.35, col4: 0.55, larva: 0.18, ripen: 3.1, hatch: [0.3, 0.5, 0.2], maxL: 3,
     spare: 5, share: 0.6, rel: 0.7, cols: [0, 6], bees: 7 },
-  { time: 36, win: 0.7,  swing: 0.3,  lv: 0.24, live: 3, gap: [0.5, 0.9], burst: 0.32, bgap: [0.25, 0.35], pause: [0.9, 1.4],
+  { time: 36, win: 0.7,  swing: 0.3,  lv: 0.24, live: 3, gap: [0.35, 0.65], burst: 0.32, bgap: [0.25, 0.35], pause: [0.7, 1.0],
     hop: [0.45, 0.75], alt: 0.65, adj: 0.17, decep: 0.32, kinds: [0.35, 0.23, 0.42], bombCap: 0.33,
     trick: 0.21, beat: 0.4, snake: 0.42, pp: 0.48, wall: 1.05, col4: 0.65, larva: 0.2, ripen: 2.6, hatch: [0.28, 0.46, 0.26], maxL: 3,
     spare: 3, share: 0.64, rel: 0.62, cols: [0, 6], bees: 7 },
-  { time: 32, win: 0.45, swing: 0.22, lv: 0.2,  live: 2, gap: [0.45, 0.8], burst: 0.35, bgap: [0.22, 0.3], pause: [1.0, 1.5],
+  { time: 32, win: 0.45, swing: 0.22, lv: 0.2,  live: 3, gap: [0.25, 0.5], burst: 0.35, bgap: [0.22, 0.3], pause: [0.6, 0.9],
     hop: [0.6, 1.0], alt: 0.85, adj: 0.2, decep: 0.38, kinds: [0.3, 0.24, 0.46], bombCap: 0.38,
     trick: 0.24, beat: 0.32, snake: 0.34, pp: 0.4, wall: 0.85, col4: 0.75, larva: 0.22, ripen: 2.2, hatch: [0.25, 0.45, 0.3], maxL: 3,
     spare: 2, share: 0.68, rel: 0.55, cols: [0, 6], bees: 8 }
@@ -1125,6 +1155,11 @@ function config(tier, v) {
 }
 // the director's distance: plain sqrt (exactly rounded in every JIT tier; Math.hypot's last bit is not specified)
 const hyp = (x, y) => Math.sqrt(x * x + y * y);
+// #90 aim travel on the comb: vertical px x AIM_KY; side dead zone (game px) round the middle column; OUTER_MAX singles in a
+// row on an edge column at most; MID_SHARE of the singles in the middle three columns at least (a soft pull)
+const AIM_KY = 1.8, SIDE_DZ = 14, OUTER_MAX = 2, MID_SHARE = 0.35;
+// #88 the shot-driven patterns and their nominal beat (the fallback cadence)
+const SEQ_BASE = { R: c => c.beat, V: c => c.beat * 1.05, P: c => c.pp };
 const pickW = (w, r) => { let s = r * w.reduce((a, b) => a + b, 0); for (let i = 0; i < w.length; i++) if ((s -= w[i]) < 0) return i; return w.length - 1; };
 const isItem = s => s.kind === 'cell';
 const isReq = s => isItem(s) && (!s.bomb || !!s.hidden) && !(s.larva && s.larva.hatch !== 'target');   // a shot a perfect player spends
@@ -1157,6 +1192,8 @@ function timeline(c, rng) {
   const magN = c.ammo && c.ammo.mag && !c.ammo.autoReload ? c.ammo.mag : 0, MARG = magN ? c.rel + 0.8 : 0;
   const ra = +(c.swing * 0.15).toFixed(3);
   let bombs = 0, lastAim = null, xUntil = 0, nTrick = 0, lastTrick = '', nLarva = 0;
+  let outerRun = 0, nSingle = 0, nMid = 0;           // #90: singles in a row on an edge column; singles / of them in the middle three
+  const isOuter = C => C.c <= c.cols[0] || C.c >= c.cols[1], isMid = C => Math.abs(C.c - 3) <= 1;
   const count = {}, used = k => count[k] || 0;
   // ---- occupancy: per cell, booked [a, b]; up (shown) [ua, ub]
   const upAt = t => occ.filter(o => !o.ghost && o.ua <= t && o.ub > t);
@@ -1177,9 +1214,16 @@ function timeline(c, rng) {
       if (t + life > TIME - 0.2) continue;
       const p = C.s; let s = 0;
       if (lastAim && D != null) {
-        s = Math.abs(hyp(p[0] - lastAim[0], p[1] - lastAim[1]) - D) / CD;
-        if ((p[0] < CX) === (lastAim[0] < CX)) s += 0.35 * c.alt;
+        // #90 (the range's rule): vertical travel counts x AIM_KY toward the hop, so a middle column at the other height
+        // answers a big hop; the side preference has a dead zone round the comb's middle column
+        s = Math.abs(hyp(p[0] - lastAim[0], AIM_KY * (p[1] - lastAim[1])) - D) / CD;
+        const sd = x => x < CX - SIDE_DZ ? -1 : x > CX + SIDE_DZ ? 1 : 0;
+        if (sd(p[0]) * sd(lastAim[0]) > 0) s += 0.35 * c.alt;
         if ((p[1] < CY) === (lastAim[1] < CY)) s += 0.2 * c.alt;
+      }
+      if (o.single) {                                // #90: at most OUTER_MAX singles in a row on an edge column; a middle share
+        if (isOuter(C) && outerRun >= OUTER_MAX) s += 2.5;
+        if (isMid(C) && nSingle >= 2 && nMid < MID_SHARE * (nSingle + 1)) s -= 0.3;
       }
       if (o.pref && o.pref.has(C.i)) s -= 0.45;
       const ua = t + (o.at || 0);
@@ -1212,9 +1256,10 @@ function timeline(c, rng) {
       kind = ['plain', 'hidden', 'decoy'][ty];
     }
     const sp0 = mk(t, 0); const life = lifeOf(sp0) + (kind === 'hidden' ? HB_BEAT + c.lv : 0);
-    const C = slot(t, life, { D: rng.range(c.hop[0], c.hop[1]) * CD });
+    const C = slot(t, life, { D: rng.range(c.hop[0], c.hop[1]) * CD, single: true });
     if (!C) return -1;
     const sp = mk(t, C.i);
+    nSingle++; if (isMid(C)) nMid++; outerRun = isOuter(C) ? outerRun + 1 : 0;
     if (kind) { sp.bomb = true; if (kind === 'hidden') sp.hidden = true; else if (kind === 'decoy') sp.decoy = true; }
     fin(sp); commit(sp);
     if (!kind || kind === 'hidden') aimed(sp);
@@ -1373,6 +1418,7 @@ function timeline(c, rng) {
       const P = CELLS[s.cell].s, aim = 0.06 + 0.32 * (prevP ? hyp(P[0] - prevP[0], P[1] - prevP[1]) : 0) / 489; prevP = P;
       const rdy = s.col ? prev + 0.05 : s.t0 + s.readyAt + 0.22, boundary = k > 0 && k % magN === 0;
       const shot = (boundary ? Math.max(rdy, prev + c.rel) : Math.max(rdy, prev + 0.2)) + aim;
+      if (boundary && SEQ_BASE[s.patKind]) s._relB = true;   // #88: a shot-driven member keeps the reach after a hit too
       if (boundary) {
         const end = s.col ? prev + (s.revW || 0) : s.t0 + (s.at || 0) + s.swing + s.stay + 0.7 * s.lv;
         const need = Math.min(MARG - 0.05, (shot - aim + 0.45) - end + 0.001);
@@ -1383,6 +1429,20 @@ function timeline(c, rng) {
     // deep cells: re-derive the members' latest end from the (maybe longer) reveal windows
     const byPat = new Map(); for (const s of out) if (s.patKind === 'C') { if (!byPat.has(s.pat)) byPat.set(s.pat, []); byPat.get(s.pat).push(s); }
     for (const mem of byPat.values()) { mem.sort((a, b) => (a.col || 0) - (b.col || 0)); const base = lifeOf(mem[0]); let ext = 0; mem.forEach((s, j) => { if (j) ext += s.revW + 0.7 * c.lv; s.t1 = +(s.t0 + base + ext).toFixed(3); }); }
+  }
+  // ---- #88 SHOT-DRIVEN rows / beat columns / ping-pongs: the clock schedule becomes the fallback (chR), the spawn t0 the
+  // earliest pop (the one before hit at its readyAt); see releaseAt
+  const seqs = new Map(); for (const s of out) if (s.pat != null && SEQ_BASE[s.patKind]) { if (!seqs.has(s.pat)) seqs.set(s.pat, []); seqs.get(s.pat).push(s); }
+  for (const mem of seqs.values()) {
+    mem.sort((a, b) => a.pi - b.pi);
+    const S0 = mem.map(m => m.t0), base = SEQ_BASE[mem[0].patKind](c), slotBack = mem[0].patKind === 'P' ? 2 : 0;
+    for (let i = 1; i < mem.length; i++) {
+      const m = mem[i], p = mem[i - 1], dS = +(S0[i] - S0[i - 1]).toFixed(3);
+      m.chS = dS; m.chX = +(REL_LEAD + Math.max(0, dS - base) + (m._relB ? c.rel : 0)).toFixed(3); m.chF = slotBack; m._chP = p;
+      const e = Math.floor((p.t0 + Math.min(dS, p.readyAt + m.chX)) * 1000) / 1000;
+      m.chR = +(S0[i] - e).toFixed(3); m.t0 = e;
+    }
+    for (const m of mem) delete m._relB;
   }
   // ---- the swarm, scheduled frenzies, order, ids, relative links
   const last = out.reduce((a, s) => Math.max(a, s.t1), 0);
@@ -1406,7 +1466,10 @@ function timeline(c, rng) {
   if (c.frenzy) for (let ft = rng.range(5, 8); ft < last - 1; ft += rng.range(c.frenzy[0], c.frenzy[1])) out.push({ id: 0, t0: +ft.toFixed(3), t1: +(ft + 0.05).toFixed(3), kind: 'frenzy' });
   out.sort((a, b) => a.t0 - b.t0 || (a.kind === 'swarm' ? -1 : b.kind === 'swarm' ? 1 : 0));
   out.forEach((s, i) => { s.id = i; });
-  for (const s of out) if (s._ahead) { s.aheadD = s.id - s._ahead.id; delete s._ahead; }
+  for (const s of out) {
+    if (s._ahead) { s.aheadD = s.id - s._ahead.id; delete s._ahead; }
+    if (s._chP) { s.chD = s.id - s._chP.id; delete s._chP; }
+  }
   const good = out.filter(isReal).length;
   c.goodCount = good; c.bombCount = out.filter(s => (s.bomb && !s.hidden) || (s.larva && s.larva.hatch === 'bomb')).length;
   c.tricks = count; c.larvaCount = nLarva; c.relExt = relExt;
@@ -1417,6 +1480,8 @@ function timeline(c, rng) {
 // member behind the front 200), a larva's hatched plate +150 on top
 function points(sp, lt) {
   if (sp.kind !== 'cell') return 0;
+  HIT.set(sp, +(sp.t0 + lt).toFixed(4));                       // #88: the shared hit stage time
+  lt -= RELT.get(sp) || 0;                                     // a shot-driven member: its stay runs from its release
   let base = 200;
   if (!sp.col) { const f = (lt - (sp.at || 0) - sp.ra) / Math.max(0.05, spanOf(sp)); base = f < 0.25 ? 300 : f < 0.5 ? 200 : f < 0.75 ? 150 : 100; }
   return base + (sp.larva ? 150 : 0);
@@ -1446,5 +1511,5 @@ function drawIcon(cx, cy, r, t = 0) {
 { const K = B.SFXKit; if (K && K.beds && K.stageBeds && K.stageBeds.beehive && !K.beds.beehive) K.beds.beehive = K.stageBeds.beehive; }
 B.Stage.register({ id: 'beehive', name: 'BEE HIVE', short: 'HIVE', variants: 3, variantNames: VARIANT_NAMES, penalty: -300,
   buildEnv, config, timeline, makeTarget, points, briefing, drawIcon,
-  pose: cellPose, CELLS, TIER_P, lifeOf, spanOf, isReal, isReq, scr, BEES, ZM });
+  pose: cellPose, CELLS, TIER_P, lifeOf, spanOf, isReal, isReq, scr, BEES, ZM, releaseAt });
 })(window.BLAM);
