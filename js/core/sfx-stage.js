@@ -1,5 +1,5 @@
 'use strict';
-/* B.L.A.M. core/sfx-stage.js -- Deputy Duck's voice set and the stage-specific sounds (alley, boneyard, sky show, bee hive, invasion).
+/* B.L.A.M. core/sfx-stage.js -- Deputy Duck's voice set and the stage-specific sounds (alley, boneyard, sky show, bee hive, invasion, laser tag, skee ball).
    Recipes only (see sfx-kit.js for the recipe contract). */
 window.BLAM = window.BLAM || {};
 (function (B) {
@@ -541,6 +541,92 @@ K.stageBeds.lasertag = (ctx, bus) => {
       if (next < ctx.currentTime - 0.5) next = ctx.currentTime + 1;
       while (next < until) { try { pew(next); if (Math.random() < 0.4) pew(next + 0.12); } catch (e) {} next += 1.4 + Math.random() * 3.6; }
     },
+    stop(fade = 1.5) {
+      if (stopped) return; stopped = true;
+      const t = ctx.currentTime, gp = out.gain;
+      gp.cancelScheduledValues(t); gp.setValueAtTime(gp.value, t); gp.linearRampToValueAtTime(0, t + fade);
+      for (const x of srcs) { try { x.stop(t + fade + 0.1); } catch (e) {} }
+      setTimeout(() => { try { out.disconnect(); } catch (e) {} }, (fade + 1) * 1000);
+    }
+  };
+};
+// ---------- SKEE BALL ----------
+// a boardwalk arcade: wooden balls rumbling up the lanes, the ramp thunk, a ding per ring, the carnival bell, tickets
+const wood = (v, f, at, g, d = 0.06) => {                     // a hollow wood-block knock: a resonant noise burst + a short sine body
+  noise(v, { ft: 'bandpass', ff: f, q: 9, at, a: 0.001, d, g });
+  tone(v, { f: f * 0.5, f2: f * 0.42, ft: d, at, a: 0.001, d: d * 1.2, g: g * 0.5 });
+};
+def('ballRoll', { max: 3, gap: 0.05, pv: 0.6, dv: 0.1, verb: 0.08, pri: 1, gain: 1 },
+  v => {                                   // the clack of the release, then the low rumble of the roll (opts.d = its roll time)
+    const d = K.clamp(+v.o.d || 1.2, 0.4, 2);
+    wood(v, 1500, 0, 0.12, 0.04); wood(v, 1100, 0.035, 0.06, 0.04);
+    noise(v, { kind: 'brown', ft: 'lowpass', ff: 520, ff2: 260, fft: d, at: 0.03, a: 0.06, hold: d * 0.55, d: d * 0.4, g: 0.16, nd: true });
+    tone(v, { type: 'triangle', f: 70, f2: 52, ft: d, at: 0.03, a: 0.06, hold: d * 0.5, d: d * 0.4, g: 0.035, vib: [9, 0.06], nd: true });
+    return d + 0.1;
+  });
+def('ballJump', { max: 3, gap: 0.05, pv: 0.8, dv: 0.1, verb: 0.1, pri: 1, gain: 4.5 },
+  v => {                                   // the ramp lip: a thunk and a little airborne whoop
+    tone(v, { f: 160, f2: 70, ft: 0.08, a: 0.002, d: 0.1, g: 0.18 });
+    wood(v, 700, 0, 0.08, 0.05);
+    noise(v, { ft: 'bandpass', ff: 900, ff2: 2600, fft: 0.2, q: 2, at: 0.03, a: 0.04, d: 0.18, g: 0.025 });
+    return 0.3;
+  });
+def('pocket', { max: 3, gap: 0.04, pv: 0, dv: 0.05, verb: 0.25, pri: 2, gain: 3 },
+  v => {                                   // into the hole: a hollow plunk + a bell ding, higher by ring (the 100: a double ding with sparkle)
+    const ring = +v.o.ring || 10, n = ring >= 100 ? 9 : [10, 20, 30, 40, 50].indexOf(ring), f = 784 * st(Math.max(0, n) * 2);
+    tone(v, { f: 220, f2: 110, ft: 0.07, a: 0.002, d: 0.09, g: 0.12 });
+    K.bell(v, { f, at: 0.02, d: 0.5, g: 0.045, ratios: [1, 2.76, 5.4], amps: [1, 0.35, 0.12] });
+    if (ring >= 100) { K.bell(v, { f: f * 1.5, at: 0.12, d: 0.6, g: 0.04, ratios: [1, 2.76], amps: [1, 0.3] }); K.pings(v, { n: 5, span: 0.3, at: 0.1, f: [3500, 6000], gmax: 0.03 }); }
+    return 0.8;
+  });
+def('ballKick', { max: 2, gap: 0.04, pv: 0.6, dv: 0.08, verb: 0.15, pri: 3, gain: 11 },
+  v => {                                   // a ball shot in the air: a fat wooden CLONK, a ricochet whizz up
+    wood(v, 1250, 0, 0.2, 0.07); wood(v, 1850, 0.012, 0.12, 0.05);
+    tone(v, { f: 300, f2: 150, ft: 0.06, a: 0.001, d: 0.08, g: 0.12 });
+    tone(v, { type: 'triangle', f: 900, f2: 2400, ft: 0.18, at: 0.04, a: 0.01, d: 0.16, g: 0.03 });
+    return 0.35;
+  });
+def('shuffleBell', { max: 1, cool: 0.8, pv: 0, dv: 0.03, verb: 0.3, pri: 3, gain: 2.5 },
+  v => {                                   // the carnival bell: ding-ding-ding (opts.wave: a longer ring) + a relay whirr as the lights change
+    const n = v.o.wave ? 4 : 3;
+    for (let k = 0; k < n; k++) K.bell(v, { f: 1318, at: k * 0.11, d: 0.35, g: 0.05, ratios: [1, 2.4, 3.9, 5.6], amps: [1, 0.5, 0.25, 0.1] });
+    for (let k = 0; k < 6; k++) noise(v, { ft: 'bandpass', ff: 2400, q: 5, at: 0.05 + k * 0.07, d: 0.02, g: 0.03, nd: true });
+    return 0.9;
+  });
+def('ticketSpray', { max: 1, pv: 0, dv: 0.05, verb: 0.2, pri: 3, gain: 2.5 },
+  v => {                                   // the dispensers run wild: a motor whirr under a flutter of paper ticks for ~2 s
+    tone(v, { type: 'sawtooth', f: 95, f2: 120, ft: 0.4, a: 0.1, hold: 1.6, d: 0.4, g: 0.02, lp: 700, np: true });
+    K.grains(v, { n: 70, span: 2.1, f: [2500, 6500], q: 3, d: [0.004, 0.012], g: [0.04, 0.12], kind: 'white' });
+    return 2.3;
+  });
+def('jackpot', { max: 1, cool: 0.6, pv: 0, dv: 0.03, verb: 0.3, pri: 4, gain: 2.5 },
+  v => {                                   // JACKPOT: a rising chiptune arpeggio, a bell on top
+    const w = K.pulse(v.ctx, 0.25);
+    [0, 4, 7, 12, 16, 19, 24].forEach((n, i) => tone(v, { wave: w, f: 523 * st(n), at: i * 0.055, a: 0.003, hold: 0.03, d: 0.08, g: 0.035, lp: 5000, np: true }));
+    K.bell(v, { f: 2093, at: 0.38, d: 0.7, g: 0.05, ratios: [1, 2.76, 5.4], amps: [1, 0.3, 0.1] });
+    return 1.1;
+  });
+// the boardwalk bed: an arcade murmur, the bulbs' buzz, the surf outside, a far skee ball now and then. Waits in
+// K.stageBeds; stages/skeeball.js adds it to K.beds (id 'skeeball').
+K.stageBeds.skeeball = (ctx, bus) => {
+  const now = ctx.currentTime, out = ctx.createGain(), srcs = [];
+  out.gain.setValueAtTime(0, now); out.gain.linearRampToValueAtTime(1, now + 2.5); out.connect(bus);
+  const lfo = (rate, depth, param, base) => { const o = ctx.createOscillator(), gn = K.gain(ctx, depth); o.frequency.value = rate; param.value = base; o.connect(gn).connect(param); o.start(now); srcs.push(o); };
+  const loop = (kind, type, f, q, g) => { const s = ctx.createBufferSource(), fl = K.filt(ctx, type, f, q), gn = K.gain(ctx, g); s.buffer = K.noiseBuf(ctx, kind); s.loop = true; s.connect(fl).connect(gn).connect(out); s.start(now, Math.random() * 1.5); srcs.push(s); return { f: fl, g: gn }; };
+  const crowd = loop('pink', 'bandpass', 700, 1.6, 0.012); lfo(0.21, 0.004, crowd.g.gain, 0.012);
+  const surf = loop('brown', 'lowpass', 420, 0.7, 0.022); lfo(0.085, 0.016, surf.g.gain, 0.022); lfo(0.085, 160, surf.f.frequency, 420);
+  const bz = K.filt(ctx, 'bandpass', 360, 2); bz.connect(out);
+  [[120, 0.0022], [240, 0.0012]].forEach(([f, g]) => { const o = ctx.createOscillator(), gn = K.gain(ctx, g); o.type = 'sawtooth'; o.frequency.value = f; o.connect(gn).connect(bz); o.start(now); srcs.push(o); });
+  const far = t => {                       // a far lane: a rumble, a plunk, sometimes a ding
+    const s = ctx.createBufferSource(), f = K.filt(ctx, 'lowpass', 380, 0.7), g = ctx.createGain(), p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    g.gain.value = 0; s.buffer = K.noiseBuf(ctx, 'brown'); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.02, t + 0.15); g.gain.linearRampToValueAtTime(0, t + 1.1);
+    s.connect(f).connect(g); if (p) { p.pan.value = Math.random() * 1.6 - 0.8; g.connect(p).connect(out); } else g.connect(out); s.start(t, Math.random()); s.stop(t + 1.2);
+    if (Math.random() < 0.6) { const o = ctx.createOscillator(), og = ctx.createGain(); og.gain.value = 0; o.frequency.value = 784 * Math.pow(2, (Math.floor(Math.random() * 5) * 2) / 12);
+      og.gain.setValueAtTime(0, t + 1.15); og.gain.linearRampToValueAtTime(0.004, t + 1.152); og.gain.exponentialRampToValueAtTime(0.0001, t + 1.6); o.connect(og).connect(p || out); o.start(t + 1.15); o.stop(t + 1.65); }
+  };
+  let stopped = false, next = now + 2;
+  return {
+    tick(until) { if (stopped) return; if (next < ctx.currentTime - 0.5) next = ctx.currentTime + 1; while (next < until) { try { far(next); } catch (e) {} next += 2.5 + Math.random() * 5; } },
     stop(fade = 1.5) {
       if (stopped) return; stopped = true;
       const t = ctx.currentTime, gp = out.gain;

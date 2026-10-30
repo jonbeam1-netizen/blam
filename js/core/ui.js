@@ -590,8 +590,8 @@ UI.screens.practiceresults = {
   enter(a) {
     this.a = a; const g = G(); g.placeDuck('results'); g.duckPose('cheer', 'idle', 1.5);
     this.menu = new Menu([
-      { text: 'AGAIN', color: 'green', s: 0.045, u: 0.3, v: 0.86, act: () => g.startPractice(g.free.tier) },
-      { text: 'BACK', color: 'slate', s: 0.045, u: 0.56, v: 0.86, act: () => g.go('free') }
+      { text: 'AGAIN', color: 'green', s: 0.045, u: 0.3, v: 0.86, z: 3.4, act: () => g.startPractice(g.free.tier) },
+      { text: 'BACK', color: 'slate', s: 0.045, u: 0.56, v: 0.86, z: 3.4, act: () => g.go('free') }
     ]);
   },
   exit() { this.menu.dispose(); },
@@ -625,8 +625,8 @@ UI.screens.results = {
     SFX.play(a.res.cleared ? 'stageClear' : 'stageFail'); if (a.newRecord) SFX.play('newRecord');
     // #53 free play: AGAIN (same stage / variant / tier, new seed) and BACK (the free-play menu) signs, no auto-advance
     this.menu = a.free ? new Menu([
-      { text: 'AGAIN', color: 'green', s: 0.045, u: 0.3, v: 0.86, act: () => g.startFree(a.free.stage, a.free.variant, a.free.tier) },
-      { text: 'BACK', color: 'slate', s: 0.045, u: 0.56, v: 0.86, act: () => g.go('free') }
+      { text: 'AGAIN', color: 'green', s: 0.045, u: 0.3, v: 0.86, z: 3.4, act: () => g.startFree(a.free.stage, a.free.variant, a.free.tier) },   // #94: z 3.4 = in front of every stage's foreground (Laser Tag's barrier sits at z 3)
+      { text: 'BACK', color: 'slate', s: 0.045, u: 0.56, v: 0.86, z: 3.4, act: () => g.go('free') }
     ]) : null;
   },
   exit() { if (this.menu) this.menu.dispose(); this.menu = null; },

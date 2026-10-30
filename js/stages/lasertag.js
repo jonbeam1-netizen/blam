@@ -567,8 +567,10 @@ const STAGE = { haze: 0, fin: -1, finT: 0, blasts: 0 };
 function envStep() {
   const nowMs = performance.now(), now = nowMs / 1000, dt0 = ENV.last ? Math.min(0.05, now - ENV.last) : 0.016; ENV.last = now;
   const dt = dt0 * slowK(); ENV.t += dt; U.uTime.value = ENV.t;
-  if (B.FX && B.FX.setDark) B.FX.setDark(ID, true);           // #92: this whole stage is a dark scene
   const mine = isMine(), hz = mine ? STAGE.haze : 0;
+  // #92: this whole stage is a dark scene, but ONLY while it is being played: the title / results keep the last env on
+  // display, and a claim made there put the muzzle glow on every menu shot (Jon, 2026-10-30; it lapses in 0.3 s now)
+  if (mine && B.G.run.state !== 'end' && B.FX && B.FX.setDark) B.FX.setDark(ID, true);   // not on the results screen either
   U.uHaze.value = hz; if (hz > 0.01 && B.FX && B.FX.setHaze) B.FX.setHaze(hz);
   const gn = B.FX && B.FX.glowNow;
   if (gn && gn.k > 0.01) { U.uGunP.value.copy(gn.world); U.uGunC.value.set(gn.col.r, gn.col.g, gn.col.b, gn.k); } else U.uGunC.value.w = 0;

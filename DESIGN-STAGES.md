@@ -233,6 +233,67 @@ Jon's pitch: a black-light laser tag arena, nostalgic 90s art and vibe, "laser t
 
 **Done when:** registered as stage 'lasertag' after INVASION (script tag after invasion.js, `?v=` matching the others; the manager bumps the build), name 'LASER TAG', short 'TAG', 3 variants, 4 tiers, briefing card with its own icons, versus-safe, no console errors, Beginner and Insane play-checked MUTED, screenshots (arena, a tagger with the dot closing, a fog burst, the base, the finale, the muzzle glow in the dark), ENGINE.md "LASER TAG (stage 7)" section with the dials, one browser tab reused and closed.
 
+## 9. SKEE BALL build brief (Jon + Fable, 2026-10-30 05:00 PDT; stage 8) -- GO given 2026-10-30 ("Go!", all three of 9 / 10 / 11, built one by one)
+Jon's own idea (section 2): balls roll down a skee-ball lane; the hole a ball drops into decides whether a target or a bomb pops up there; shoot the targets as they appear. Settled 2026-10-30: build order Skee Ball -> Conveyor -> Doppelducks, each its own build (0.022 / 0.023 / 0.024), muted checks, no credit floor but keep spend lean.
+
+**Scene:** a boardwalk arcade at night: FIVE skee-ball lanes side by side angled up toward their ring boards (the classic nested rings 10 / 20 / 30 / 40 / 50 in the big board plus the two 100 pockets top-left / top-right), carnival bulbs chasing round every board, a ticket counter spitting tickets, a prize wall (plush toys, a lava lamp, a giant teddy) behind, sea air haze, a marquee "B.L.A.M. SKEE-BALL" (fixed logo). Original art, pixel / dither voxel (STYLE.md), warm bulbs on dark wood.
+
+**The mechanic:** BALLS roll up the lanes (released at the bottom with a clack), jump the ramp and drop into a ring POCKET. The pocket LIGHTS and a hex PLATE (target) or a BOMB pops out of that pocket on a little stand (flip-up like the hive cells; `BLAM.Props` plates / bombs / decoys / hidden bombs so every range rule carries over). The RING COLOURS tell you what will pop: GREEN-lit pockets pop targets, RED-lit pockets pop bombs; the colours are visible before the ball lands, so a player who reads the ball's arc (where + roughly when) is aimed before the pop. Pop windows per tier; aim travel = where the balls go (the director picks lanes / pockets with the range's hop rule); never two pops right next to each other unless a trick says so. Decoys pop from GREEN pockets (fair by the decoy rules: the tell is on the prop). Hidden bombs behind plates as usual.
+
+**Twist 1, BALL SHOT:** shoot a ball IN THE AIR and it kicks one ring outward / inward (deterministic: toward the nearest other-colour pocket); so you can bump a ball out of a red pocket into a green one (a target pops instead of a bomb) or into a 100 pocket (BONUS pop: a gold plate, +500, or the duck cameo). A ball hit = a satisfying wooden clonk + 50 pts; the kick is a pure function of (spawn, hit time). Versus: the kick comes through the shared hit.
+
+**Twist 2, LIGHTS SHUFFLE:** between waves (and mid-wave at high tiers) the boards SHUFFLE their colours: green and red swap pockets with a bell and a 0.5 s blink telegraph; balls already in the air land under the NEW colours (the telegraph is long enough to read).
+
+**Patterns:** a lane volley (balls up one lane in a beat, pops in a column up the rings), a cross-lane ROW (five balls at once, pops across the five boards on a beat, shot-driven release like #88), a SNAKE across the boards, PING-PONG between two lanes then a red pocket takes the slot, a JACKPOT RAIN (a line of balls all into the 100s at Beginner, mixed at Insane). Anticipation pauses.
+
+**Difficulty:** ball speed (slower arcs at Beginner so you can track them, fast at Insane), balls in flight at once (2 -> 4), pop windows (1.3 -> 0.45 s), shuffle frequency (per wave -> mid-wave), deception share. Every mechanic at every tier.
+
+**Scoring:** plate by stay as the range; ring bonus on top (+10/20/30/40/50 by the pocket); ball shot +50; 100-pocket bonus pop +500 / duck cameo +500 (~1 round in 5); bombs / decoys = life (decoys with the 0.3 s build-up). Quota = the range's share rule. Briefing: "SHOOT n TARGETS OR MORE!", icon = a skee ball dropping into a lit ring, dont = bomb, tip "GREEN POCKETS POP TARGETS. RED ONES POP BOMBS!"
+
+**Variants (3):** 1 BOARDWALK (free fire), 2 TICKET RUSH (more balls in flight, 8 per magazine), 3 LIGHTS SHUFFLE (constant shuffles, 12 per magazine). No shot cap.
+
+**Finale:** on clear the ticket counters spray tickets and the prize wall's bulbs spell B.L.A.M. **Sound events** (synth recipes in sfx-stage.js): `ballRoll {u}`, `ballJump`, `pocket {u, ring}` (ding by ring), `ballKick`, `shuffleBell`, `ticketSpray`, `jackpot`, bed `skeeball` (boardwalk arcade murmur, bulbs buzz, surf). **Done when:** registered as 'skeeball' (name 'SKEE BALL', short 'SKEE') after lasertag in index.html, 3 variants, 4 tiers, briefing icons, versus-safe, no console errors, Beginner + Insane play-checked MUTED, screenshots, ENGINE.md "SKEE BALL (stage 8)".
+
+## 10. CONVEYOR build brief (Fable, Jon approved 2026-10-30; stage 9) -- GO given 2026-10-30
+From the range-mechanic transfers (section 2): plates ride belts at different speeds and heights, rows form as plates bunch up, decoys ride along, hidden bombs behind plates on the back belt.
+
+**Scene:** a TOY FACTORY at night (fits the tin-toy game): THREE conveyor belts at different heights and depths running across the view (front belt low and near, middle belt waist height, back belt high and far), robot arms, a big STAMPING PRESS over the middle belt, crates and toy parts, hazard stripes, a factory sign "B.L.A.M. TOY WORKS" (fixed logo), sodium lights. Original art, pixel / dither voxel.
+
+**The mechanic:** hex PLATES, BOMBS, DECOYS and HIDDEN BOMBS (behind plates; `BLAM.Props`) ride the belts standing up, entering from one side and leaving at the other; each belt has its own speed and direction (they differ, and change per wave). A plate is shootable the whole ride; the ride length per tier IS the pop window (long at Beginner, a flash at Insane on the fast belt). Rows form when the director bunches items; the back belt carries the hidden-bomb pairs (shoot the front plate and the bomb behind it is revealed, same rule as the range). The PRESS comes down over the middle belt for a beat and hides whatever is under it (an item can come out the other side flipped: the turncoat with the fuse-tick telegraph before the flip, unshootable during it).
+
+**Twist 1, BELT REVERSE:** a klaxon + a spinning amber light for 0.5 s, then one belt REVERSES; an item you were leading goes the other way. 1-3 times a round by tier.
+
+**Twist 2, THE SORTER:** a robot arm plucks an item off one belt and drops it on another (a plate lands in a bomb's row, or vice versa), telegraphed by the arm swinging in; items in the arm's claw are not shootable.
+
+**Patterns:** a ROW on one belt (shot-driven beat as #88), a STACK across the three belts (one column, three heights, bottom to top), a SNAKE weaving between belts via the sorter, PING-PONG between the front and back belt then a bomb in the slot, THE WALL (6-8 at once across the belts, decoys among them). Aim travel rules apply (belt heights count as vertical travel per #90).
+
+**Difficulty:** belt speed (ride window ~1.4 s Beginner -> 0.5 s Insane on the fast belt), items on belts at once, reversals, deception share, press frequency. Every mechanic at every tier.
+
+**Scoring:** the range's by-stay points; +50 for a plate shot in the press's shadow; bombs / decoys = life. Quota = share rule. Briefing: "SHOOT n PLATES OR MORE!", icon a plate on a belt, dont = bomb, tip "WATCH THE BELTS. THEY REVERSE!"
+
+**Variants (3):** 1 ASSEMBLY (free fire), 2 OVERTIME (faster belts, 8 per magazine), 3 NIGHT SHIFT (the factory DARK, only the belts and items lit: set `B.FX.setDark` for the run so the muzzle glow works; 12 per magazine). No shot cap.
+
+**Finale:** on clear the press punches B.L.A.M. into a steel sheet that rolls out on the middle belt. **Sound events:** `beltHum` bed `conveyor`, `beltReverse` (klaxon), `pressDown`, `sorterArm`, `itemIn {u}`, `sheetStamp`. **Done when:** registered as 'conveyor' (name 'CONVEYOR', short 'BELT') after skeeball, 3 variants, 4 tiers, briefing icons, versus-safe, no console errors, Beginner + Insane play-checked MUTED, screenshots, ENGINE.md "CONVEYOR (stage 9)".
+
+## 11. DOPPELDUCKS build brief (Fable, Jon approved 2026-10-30; stage 10) -- GO given 2026-10-30
+From section 2: a wall of Deputy Ducks, shoot the fakes (wrong badge, wrong hat, wrong eyes). The breather stage: slow, funny, spot-the-difference.
+
+**Scene:** the sheriff's office LINEUP ROOM: a height chart wall, a one-way mirror, a desk lamp, a corkboard with a big WANTED-style poster of the REAL Deputy Duck (your reference, always visible), a coffee pot, a "B.L.A.M. COUNTY SHERIFF" sign (fixed logo). A GRID of voxel Deputy Ducks stands in the lineup (12 at Beginner / standard; up to 20 in the CROWD variant), built in the stage (range.js's placeholder voxel duck style, upgraded: sheriff hat, star badge, bill, boots; js/duck.js untouched). Original art, pixel / dither voxel.
+
+**Rule:** shoot the FAKES. A fake differs from the poster by ONE TELL: wrong badge (circle instead of a star), wrong hat (bowler / cap / none), sunglasses, a moustache, wrong boots (red), wrong bill colour, a different tail. Shooting a REAL duck = FRIENDLY FIRE (kind 'bystander', life -1, the duck in the HUD gets angry). Each WAVE a curtain drops and rises, the lineup SHUFFLES places and the tells change; the wave's fakes must be shot before the curtain drops again (the wave window per tier). Beginner: 2-3 fakes per wave, obvious tells (hat, sunglasses), long waves; Insane: 4-5 fakes, subtle tells (badge shape, boot colour, bill shade), short waves, 20-duck grid. Every tell type at every tier (frequency and subtlety by tier).
+
+**Twist 1, NERVOUS FAKES:** a fake occasionally gives itself away for a split second (a sideways glance, a sweat drop, a gulp); watching rewards. If a wave's window runs out, the remaining fakes MAKE A BREAK FOR IT (run off left/right in a puff of feathers, shootable while running for 0.5 s, +100 if caught). A missed fake is a lost target, no life.
+
+**Twist 2, THE SWAP:** mid-wave two neighbours swap hats (or glasses) on a visible hand-over, so the tell moves to a different duck; telegraphed by a whistle.
+
+**Patterns:** the lineup is the grid; waves vary the layout (a straight line, two rows, a V, a crowd with ducks half hidden behind others; occlusion raycast like Alley's so a hidden tell cannot be judged until the duck steps out, which they do on a beat).
+
+**Scoring:** fake 300, +100 QUICK EYE (within 1 s of the curtain), runner +100, friendly fire = -300 + life. Quota = total fakes x the share rule. Briefing: "SHOOT THE n FAKES!", icon = a duck with a question mark, dont = the real Deputy's face, tip "CHECK THE POSTER. ONE THING IS OFF!"
+
+**Variants (3):** 1 LINEUP (12 ducks, free fire), 2 CROWD (20 ducks, 8 per magazine), 3 SHUFFLE (constant swapping and swaps, 12 per magazine). No shot cap.
+
+**Finale:** on clear the real ducks hold up cards spelling B.L.A.M. and quack in time; the HUD duck cheers. **Sound events:** `curtain`, `lineupShuffle`, `tellGlance`, `swapWhistle`, `fakeRun`, `cardsUp`, bed `lineup` (office hum, a ticking clock, distant typewriter). **Done when:** registered as 'doppelducks' (name 'DOPPELDUCKS', short 'DUCKS') after conveyor, 3 variants, 4 tiers, briefing icons, versus-safe (the lineup, tells and swaps are pure functions of seed / tier / variant and the stage clock; runners depend on run.taken), no console errors, Beginner + Insane play-checked MUTED, screenshots, ENGINE.md "DOPPELDUCKS (stage 10)".
+
 ## 3. Open questions for Jon
 1. Approve Alley, Boneyard, Sky Show as the next three, in that order?
 2. Fake-surrender criminal: fun or unfair?

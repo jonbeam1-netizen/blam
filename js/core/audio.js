@@ -71,6 +71,15 @@
      baseOpen / baseHit : the enemy base opens (siren) / its core is shot (+500)
      gameOn      : the announcer's "GAME ON!" at the stage start
      + the ambience bed 'lasertag' (UV-tube hum, a muffled 90s beat, far-off pews)
+   SKEE BALL (stage 8):
+     ballRoll    : a ball is released up a lane: the clack + its rumble (opts.u, opts.d = the roll time s)
+     ballJump    : a ball leaves the ramp lip (opts.u)
+     pocket      : a ball drops into a pocket (opts.u, opts.ring 10 / 20 / 30 / 40 / 50 / 100: the ding climbs by ring)
+     ballKick    : a ball was shot in the air: the wooden clonk (opts.u; 'hit' plays too); it kicks to another pocket
+     shuffleBell : the LIGHTS SHUFFLE telegraph (0.5 s before green / red swap; opts.wave 1 at a wave break)
+     ticketSpray : the finale: every ticket dispenser sprays ('finale' plays too)
+     jackpot     : a jackpot rain's first gold plate / a ball kicked into a 100 pocket (opts.u)
+     + targetIn / bombReveal / duckCameo / duckCameoHit as the range's; the ambience bed 'skeeball' (arcade murmur, bulb buzz, surf)
    Internal (the router plays these itself): duckScared, duckRelief, duckHeckle, duckCheer, duckSad (Deputy Duck's
    pose changes, watched on BLAM.G.duck.pose; duckQuiet(s) mutes the scared / relief ones for s seconds, used by the
    bomb's silent scared face), the title-menu chiptune and a quiet ambience bed per stage.

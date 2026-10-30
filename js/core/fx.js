@@ -124,7 +124,7 @@ function stepGlow(dt) {
   if (!L || GL.age >= L.T) { if (glowMesh.visible) glowMesh.visible = false; glowNow.k = 0; return; }
   GL.age += dt;
   const q = Math.min(1, GL.age / L.T), k = L.k * (q < 0.5 ? 1 : 1 - (q - 0.5) * 1.6);
-  glowU.uK.value = k; glowMesh.visible = k > 0.02; glowNow.k = Math.max(0, k);
+  glowU.uK.value = k; glowMesh.visible = false; glowNow.k = Math.max(0, k);   // #96: the round disc is gone (the gun draws a tongue of flame itself); FX.glowNow still lights a dark stage's cover
 }
 
 // ---------- spawning ----------

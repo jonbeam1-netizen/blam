@@ -1,7 +1,20 @@
-# B.L.A.M. play-test list (builds 0.008 to 0.021, live 2026-10-30)
+# B.L.A.M. play-test list (builds 0.008 to 0.022, live 2026-10-30)
 
 Everything that changed since you last played a build by ear, in one place. Tick what is good, gripe what is not.
 Live link: https://jonbeam1-netizen.github.io/blam/ (hard refresh once: Ctrl+Shift+R).
+
+## Build 0.022 (2026-10-30 morning): SKEE BALL (stage 8) + #93 #94 #96 #97
+- [ ] SKEE BALL = SKEE 1-3 in FREE PLAY (page 5) and in the course pool. Boardwalk arcade, five fanned lanes, ring boards, prize wall, marquee. Balls roll up and drop into a pocket: GREEN pockets pop a plate (or a decoy / hidden-bomb plate), RED pockets pop a bomb, the 100s pop a gold plate (+500) or the duck cameo. Read the arc, be aimed before the pop.
+- [ ] BALL SHOT: shoot a ball in the air (+50) and it kicks to the nearest other-colour pocket (a 50-bound ball goes into the 100). Fun or confusing?
+- [ ] LIGHTS SHUFFLE: bell, blink, then green and red swap pockets. Mid-wave shuffles from Advanced up, every wave at Insane.
+- [ ] Variants: SKEE 1 BOARDWALK free fire, SKEE 2 TICKET RUSH more balls + 8 per mag, SKEE 3 LIGHTS SHUFFLE constant shuffles + 12 per mag. Finale: tickets spray and the prize wall spells B.L.A.M.
+- [ ] #97 lanes rebuilt after your screenshot: flat walnut alleys with low rails, a ramp hump, a dark walkway between lanes (no more slanted planks). Right now?
+- [ ] #96 MUZZLE FLASH: a tongue of flame out of the barrel along the bore on every gun, depth-tested (never over the gun body), two frames. AQUA PRO small, HOT ROD longer, RAY-85 a green bolt, CANDY SIX a cap pop then a smoke wisp. Bigger in dark scenes (Laser Tag, lights out). The round glow disc is gone. Size and shape OK?
+- [ ] #93 No more glow on the menu after a Laser Tag round (the dark claim now lives only during the run).
+- [ ] #94 Free-play FAILED / CLEARED on Laser Tag: AGAIN and BACK signs now hang in front of the arena barrier (results signs sit nearer the camera on every stage).
+- NOT DONE: #95 ESC-free screens (MENU sign during play, BACK on briefing and course results) = agent job for next session. #98 to check: Laser Tag HIT % read 137 % on a failed Insane round (hits counted above shots?).
+- NOT VERIFIED: the new flash was checked by logic and frame images only (the pane would not render while hidden); nothing heard by ear; no real mouse / touch play of Skee Ball; portrait layouts; two-browser versus.
+- Agent-reported rough spots (Skee Ball): ball hits count as HITS toward the quota; Insane is harsh for a player who does not read the arcs (slow bot fails 7 of 90); plates ~18 px and rings ~8 px apart at this distance; a kicked pop can land on a board where a pattern member is up.
 
 ## Build 0.021 (2026-10-30, 03:00): LASER TAG (stage 7) + muzzle glow #92
 - [ ] LASER TAG = TAG 1-3 in FREE PLAY (pages 4-5) and in the course pool. 90s black-light arena: neon tape walls, splatter murals, barrels, confetti carpet, UV tubes, the B.L.A.M. LASER TAG neon sign, an LED scoreboard. Does the vibe land?

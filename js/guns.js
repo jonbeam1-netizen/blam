@@ -522,37 +522,34 @@ function buildCandySix(THREE, mat) {
 
 // ---------- 7. RUNTIME PIECES: flash frames, particles, coiled cable ----------
 const CSS = k => '#' + PAL[k].toString(16).padStart(6, '0');
-// three 16x16 pixel-art frames per flash style: 'fire' (burst, star, smoke ring) or 'ray' (rings)
-function flashFrames(THREE, style) {
-  const out = [];
-  for (let f = 0; f < 3; f++) {
-    const cv = document.createElement('canvas'); cv.width = cv.height = 16;
-    const g = cv.getContext('2d'), R = (x, y, w, h, k) => { g.fillStyle = CSS(k); g.fillRect(x, y, w, h); };
-    const ring = (r0, r1, k, keep) => { for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
-      const d = Math.hypot(x - 7.5, y - 7.5); if (d >= r0 && d <= r1 && (!keep || keep(x, y))) R(x, y, 1, 1, k); } };
-    if (style === 'cap') {                          // CANDY SIX toy cap: a tiny orange-red pop, then a wisp of smoke
-      if (f === 0) { R(6, 6, 4, 4, 'orange'); R(7, 5, 2, 6, 'red'); R(5, 7, 6, 2, 'red'); R(7, 7, 2, 2, 'yellow'); R(4, 4, 1, 1, 'coral'); R(11, 11, 1, 1, 'coral'); }
-      else if (f === 1) { ring(0, 2.2, 'orange'); ring(2.2, 3.4, 'red', (x, y) => (x + y) % 2 === 0); R(7, 7, 2, 2, 'yellow'); }
-      else { ring(2.0, 3.8, 'mist', (x, y) => (x + y) % 2 === 0); ring(0, 2.0, 'bone', (x, y) => (x * 3 + y) % 4 !== 0); }
-    } else if (style === 'ray') {
-      if (f === 0) { ring(5.6, 7.4, 'cyan'); ring(3.2, 5.6, 'ice'); ring(0, 3.2, 'bone'); R(7, 0, 2, 3, 'lime'); R(7, 13, 2, 3, 'lime'); R(0, 7, 3, 2, 'lime'); R(13, 7, 3, 2, 'lime'); }
-      else if (f === 1) { ring(6.0, 7.6, 'ice'); ring(4.6, 6.0, 'cyan'); ring(0, 2.2, 'lime'); }
-      else ring(6.2, 7.6, 'lime', (x, y) => (x + y) % 3 === 0);
-    } else {
-      if (f === 0) {
-        R(7, 0, 2, 16, 'orange'); R(0, 7, 16, 2, 'orange');
-        R(3, 3, 2, 2, 'orange'); R(11, 3, 2, 2, 'orange'); R(3, 11, 2, 2, 'orange'); R(11, 11, 2, 2, 'orange');
-        R(5, 4, 6, 8, 'yellow'); R(4, 5, 8, 6, 'yellow'); R(7, 2, 2, 12, 'yellow'); R(2, 7, 12, 2, 'yellow');
-        R(6, 6, 4, 4, 'lemon'); R(7, 4, 2, 8, 'lemon'); R(4, 7, 8, 2, 'lemon'); R(7, 7, 2, 2, 'bone');
-      } else if (f === 1) {
-        for (let i = 0; i < 6; i++) { R(1 + i, 1 + i, 2, 2, 'orange'); R(13 - i, 1 + i, 2, 2, 'orange'); R(1 + i, 13 - i, 2, 2, 'orange'); R(13 - i, 13 - i, 2, 2, 'orange'); }
-        ring(0, 4.2, 'yellow'); ring(0, 2.4, 'lemon'); R(7, 3, 2, 10, 'yellow');
-      } else { ring(4.8, 6.6, 'haze', (x, y) => (x * 3 + y) % 4 !== 0); ring(3.6, 4.8, 'mist', (x, y) => (x + y) % 2 === 0); R(3, 7, 1, 1, 'orange'); R(12, 5, 1, 1, 'amber'); R(9, 12, 1, 1, 'orange'); }
+// #96 MUZZLE FLASH (Jon 2026-10-30, ref review/refs/guns/muzzle-flash-ref.png): a TONGUE of flame out of the barrel along
+// the bore, not a camera-facing sprite pasted over the gun body. Two 24x8 pixel-art frames per style, drawn with the base
+// (u = 0) at the muzzle and the tip at u = 1: 'fire' (white-hot core, yellow, orange fringe, jagged tip; frame 2 shorter and
+// more orange), 'ray' (lime bolt with a pale core), 'cap' (a small orange pop, then a wisp of smoke). Sizes per skin: FLASH_SIZE.
+function tongueFrames(THREE, style) {
+  const out = [], W = 24, Hh = 8;
+  const COLS = style === 'ray' ? ['bone', 'lime', 'green', 'forest'] : style === 'cap' ? ['lemon', 'orange', 'rust', 'rust'] : ['bone', 'lemon', 'yellow', 'orange'];
+  for (let f = 0; f < 2; f++) {
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = Hh;
+    const g = cv.getContext('2d'), R = (x, y, k) => { g.fillStyle = CSS(k); g.fillRect(x, y, 1, 1); };
+    const len = f ? W * 0.62 : W, pw = style === 'ray' ? 0.9 : 1.5;
+    for (let x = 0; x < len; x++) {
+      const q = x / len, jag = ((x * 7 + f * 3) % 3 - 1) * 0.45;
+      let hh = 3.6 * (1 - Math.pow(q, pw)) + (q > 0.3 ? jag : 0);          // half height of the tongue at this column
+      if (style === 'cap') hh *= 0.75;
+      if (f && style === 'cap') { if ((x + 1) % 3 === 0) { R(x, 3, 'mist'); R(x, 4, 'haze'); } continue; }   // smoke wisp
+      for (let y = 0; y < Hh; y++) {
+        const d = Math.abs(y + 0.5 - Hh / 2); if (d > hh) continue;
+        const k = d <= hh * 0.28 && q < 0.42 ? COLS[0] : d <= hh * 0.5 && q < 0.7 ? COLS[1] : d <= hh * 0.78 ? COLS[2] : COLS[3];
+        R(x, y, f && style !== 'ray' && k === COLS[0] ? COLS[1] : k);        // frame 2 has no white core
+      }
     }
     const t = new THREE.CanvasTexture(cv); t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; out.push(t);
   }
   return out;
 }
+// tongue length / height per skin (skin space, before the holder scale); Jon: the AQUA PRO one must stay small
+const FLASH_SIZE = { guncon: { len: 0.17, h: 0.075 }, justifier: { len: 0.23, h: 0.085 }, zapper: { len: 0.15, h: 0.07 }, revolver: { len: 0.1, h: 0.05 } };
 // Pool of unit cubes (one InstancedMesh, unlit palette colours): shells, sparks, smoke puffs.
 class Particles {
   constructor(THREE, n, parent) {
@@ -690,9 +687,13 @@ function create(THREE, opts) {
   for (const k of ['uFB', 'uFL', 'uFH']) mat.uniforms[k].value.setHex(PAL.lime);
   const group = new THREE.Group(), rig = new THREE.Group(), kick = new THREE.Group(), holder = new THREE.Group();
   group.name = 'BLAM.gun'; group.add(rig); rig.add(kick); kick.add(holder);
-  const tex = { fire: flashFrames(THREE, 'fire'), ray: flashFrames(THREE, 'ray'), cap: flashFrames(THREE, 'cap') };
-  const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex.fire[0], alphaTest: 0.5, transparent: false, depthTest: false, depthWrite: false, fog: false }));
-  flash.renderOrder = 10; flash.visible = false; flash.name = 'gun-flash'; holder.add(flash);
+  const tex = { fire: tongueFrames(THREE, 'fire'), ray: tongueFrames(THREE, 'ray'), cap: tongueFrames(THREE, 'cap') };
+  // #96: two crossed planes along the bore (-z in skin space), base at the muzzle; DEPTH-TESTED so the gun occludes it
+  const flashMat = new THREE.MeshBasicMaterial({ map: tex.fire[0], alphaTest: 0.5, transparent: false, depthTest: true, depthWrite: false, fog: false, side: THREE.DoubleSide });
+  const tongueGeo = new THREE.PlaneGeometry(1, 1); tongueGeo.rotateY(Math.PI / 2); tongueGeo.translate(0, 0, -0.5);   // x (u) -> -z, from the origin
+  const flash = new THREE.Group(); flash.name = 'gun-flash'; flash.visible = false;
+  const flashA = new THREE.Mesh(tongueGeo, flashMat), flashB = new THREE.Mesh(tongueGeo, flashMat); flashB.rotation.z = Math.PI / 2;
+  flashA.renderOrder = flashB.renderOrder = 10; flash.add(flashA); flash.add(flashB); holder.add(flash);
   const parts = new Particles(THREE, 80, group), cable = new Cable(THREE, group), skins = {};
   for (const m of [parts.mesh, cable.mesh]) m.geometry.boundingBox = new THREE.Box3();   // effects never count toward the gun's bounds
   let skin = null, skinIndex = 0, layoutName = LAYOUTS[menuPark(opts.layout)] ? menuPark(opts.layout) : (String(opts.layout || '').indexOf('mobile') === 0 ? 'mobile' : 'desktop');
@@ -796,10 +797,12 @@ function create(THREE, opts) {
     }
     skin.anim(S, skin.meshes, fx, skin.st, dt);
     ledMat.color.setHex(PAL[S.rp >= 0 ? ((T * 8 | 0) % 2 ? 'amber' : 'rust') : S.empty ? ((T * 3 | 0) % 2 ? 'red' : 'oxblood') : (skin.led || 'lime')]);
-    if (S.fireAge < 0.075) {                                                         // 3-frame muzzle flash
-      const f = Math.min(2, Math.floor(S.fireAge / 0.025));
-      flash.visible = true; flash.material.map = tex[skin.flash][f];
-      flash.material.rotation = flashRot + f * Math.PI / 2; flash.scale.setScalar([0.19, 0.23, 0.26][f] * flashScale);
+    if (S.fireAge < 0.05) {                                                          // #96: 2-frame tongue along the bore
+      const f = S.fireAge < 0.025 ? 0 : 1, FS = FLASH_SIZE[SKINS[skinIndex].id] || FLASH_SIZE.guncon;
+      const dk = (window.BLAM && window.BLAM.FX && window.BLAM.FX.dark) ? 1.35 : 1;   // dark scenes (#92): a bigger lick
+      flash.visible = true; flashMat.map = tex[skin.flash][f];
+      const len = FS.len * (f ? 0.62 : 1) * flashScale * dk, h = FS.h * (f ? 0.8 : 1) * flashScale * dk;
+      flash.scale.set(h, h, len); flash.rotation.z = flashRot;
     } else flash.visible = false;
     parts.update(dt);
     chain(); toGroup(skin.cableV, _a); dirGroup(skin.cableDir, _d); _a2.copy(_a).addScaledVector(_d, cable.SEG);
