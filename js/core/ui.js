@@ -151,13 +151,14 @@ function holdRopes(sg) {
 }
 
 // ---------- Menu: a set of shootable signs placed in screen terms ----------
-// items: [{ text, sub, color, u, v, s, z, act(sign), keep (don't shatter, e.g. toggles) }]
+// items: [{ text, sub, color, u, v, s, z, act(sign), keep (don't shatter, e.g. toggles), font }]
+// #100: s is the voxel size of the BOLD lettering (~0.6x the old 3x5 sizes): 0.03 ~ 1.5 game px per voxel
 class Menu {
   constructor(items) {
     this.items = items.map(it => {
       // signs hang on the plane z (default 1.5); sizes are authored for z = 0 and scaled by distance so they keep their screen size
       const z = it.z == null ? 1.5 : it.z, k = (R.CAM_POS.z - z) / R.CAM_POS.z;
-      const sign = new Tg.Sign({ text: it.text, sub: it.sub, color: it.color || 'crimson', s: (it.s || 0.05) * k, hang: 0, minW: it.minW || 0 });   // ropes: routeRopes()
+      const sign = new Tg.Sign({ text: it.text, sub: it.sub, color: it.color || 'crimson', s: (it.s || 0.03) * k, hang: 0, minW: it.minW || 0, font: it.font });   // ropes: routeRopes()
       R.screenToWorld(it.u, it.v, z, sign.group.position);
       R.scene.add(sign.group); sign.group.updateMatrixWorld(true);   // shootable before the first render
       return Object.assign({ sign }, it);
@@ -221,9 +222,26 @@ function menuFire(scr, u, v, inside) {
 }
 function header(text, sub) {
   H.text7c(text, RW / 2, 8, 2, 'gold', 'void', 2);
-  if (sub) H.text3c(sub, RW / 2, 27, 'cyan', 1, 'void');
+  if (sub) H.textBc(sub, RW / 2, 27, 'cyan', 1, 'void');
 }
 function blink(t, hz = 2.2) { return ((t * hz) | 0) % 2 === 0; }
+// #100: word wrap for the bold menu text (H.textB): lines no wider than maxW, balanced (as few lines as a greedy
+// wrap needs, but as even as possible: "SHOOTING RANGE: / RELOAD DRILL", not "SHOOTING RANGE: RELOAD / DRILL")
+function wrapB(str, maxW, sc = 1) {
+  const ws = String(str).toUpperCase().split(' ').filter(Boolean);
+  const greedy = mw => { const out = []; let cur = '';
+    for (const w of ws) { const nx = cur ? cur + ' ' + w : w; if (cur && H.textBw(nx, sc) > mw) { out.push(cur); cur = w; } else cur = nx; }
+    if (cur) out.push(cur); return out; };
+  let rows = greedy(maxW); const n = rows.length;
+  if (n > 1) for (let mw = maxW - 4; mw > 8; mw -= 4) { const r = greedy(mw); if (r.length > n) break; rows = r; }
+  return rows;
+}
+// wrapped, left-aligned (align 'l') or centred ('c') bold lines from y; returns the y under the last line
+function linesB(str, x, y, maxW, col, align = 'c', outline = 'void', lh = 10) {
+  for (const l of wrapB(str, maxW)) { if (align === 'c') H.textBc(l, x, y, col, 1, outline); else H.textB(l, x, y, col, 1, outline); y += lh; }
+  return y;
+}
+UI.wrapB = wrapB; UI.linesB = linesB;
 UI.menuFire = menuFire; UI.header = header; UI.blink = blink; UI.marqueeBottomPx = marqueeBottomPx;
 
 // caption under a sign (HUD text projected from the sign's world position)
@@ -231,11 +249,11 @@ const _sp = new THREE.Vector3();
 function caption(sign, text, col = 'mist', dy = 4) {
   if (!sign.alive) return;
   _sp.set(0, -sign.h / 2, 0); sign.group.localToWorld(_sp);
-  const [x, y] = R.toPx(_sp); H.text3c(text, x, y + dy, col, 1, 'void');
+  const [x, y] = R.toPx(_sp); H.textBc(text, x, y + dy, col, 1, 'void');
 }
 function statusLine(left, right) {
-  if (left) H.text3(left, 44, RH - 7, 'lime', 1, 'void');
-  if (right) H.text3r(right, RW - 4, RH - 7, 'lime', 1, 'void');
+  if (left) H.textB(left, 44, RH - 9, 'lime', 1, 'void');
+  if (right) H.textBr(right, RW - 4, RH - 9, 'lime', 1, 'void');
 }
 UI.caption = caption; UI.statusLine = statusLine;
 
@@ -247,11 +265,11 @@ UI.screens.title = {
     const g = G(); g.placeDuck('title'); g.duckPose('present', 'idle', 2.5); marquee.visible = true; S.showEnv('range');
     this.decor = S.get('range').decor(); this.decor.targets.forEach(t => R.scene.add(t.group));
     this.menu = new Menu([
-      { text: 'PLAY', color: 'crimson', u: 0.47, v: 0.475, s: 0.075, act: () => g.go('tiers') },
-      { text: 'VERSUS', color: 'blue', u: 0.33, v: 0.645, act: () => g.go('lobby') },
-      { text: 'FREE PLAY', color: 'amber', u: 0.6, v: 0.645, act: () => g.go('free') },
-      { text: 'SETTINGS', color: 'slate', u: 0.33, v: 0.8, act: () => g.go('settings') },
-      { text: 'HIGH SCORES', color: 'plum', u: 0.6, v: 0.8, act: () => g.go('scores') }
+      { text: 'PLAY', color: 'crimson', u: 0.47, v: 0.475, s: 0.046, act: () => g.go('tiers') },
+      { text: 'VERSUS', color: 'blue', u: 0.33, v: 0.645, s: 0.029, act: () => g.go('lobby') },
+      { text: 'FREE PLAY', color: 'amber', u: 0.6, v: 0.645, s: 0.029, act: () => g.go('free') },
+      { text: 'SETTINGS', color: 'slate', u: 0.33, v: 0.8, s: 0.029, act: () => g.go('settings') },
+      { text: 'HIGH SCORES', color: 'plum', u: 0.6, v: 0.8, s: 0.029, act: () => g.go('scores') }
     ]);
   },
   exit() { marquee.visible = false; this.menu.dispose(); this.decor.targets.forEach(t => t.dispose()); },
@@ -260,7 +278,7 @@ UI.screens.title = {
     if (tall()) return;                                                       // portrait: drawPortrait() has the text
     const by = marqueeBottomPx();
     H.text3c('BLAST LIKE A MANIAC!', RW / 2, by + 5, 'cyan', 2, 'void');
-    if (blink(t)) H.text3c(G().touch ? 'TAP A SIGN!' : 'SHOOT A SIGN!', RW / 2, 216, 'yellow', 1, 'void');
+    if (blink(t)) H.textBc(G().touch ? 'TAP A SIGN!' : 'SHOOT A SIGN!', RW / 2, 217, 'yellow', 1, 'void');
     statusLine('BUILD ' + G().BUILD, G().touch ? '' : 'KEY 4: GUN SKIN');
   },
   extraFire(ray) {
@@ -304,23 +322,24 @@ UI.reloadHelp = () => { const touch = B.Input.touch, m = G().reloadMode();
 UI.screens.settings = {
   enter() {
     const g = G(), st = B.Save.settings; g.placeDuck('title'); g.duckPose('idle');
-    const tog = (key, label, apply) => ({ text: label + ': ' + onOff(st[key]), keep: true, color: 'slate', s: 0.036, act: sign => {
+    const tog = (key, label, apply) => ({ text: label + ': ' + onOff(st[key]), keep: true, color: 'slate', s: 0.024, act: sign => {
       B.Save.set(key, !B.Save.settings[key]); apply && apply(); sign.setText(label + ': ' + onOff(B.Save.settings[key])); } });
     this.menu = new Menu([
-      Object.assign(tog('dither', 'DITHER', () => g.applySettings()), { u: 0.31, v: 0.26 }),
-      Object.assign(tog('crosshair', 'CROSSHAIR', () => g.applySettings()), { u: 0.31, v: 0.4 }),
-      Object.assign(tog('shake', 'SCREEN SHAKE'), { u: 0.31, v: 0.54 }),
-      { text: 'GUN: ' + g.skinName(), keep: true, color: 'plum', s: 0.036, u: 0.66, v: 0.26, act: sign => { g.setSkin(g.skin + 1); sign.setText('GUN: ' + g.skinName()); } },
-      { text: 'NAME: ' + st.name, keep: true, color: 'blue', s: 0.036, u: 0.66, v: 0.4, act: sign => UI.prompt('PLAYER NAME (VERSUS)', B.Save.settings.name, 10, v => { if (v) { B.Save.set('name', v); sign.setText('NAME: ' + v); } }) },
-      { text: 'BACK', color: 'crimson', s: 0.045, u: 0.66, v: 0.54, act: () => g.go('title') },
-      { text: reloadSignText(), keep: true, color: 'amber', s: 0.036, u: 0.48, v: 0.84, act: sign => {
+      // #100 bold lettering: rows 0.24 / 0.38 / 0.52 / 0.66 / 0.8, columns 0.33 / 0.66 (the big duck stands bottom-left)
+      Object.assign(tog('dither', 'DITHER', () => g.applySettings()), { u: 0.33, v: 0.24 }),
+      Object.assign(tog('crosshair', 'CROSSHAIR', () => g.applySettings()), { u: 0.33, v: 0.38 }),
+      Object.assign(tog('shake', 'SCREEN SHAKE'), { u: 0.34, v: 0.52 }),
+      { text: 'GUN: ' + g.skinName(), keep: true, color: 'plum', s: 0.024, u: 0.66, v: 0.24, act: sign => { g.setSkin(g.skin + 1); sign.setText('GUN: ' + g.skinName()); } },
+      { text: 'NAME: ' + st.name, keep: true, color: 'blue', s: 0.024, u: 0.67, v: 0.38, act: sign => UI.prompt('PLAYER NAME (VERSUS)', B.Save.settings.name, 10, v => { if (v) { B.Save.set('name', v); sign.setText('NAME: ' + v); } }) },
+      { text: 'BACK', color: 'crimson', s: 0.03, u: 0.66, v: 0.52, act: () => g.go('title') },
+      { text: reloadSignText(), keep: true, color: 'amber', s: 0.024, u: 0.48, v: 0.8, act: sign => {
         const touch = B.Input.touch, key = touch ? 'reloadTouch' : 'reloadPC', list = RELOAD_TYPES[touch ? 'touch' : 'pc'];
         B.Save.set(key, list[(list.indexOf(g.reloadMode()) + 1) % list.length]); sign.setText(reloadSignText()); } },
-      { text: soundSignText(), keep: true, color: 'green', s: 0.034, u: 0.31, v: 0.68, act: sign => {
+      { text: soundSignText(), keep: true, color: 'green', s: 0.024, u: 0.33, v: 0.66, act: sign => {
         const S = B.SFX, steps = [0, 0.15, 0.35, 0.6, 1], cur = S.muted ? 0 : (S.volume == null ? 0.35 : S.volume);
         let i = steps.findIndex(x => Math.abs(x - cur) < 0.02); i = (i + 1) % steps.length;
         if (S.setVolume) S.setVolume(steps[i]); S.muted = steps[i] === 0; sign.setText(soundSignText()); } },
-      { text: musicSignText(), keep: true, color: 'green', s: 0.034, u: 0.66, v: 0.68, act: sign => {
+      { text: musicSignText(), keep: true, color: 'green', s: 0.024, u: 0.66, v: 0.66, act: sign => {
         const S = B.SFX, on = !(B.Save.settings.music !== false); B.Save.set('music', on); if (S.music) S.music(on); sign.setText(musicSignText()); } }
     ]);
   },
@@ -336,9 +355,9 @@ UI.screens.settings = {
     if (tall()) return;                                                       // portrait: drawPortrait() has the text
     header('SETTINGS', 'SHOOT A SIGN TO CHANGE IT');
     const m = this.menu.items;
-    caption(m[0].sign, 'OFF = PALETTE SNAP ONLY');
-    caption(m[3].sign, 'KEY 4 CYCLES GUNS ANYWHERE');
-    const rh = UI.reloadHelp(); caption(m[6].sign, rh.group, 'yellow'); caption(m[6].sign, rh.help, 'mist', 10);
+    caption(m[0].sign, 'OFF = PALETTE SNAP');
+    caption(m[3].sign, 'KEY 4 CYCLES GUNS');
+    const rh = UI.reloadHelp(); caption(m[6].sign, rh.group, 'yellow'); caption(m[6].sign, rh.help, 'mist', 14);
     statusLine('BUILD ' + G().BUILD, B.R.MODE_NAMES[B.R.mode]);
   },
   fire(u, v, inside) { menuFire(this, u, v, inside); }
@@ -350,8 +369,8 @@ UI.screens.settings = {
 UI.screens.tiers = {
   enter() {
     const g = G(); g.placeDuck('title'); g.duckPose('present', 'idle', 1.5);
-    const items = S.TIERS.map((T, i) => ({ text: T.name, sub: T.lives + ' LIVES', color: T.sign, s: 0.042, u: [0.33, 0.63][i % 2], v: [0.3, 0.55][i >> 1], act: () => g.startCourse(i) }));
-    items.push({ text: 'BACK', color: 'slate', s: 0.045, u: 0.48, v: 0.8, act: () => g.go('title') });
+    const items = S.TIERS.map((T, i) => ({ text: T.name, sub: T.lives + ' LIVES', color: T.sign, s: 0.029, u: [0.34, 0.63][i % 2], v: [0.3, 0.56][i >> 1], act: () => g.startCourse(i) }));
+    items.push({ text: 'BACK', color: 'slate', s: 0.03, u: 0.485, v: 0.82, act: () => g.go('title') });
     this.menu = new Menu(items);
   },
   exit() { this.menu.dispose(); },
@@ -380,19 +399,24 @@ UI.screens.free = {
     for (const id of S.order) { const d = S.get(id); for (let v = 0; v < d.variants; v++) items.push({ stage: id, variant: v }); }
     const pages = Math.max(1, Math.ceil(items.length / PER));
     g.free.page = Math.max(0, Math.min(pages - 1, g.free.page | 0));
-    const slot = i => ({ u: [0.33, 0.63][i % 2], v: [0.27, 0.5, 0.73][i >> 1] });
-    const menuItems = [Object.assign({ id: 'practice', text: 'PRACTICE', sub: 'RANGE, NO CLOCK', color: 'green', s: 0.034,
+    // #100 bold lettering: the stage signs carry long variant names (COUNT YOUR SHOTS), so they run at 0.022
+    const slot = i => ({ u: [0.34, 0.655][i % 2], v: [0.27, 0.49, 0.71][i >> 1] });
+    const menuItems = [Object.assign({ id: 'practice', text: 'PRACTICE', sub: 'RANGE, NO CLOCK', color: 'green', s: 0.022,
       act: () => g.startPractice(g.free.tier) }, slot(0))];
     items.slice(g.free.page * PER, g.free.page * PER + PER).forEach((it, i) => menuItems.push(Object.assign({ text: (S.get(it.stage).short || 'RANGE') + ' ' + (it.variant + 1), sub: (S.get(it.stage).variantNames || [])[it.variant] || '',
-      color: 'wood', s: 0.034, stage: it.stage, variant: it.variant,
+      color: 'wood', s: 0.022, stage: it.stage, variant: it.variant,
       act: () => g.startFree(it.stage, it.variant, g.free.tier) }, slot(i + 1))));
     const T = S.TIERS[g.free.tier];
-    const lastRow = pages > 1 || Math.ceil(menuItems.length / 2) >= 3 ? 0.9 : 0.75;   // paged: the bottom row stays put
-    menuItems.push({ id: 'tier', text: 'TIER: ' + T.name, keep: true, color: T.sign, s: 0.04, u: 0.33, v: lastRow, act: sign => {
+    const lastRow = pages > 1 || Math.ceil(menuItems.length / 2) >= 3 ? 0.87 : 0.75;   // paged: the bottom row stays put
+    menuItems.push({ id: 'tier', text: 'TIER: ' + T.name, keep: true, color: T.sign, s: 0.024, u: 0.37, v: lastRow, act: sign => {
       g.free.tier = (g.free.tier + 1) % 4; const T2 = S.TIERS[g.free.tier]; sign.opts.color = T2.sign; sign.setText('TIER: ' + T2.name); } });
-    menuItems.push({ text: 'BACK', color: 'slate', s: 0.04, u: 0.63, v: lastRow, act: () => g.go('title') });
-    if (pages > 1) menuItems.push({ id: 'page', text: 'PAGE ' + (g.free.page + 1) + '/' + pages, sub: 'NEXT >', color: 'blue', s: 0.038, u: 0.885, v: 0.5,
-      act: () => { if (G().screen !== this) return; g.free.page = (g.free.page + 1) % pages; this.menu.dispose(); this.build(); } });
+    menuItems.push({ text: 'BACK', color: 'slate', s: 0.026, u: 0.64, v: lastRow, act: () => g.go('title') });
+    // paging (#99): NEXT > above, < PREV below, both on the right side (the big duck stands bottom-left); both wrap.
+    // #100: one-line signs (bold lettering is wider); the page number is a caption under NEXT (draw)
+    const flip = d => { if (G().screen !== this) return; g.free.page = (g.free.page + d + pages) % pages; this.menu.dispose(); this.build(); };
+    this.pages = pages;
+    if (pages > 1) menuItems.push({ id: 'page', text: 'NEXT >', color: 'blue', s: 0.026, u: 0.9, v: 0.42, act: () => flip(1) });
+    if (pages > 1) menuItems.push({ id: 'pageprev', text: '< PREV', color: 'blue', s: 0.026, u: 0.9, v: 0.6, act: () => flip(-1) });
     this.menu = new Menu(menuItems);
   },
   exit() { this.menu.dispose(); },
@@ -401,6 +425,7 @@ UI.screens.free = {
     if (tall()) return;                                                       // portrait: drawPortrait() has the text
     header('FREE PLAY', 'SHOOT A STAGE TO PLAY IT');
     const pr = this.menu.find('practice'); if (pr) caption(pr.sign, 'NO TIMER, NO QUOTA', 'lime', 3);
+    const pg = this.menu.find('page'); if (pg) caption(pg.sign, 'PAGE ' + (G().free.page + 1) + '/' + this.pages, 'cyan', 5);
     for (const it of this.menu.items) if (it.stage) {
       const b = B.Save.best(it.stage + ':' + it.variant, G().free.tier);
       caption(it.sign, b ? 'BEST ' + b : B.Ammo.describe(S.get(it.stage).config(G().free.tier, it.variant).ammo), b ? 'yellow' : 'mist', 3);
@@ -413,35 +438,49 @@ UI.screens.free = {
 // =========================================================================================
 // HIGH SCORES: local bests per stage / tier
 // =========================================================================================
+// every stage variant + COURSE, as [label, save key] (shared with the portrait layout)
+const scoreRows = UI.scoreRows = () => {
+  const rows = [];
+  for (const id of S.order) { const d = S.get(id); for (let v = 0; v < d.variants; v++) rows.push([(d.short || 'RANGE') + ' ' + (v + 1), id + ':' + v]); }
+  rows.push(['COURSE', 'course']);
+  return rows;
+};
 UI.screens.scores = {
   enter() {
     const g = G(); g.placeDuck('title'); g.duckPose('cheer', 'idle', 1.2);
-    this.menu = new Menu([{ text: 'BACK', color: 'crimson', u: 0.6, v: 0.86, s: 0.045, act: () => g.go('title') }]);
+    this.page = 0; this.pages = 1;
+    // #100: rows are in the bold menu font now, so the table is paged (22 rows a page here, the portrait strip
+    // fits its own count); NEXT > cycles the pages and wraps (a keep sign: it sparks, it doesn't shatter)
+    const items = [{ text: 'BACK', color: 'crimson', u: 0.6, v: 0.86, s: 0.03, act: () => g.go('title') }];
+    if (scoreRows().length > 16) items.push({ id: 'next', text: 'NEXT >', color: 'blue', keep: true, u: 0.4, v: 0.86, s: 0.03,
+      act: () => { this.page = (this.page + 1) % Math.max(1, this.pages); } });
+    this.menu = new Menu(items);
   },
   exit() { this.menu.dispose(); },
   update(dt, t) { this.menu.update(dt, t); },
   draw(t) {
     if (tall()) return;                                                       // portrait: drawPortrait() has the text
     header('HIGH SCORES', 'LOCAL BESTS ON THIS DEVICE');
-    // 0.021: TWO BLOCKS side by side (7 stages = 22 variants + COURSE = 23 rows; one column stopped fitting at 20)
-    const rows = [];
-    for (const id of S.order) { const d = S.get(id); for (let v = 0; v < d.variants; v++) rows.push([(d.short || 'RANGE') + ' ' + (v + 1), id + ':' + v]); }
-    rows.push(['COURSE', 'course']);
-    const half = Math.ceil(rows.length / 2), blocks = [rows.slice(0, half), rows.slice(half)];
-    const cw = 36, bw = 34 + 4 * cw, gapB = 14, totalW = bw * 2 + gapB, xL = Math.round((RW - totalW) / 2), y0 = 40;
-    const rh = Math.max(7, Math.min(10, Math.floor(126 / half)));
-    H.plate(xL - 8, y0 - 4, totalW + 16, Math.max(152, 26 + half * rh));
+    // 0.021: TWO BLOCKS side by side. #100: bold rows, 11 per block, 22 a page; NEXT > pages through the rest
+    const rows = scoreRows(), PB = 11, per = PB * 2;
+    this.pages = Math.max(1, Math.ceil(rows.length / per)); this.page = Math.min(this.page, this.pages - 1);
+    const pr = rows.slice(this.page * per, this.page * per + per), hb = Math.ceil(pr.length / 2), blocks = [pr.slice(0, hb), pr.slice(hb)];
+    const lw = 48, cw = 38, bw = lw + 4 * cw, gapB = 10, totalW = bw * 2 + gapB, xL = Math.round((RW - totalW) / 2), y0 = 40, rh = 11;
+    H.plate(xL - 7, y0 - 4, totalW + 14, 28 + PB * rh);
+    const hx = [0, 0, -3, 3];                                                // V.HARD / INSANE are wide: nudge them apart
     const ab = ['BEG', 'ADV', 'V.HARD', 'INSANE'];
     blocks.forEach((blk, bi) => {
       const x0 = xL + bi * (bw + gapB);
-      ab.forEach((n, i) => H.text3c(n, x0 + 34 + i * cw + cw / 2, y0 + 6, 'oxblood', 1, 'bone'));
+      if (!blk.length) return;
+      ab.forEach((n, i) => H.textBc(n, x0 + lw + i * cw + cw / 2 + hx[i], y0 + 5, 'oxblood', 1, 'bone'));
       blk.forEach(([label, key], r) => {
         const y = y0 + 20 + r * rh;
-        H.rect(x0, y - 3, bw, 1, 'rust');
-        H.text3(label, x0, y + 1, 'umber', 1, 'bone');
-        for (let i = 0; i < 4; i++) { const b = B.Save.best(key, i); H.text3c(b ? String(b) : '-', x0 + 34 + i * cw + cw / 2, y + 1, b ? 'void' : 'chestnut', 1, 'bone'); }
+        H.rect(x0, y - 2, bw, 1, 'rust');
+        H.textB(label, x0, y + 1, 'umber', 1, 'bone');
+        for (let i = 0; i < 4; i++) { const b = B.Save.best(key, i); H.textBc(b ? String(b) : '-', x0 + lw + i * cw + cw / 2, y + 1, b ? 'void' : 'chestnut', 1, 'bone'); }
       });
     });
+    const nx = this.menu.find('next'); if (nx) caption(nx.sign, 'PAGE ' + (this.page + 1) + '/' + this.pages, 'cyan', 3);
     statusLine('BUILD ' + G().BUILD);
   },
   fire(u, v, inside) { menuFire(this, u, v, inside); }
@@ -457,16 +496,18 @@ function shotsPillar(x, y, rule) {
   H.rect(x + 4, y + 2, w - 8, 8, 'void'); H.rect(x + 5, y + 3, w - 10, 7, 'red'); H.rect(x + 6, y + 3, w - 12, 1, 'coral');   // rounded nose
   H.rect(x - 1, y + h - 22, w + 2, 22, 'void'); H.rect(x, y + h - 21, w, 20, 'amber'); H.rect(x, y + h - 21, w, 2, 'lemon');
   H.rect(x, y + h - 5, w, 4, 'rust'); H.rect(x + 22, y + h - 16, 16, 8, 'yellow');           // brass head + primer
-  H.text3c('SHOTS', x + w / 2, y + 14, 'bone', 2, 'void');
-  const r = rule || 'unlimited';
-  if (r === 'unlimited' || (!r.mag && !r.cap)) { H.sprite(H.INF, x + w / 2 - 13, y + 52, 3, { X: 'bone' }, 'inf3'); H.text3c('NO LIMIT', x + w / 2, y + 80, 'lemon', 1, 'void'); }
-  else if (r.mag) { H.text7c(String(r.mag), x + w / 2, y + 40, 4, 'bone', 'void', 2); H.text3c('PER MAG', x + w / 2, y + 76, 'lemon', 1, 'void'); const rl = UI.reloadCard(r.autoReload); H.text3c(rl[0], x + w / 2, y + 86, 'bone', 1, 'void'); H.text3c(rl[1], x + w / 2, y + 93, 'bone', 1, 'void'); }
-  else { H.text7c(String(r.cap), x + w / 2, y + 40, 4, 'bone', 'void', 2); H.text3c('IN TOTAL', x + w / 2, y + 76, 'lemon', 1, 'void'); H.text3c('MAKE THEM', x + w / 2, y + 86, 'bone', 1, 'void'); H.text3c('COUNT!', x + w / 2, y + 93, 'bone', 1, 'void'); }
+  H.textBc('SHOTS', x + w / 2, y + 15, 'bone', 1, 'void');
+  const r = rule || 'unlimited', cx = x + w / 2;
+  // #100: the small lines are bold now; the reload words wrap to the pillar (RIGHT / CLICK TO / RELOAD)
+  const sm = (lines, y0) => lines.forEach((l, i) => H.textBc(l, cx, y0 + i * 10, 'bone', 1, 'void'));
+  if (r === 'unlimited' || (!r.mag && !r.cap)) { H.sprite(H.INF, cx - 13, y + 52, 3, { X: 'bone' }, 'inf3'); H.textBc('NO LIMIT', cx, y + 80, 'lemon', 1, 'void'); }
+  else if (r.mag) { H.text7c(String(r.mag), cx, y + 38, 4, 'bone', 'void', 2); H.textBc('PER MAG', cx, y + 72, 'lemon', 1, 'void'); sm(wrapB(UI.reloadCard(r.autoReload).join(' '), w - 4).slice(0, 3), y + 83); }
+  else { H.text7c(String(r.cap), cx, y + 38, 4, 'bone', 'void', 2); H.textBc('IN TOTAL', cx, y + 72, 'lemon', 1, 'void'); sm(wrapB('MAKE THEM COUNT!', w - 4), y + 83); }
 }
 function timePillar(x, y, secs) {
   const w = 60, h = 132, cx = x + w / 2, cy = y + 50;
   H.box(x, y, w, h, 'magenta', 'pink', 'plum');
-  H.text3c('TIME', cx, y + 6, 'bone', 2, 'void');
+  H.textBc('TIME', cx, y + 7, 'bone', 1, 'void');
   H.draw(H.pixImg('watch', 41, 41, (px, py) => {
     const d = Math.hypot(px - 20, py - 20);
     if (d > 20) return null; if (d > 18.4) return 'void'; if (d > 16.5) return 'amber'; if (d > 15.6) return 'void';
@@ -476,7 +517,7 @@ function timePillar(x, y, secs) {
   H.rect(cx - 3, cy - 25, 6, 4, 'void'); H.rect(cx - 2, cy - 24, 4, 3, 'amber');
   H.rect(cx, cy - 12, 1, 12, 'red'); H.rect(cx, cy, 8, 1, 'void');
   H.text7c(String(secs), cx, y + 78, 3, 'bone', 'void', 2);
-  H.text3c('SECONDS', cx, y + 104, 'lemon', 1, 'void');
+  H.textBc('SECONDS', cx, y + 106, 'lemon', 1, 'void');
 }
 UI.screens.briefing = {
   enter(a) {
@@ -491,26 +532,32 @@ UI.screens.briefing = {
     const run = this.a.run, c = run.cfg, b = run.def.briefing(c), vs = this.a.versus;
     H.dim(0, 0, 330, RH); H.dim(330, 0, RW - 330, 36);
     H.stoneBanner(12, 8, 402, 26);
-    H.ruleLine(vs ? [['FIRST HIT ON A TARGET ', 'void'], ['TAKES IT!', 'red']] : b.rule, RW / 2, 16, 2);
+    const rule = vs ? [['FIRST HIT ON A TARGET ', 'void'], ['TAKES IT!', 'red']] : b.rule, big = H.ruleLineBw(rule, 2) <= 390;   // #100 bold
+    H.ruleLineB(rule, RW / 2, big ? 14 : 17, big ? 2 : 1);
     H.redPanel(12, 42, 172, 132);
     H.text7('SHOOT!', 26, 54, 2, 'gold', 'void', 2);
     const def = run.def;                                                      // stage icon hooks (ENGINE.md: briefing icons)
     if (def.drawIcon) def.drawIcon(98, 104, 21, t); else H.bullseyeIcon(98, 104, 21);
-    if (vs) { H.text3c('MOST HITS', 98, 136, 'bone', 2); H.text3c('WINS', 98, 150, 'lemon', 2); }
-    else { H.text7c(String(c.quota), 98, 132, 3, 'gold', 'void', 2); H.text3c(b.unit + ' OR MORE', 98, 158, 'bone', 1); }
+    if (vs) { H.textBc('MOST HITS', 98, 134, 'bone', 2); H.textBc('WINS', 98, 151, 'lemon', 2); }
+    else { H.text7c(String(c.quota), 98, 130, 3, 'gold', 'void', 2); H.textBc(b.unit + ' OR MORE', 98, 157, 'bone', 1); }
     if (b.dont) {
-      H.sticker(12, 182, 108, 30);
-      H.text3("DON'T SHOOT!", 18, 186, 'void', 2); H.text3('LIFE -1', 18, 199, 'crimson', 2);
+      H.sticker(12, 182, 90, 30);                                             // #100: narrower (bold text), the info lines get the room
+      H.textB("DON'T SHOOT!", 19, 187, 'void', 1); H.textB('LIFE -1', 19, 198, 'crimson', 1);
       // a stage's own don't-shoot icon (a face) keeps its read: the X moves to its lower-right corner
-      if (def.drawDont) { def.drawDont(150, 196, 13, t); H.redX(161, 205, 5); } else { H.bombIcon(150, 196, 13, t); H.redX(150, 196, 9); }
-    } else if (b.tip) H.text3(UI.reloadTip(b.tip, c.ammo), 14, 186, 'lemon', 1, 'void');
+      if (def.drawDont) { def.drawDont(120, 196, 13, t); H.redX(131, 205, 5); } else { H.bombIcon(120, 196, 13, t); H.redX(120, 196, 9); }
+    } else if (b.tip) linesB(UI.reloadTip(b.tip, c.ammo), 14, 186, 126, 'lemon', 'l');
     shotsPillar(194, 42, c.ammo); timePillar(262, 42, c.time);
-    H.text3(this.a.label || '', 194, 182, 'yellow', 1, 'void');
-    H.text3((c.title || '') + (c.subtitle ? ': ' + c.subtitle : ''), 194, 190, 'mist', 1, 'void');
-    if (b.dont && b.tip) H.text3(UI.reloadTip(b.tip, c.ammo), 194, 198, 'lemon', 1, 'void');
-    if (vs) { const P = run.players; H.text3(P[0].name, 194, 206, 'coral', 1, 'void'); H.text3('VS', 194 + H.text3w(P[0].name) + 5, 206, 'bone', 1, 'void'); H.text3(P[1].name, 194 + H.text3w(P[0].name + ' VS ') + 1, 206, 'ice', 1, 'void'); }
-    if (!vs && blink(t)) H.text3c(G().touch ? 'TAP TO SKIP' : 'CLICK OR TAP TO SKIP', RW / 2, 222, 'yellow', 1, 'void');
-    if (vs) H.text3c('GET READY... ' + Math.max(0, Math.ceil((run.wall0 - performance.now()) / 1000)), RW / 2, 222, 'yellow', 1, 'void');
+    // #100: the info lines are bold and wrap inside x 144..336 (left of Deputy Duck); 10 px a line (9 when there are 5)
+    const IX = 144, IW = 192, il = [];
+    const info = (str, col, max = 2) => wrapB(str, IW).slice(0, max).forEach(l => il.push([l, col]));
+    if (this.a.label) info(this.a.label, 'yellow', 1);
+    info((c.title || '') + (c.subtitle ? ': ' + c.subtitle : ''), 'mist');
+    if (b.dont && b.tip) info(UI.reloadTip(b.tip, c.ammo), 'lemon');
+    const lh = il.length + (vs ? 1 : 0) > 4 ? 9 : 10; let iy = 179;
+    for (const [l, col] of il.slice(0, 5)) { H.textB(l, IX, iy, col, 1, 'void'); iy += lh; }
+    if (vs && iy <= 216) { const P = run.players; let x = IX; x += H.textB(P[0].name, x, iy, 'coral', 1, 'void') + 5; x += H.textB('VS', x, iy, 'bone', 1, 'void') + 5; H.textB(P[1].name, x, iy, 'ice', 1, 'void'); }
+    if (!vs && blink(t)) H.textBr(G().touch ? 'TAP TO SKIP' : 'CLICK OR TAP TO SKIP', RW - 4, RH - 9, 'yellow', 1, 'void');
+    if (vs) H.textBr('GET READY... ' + Math.max(0, Math.ceil((run.wall0 - performance.now()) / 1000)), RW - 4, RH - 9, 'yellow', 1, 'void');
     statusLine(this.a.status || '');
   },
   fire() { if (!this.a.versus && this.t > 0.35) this.go(); }
@@ -570,10 +617,10 @@ UI.screens.play = {
 const PRACTICE_SIGNS = { v: 0.6, u: [0.26, 0.42, 0.58, 0.74], s: 0.022 };
 function practiceMenu(run) {
   const items = S.TIERS.map((T, i) => ({ id: 'tier' + i, text: T.name, keep: true, color: i === run.tier ? T.sign : 'slate',
-    s: PRACTICE_SIGNS.s, u: PRACTICE_SIGNS.u[i], v: PRACTICE_SIGNS.v, z: 1.5,
+    s: PRACTICE_SIGNS.s, u: PRACTICE_SIGNS.u[i], v: PRACTICE_SIGNS.v, z: 1.5, font: 'small',   // in play, tiny: keeps the 3x5 (#100)
     act: () => G().practiceTier(i) }));
   // #77 touch has no ESC: a FINISH sign left of the tiers ends the session (-> practice results)
-  if (G().touch) items.push({ id: 'finish', text: 'FINISH', keep: true, color: 'crimson', s: PRACTICE_SIGNS.s, u: 0.1, v: PRACTICE_SIGNS.v, z: 1.5,
+  if (G().touch) items.push({ id: 'finish', text: 'FINISH', keep: true, color: 'crimson', s: PRACTICE_SIGNS.s, u: 0.1, v: PRACTICE_SIGNS.v, z: 1.5, font: 'small',
     act: () => { if (run.state !== 'end') run.end('done'); } });
   const menu = new Menu(items);
   function paint() {
@@ -590,8 +637,8 @@ UI.screens.practiceresults = {
   enter(a) {
     this.a = a; const g = G(); g.placeDuck('results'); g.duckPose('cheer', 'idle', 1.5);
     this.menu = new Menu([
-      { text: 'AGAIN', color: 'green', s: 0.045, u: 0.3, v: 0.86, z: 3.4, act: () => g.startPractice(g.free.tier) },
-      { text: 'BACK', color: 'slate', s: 0.045, u: 0.56, v: 0.86, z: 3.4, act: () => g.go('free') }
+      { text: 'AGAIN', color: 'green', s: 0.03, u: 0.3, v: 0.86, z: 3.4, act: () => g.startPractice(g.free.tier) },
+      { text: 'BACK', color: 'slate', s: 0.03, u: 0.56, v: 0.86, z: 3.4, act: () => g.go('free') }
     ]);
   },
   exit() { this.menu.dispose(); },
@@ -601,9 +648,9 @@ UI.screens.practiceresults = {
     const r = this.a.res, m = Math.floor(r.secs / 60), sec = Math.floor(r.secs % 60);
     H.dim(0, 0, 262, 190); H.dim(262, 0, RW - 262, 60);                     // the AGAIN / BACK signs below stay bright
     H.text7c('PRACTICE', RW / 2, 10, 4, 'gold', 'void', 2);
-    H.text3c(S.TIERS[r.tier].name + '  -  NOTHING SAVED', RW / 2, 40, 'cyan', 1, 'void');
+    H.textBc(S.TIERS[r.tier].name + '  -  NOTHING SAVED', RW / 2, 40, 'cyan', 1, 'void');
     H.plate(18, 50, 236, 132);
-    const row = (i, k, v, c = 'void') => { H.text3(k, 30, 60 + i * 20, 'umber', 2, 'bone'); H.text3r(v, 242, 60 + i * 20, c, 2, 'bone'); };
+    const row = (i, k, v, c = 'void') => { H.textB(k, 30, 62 + i * 20, 'umber', 1, 'bone'); H.textBr(v, 242, 62 + i * 20, c, 1, 'bone'); };
     row(0, 'SHOTS', String(r.shots));
     row(1, 'HITS', String(r.hits), 'forest');
     row(2, 'ACCURACY', r.pct + '%');
@@ -625,8 +672,8 @@ UI.screens.results = {
     SFX.play(a.res.cleared ? 'stageClear' : 'stageFail'); if (a.newRecord) SFX.play('newRecord');
     // #53 free play: AGAIN (same stage / variant / tier, new seed) and BACK (the free-play menu) signs, no auto-advance
     this.menu = a.free ? new Menu([
-      { text: 'AGAIN', color: 'green', s: 0.045, u: 0.3, v: 0.86, z: 3.4, act: () => g.startFree(a.free.stage, a.free.variant, a.free.tier) },   // #94: z 3.4 = in front of every stage's foreground (Laser Tag's barrier sits at z 3)
-      { text: 'BACK', color: 'slate', s: 0.045, u: 0.56, v: 0.86, z: 3.4, act: () => g.go('free') }
+      { text: 'AGAIN', color: 'green', s: 0.03, u: 0.3, v: 0.86, z: 3.4, act: () => g.startFree(a.free.stage, a.free.variant, a.free.tier) },   // #94: z 3.4 = in front of every stage's foreground (Laser Tag's barrier sits at z 3)
+      { text: 'BACK', color: 'slate', s: 0.03, u: 0.56, v: 0.86, z: 3.4, act: () => g.go('free') }
     ]) : null;
   },
   exit() { if (this.menu) this.menu.dispose(); this.menu = null; },
@@ -639,23 +686,23 @@ UI.screens.results = {
     if (r.cleared) H.starburst(RW / 2, 30, 34, t * 0.8, 'yellow', 'orange', 14);
     H.text7c(r.cleared ? 'CLEARED!' : 'FAILED!', RW / 2, 14, 5, r.cleared ? 'gold' : 'red', 'void', 2);
     H.plate(18, 66, 196, 118);
-    const row = (i, k, v, c = 'void') => { H.text3(k, 30, 78 + i * 20, 'umber', 2, 'bone'); H.text3r(v, 202, 78 + i * 20, c, 2, 'bone'); };
+    const row = (i, k, v, c = 'void') => { H.textB(k, 30, 80 + i * 20, 'umber', 1, 'bone'); H.textBr(v, 202, 80 + i * 20, c, 1, 'bone'); };
     row(0, 'HITS', r.hits + (this.a.versus ? '' : '/' + r.quota), r.hits >= r.quota ? 'forest' : 'crimson');
     row(1, 'HIT %', r.pct + '%');
     row(2, 'FASTEST', isFinite(r.fastest) ? r.fastest.toFixed(2) + 'S' : '-');
     row(3, 'POINTS', String(r.base));
     row(4, 'BONUS', r.bonus ? '+' + r.bonus : '-', r.bonus ? 'forest' : 'chestnut');
     H.redPanel(224, 66, 128, 70);
-    H.text3c('STAGE SCORE', 288, 76, 'bone', 1);
-    H.text7c(String(r.score), 288, 92, 3, 'gold', 'void', 2);
-    H.text3c('BEST ' + this.a.best, 288, 142, 'mist', 1, 'void');
-    if (this.a.total != null) H.text3c('TOTAL ' + this.a.total, 288, 151, 'yellow', 1, 'void');
+    H.textBc('STAGE SCORE', 288, 76, 'bone', 1);
+    H.text7c(String(r.score), 288, 94, 3, 'gold', 'void', 2);
+    H.textBc('BEST ' + this.a.best, 288, 141, 'mist', 1, 'void');
+    if (this.a.total != null) H.textBc('TOTAL ' + this.a.total, 288, 151, 'yellow', 1, 'void');
     if (this.a.newRecord) {
       H.starburst(288, 172, 15, t * 2, 'lemon', 'red', 10);
       if (blink(t, 6)) H.text7c('NEW RECORD!', 288, 168, 1, 'hot', 'void', 2);
     }
-    if (this.a.lifeLost) { H.sprite(H.HEART, 30, 192, 2, H.HEART_OFF, 'heartoff'); H.text3('LIFE -1', 52, 196, 'red', 2, 'void'); }
-    if (!this.menu && this.t > 1.0 && blink(t)) H.text3c(G().touch ? 'TAP TO CONTINUE' : 'CLICK OR TAP TO CONTINUE', RW / 2, 224, 'yellow', 1, 'void');
+    if (this.a.lifeLost) { H.sprite(H.HEART, 30, 192, 2, H.HEART_OFF, 'heartoff'); H.textB('LIFE -1', 52, 197, 'red', 2, 'void'); }
+    if (!this.menu && this.t > 1.0 && blink(t)) H.textBc(G().touch ? 'TAP TO CONTINUE' : 'CLICK OR TAP TO CONTINUE', RW / 2, 222, 'yellow', 1, 'void');
     statusLine(this.a.status || '');
   },
   fire(u, v, inside) { if (this.menu) { if (this.t > 0.6) menuFire(this, u, v, inside); } else if (this.t > 1.0) this.go(); }
@@ -669,8 +716,8 @@ UI.screens.gameover = {
     this.a = a; this.count = 10; const g = G();
     g.placeDuck('title'); g.duckPose('sad'); SFX.play('gameOver');
     this.menu = new Menu([
-      { text: 'CONTINUE', color: 'green', u: 0.33, v: 0.66, s: 0.06, act: () => { SFX.play('continue'); a.onContinue(); } },
-      { text: 'QUIT', color: 'slate', u: 0.62, v: 0.66, act: () => g.go('title') }
+      { text: 'CONTINUE', color: 'green', u: 0.35, v: 0.66, s: 0.038, act: () => { SFX.play('continue'); a.onContinue(); } },
+      { text: 'QUIT', color: 'slate', u: 0.63, v: 0.66, s: 0.032, act: () => g.go('title') }
     ]);
   },
   exit() { this.menu.dispose(); },
@@ -678,9 +725,9 @@ UI.screens.gameover = {
   draw(t) {
     if (tall()) return;                                                       // portrait: drawPortrait() has the text
     H.text7c('GAME OVER', RW / 2, 18, 5, 'red', 'void', 2);
-    H.text3c('CONTINUE?', RW / 2, 62, 'bone', 2, 'void');
+    H.text7c('CONTINUE?', RW / 2, 60, 2, 'bone', 'void', 1);
     H.timerBall(RW / 2, 96, this.count / 10, Math.max(0, Math.ceil(this.count)), t);
-    H.text3c('SCORE ' + (this.a.total || 0) + '   STAGE ' + (this.a.stage || 1) + '/4', RW / 2, 120, 'yellow', 1, 'void');
+    H.textBc('SCORE ' + (this.a.total || 0) + '   STAGE ' + (this.a.stage || 1) + '/4', RW / 2, 120, 'yellow', 1, 'void');
     statusLine(this.a.status || '');
   },
   fire(u, v, inside) { menuFire(this, u, v, inside); }
@@ -702,13 +749,13 @@ UI.screens.final = {
     if (tall()) return;                                                       // portrait: drawPortrait() has the text
     H.starburst(RW / 2, 40, 44, t * 0.6, 'yellow', 'orange', 16);
     H.text7c('COURSE', RW / 2, 14, 4, 'gold', 'void', 2); H.text7c('CLEAR!', RW / 2, 48, 4, 'gold', 'void', 2);
-    H.text3c(S.TIERS[this.a.tier].name, RW / 2, 88, 'cyan', 2, 'void');
+    H.textBc(S.TIERS[this.a.tier].name, RW / 2, 86, 'cyan', 2, 'void');
     H.redPanel(RW / 2 - 80, 104, 160, 64);
-    H.text3c('TOTAL SCORE', RW / 2, 114, 'bone', 1);
+    H.textBc('TOTAL SCORE', RW / 2, 114, 'bone', 1);
     H.text7c(String(this.a.total), RW / 2, 128, 3, 'gold', 'void', 2);
-    H.text3c('BEST ' + this.a.best, RW / 2, 174, 'mist', 1, 'void');
-    if (this.a.newRecord && blink(t, 6)) H.text7c('NEW RECORD!', RW / 2, 186, 2, 'hot', 'void', 2);
-    if (this.t > 1.5 && blink(t)) H.text3c(G().touch ? 'TAP TO CONTINUE' : 'CLICK OR TAP TO CONTINUE', RW / 2, 224, 'yellow', 1, 'void');
+    H.textBc('BEST ' + this.a.best, RW / 2, 174, 'mist', 1, 'void');
+    if (this.a.newRecord && blink(t, 6)) H.text7c('NEW RECORD!', RW / 2, 188, 2, 'hot', 'void', 2);
+    if (this.t > 1.5 && blink(t)) H.textBc(G().touch ? 'TAP TO CONTINUE' : 'CLICK OR TAP TO CONTINUE', RW / 2, 222, 'yellow', 1, 'void');
   },
   fire() { if (this.t > 1.5) this.go(); }
 };
@@ -730,13 +777,13 @@ UI.screens.lobby = {
     if (N.state === 'hosting' && N.players[1]) {
       const L = N.lobby, T = S.TIERS[L.tier], d = S.get(L.stage);
       items = [
-        { text: 'TIER: ' + T.name, keep: true, color: T.sign, s: 0.036, u: 0.31, v: 0.6, act: () => N.setLobby({ tier: (L.tier + 1) % 4 }) },
-        { text: 'STAGE: ' + (d.short || 'RANGE') + ' ' + (L.variant + 1), keep: true, color: 'wood', s: 0.036, u: 0.65, v: 0.6, act: () => {
+        { text: 'TIER: ' + T.name, keep: true, color: T.sign, s: 0.024, u: 0.36, v: 0.6, act: () => N.setLobby({ tier: (L.tier + 1) % 4 }) },
+        { text: 'STAGE: ' + (d.short || 'RANGE') + ' ' + (L.variant + 1), keep: true, color: 'wood', s: 0.024, u: 0.68, v: 0.6, act: () => {
           const ids = []; for (const id of S.order) for (let v = 0; v < S.get(id).variants; v++) ids.push([id, v]);
           const i = ids.findIndex(e => e[0] === L.stage && e[1] === L.variant), nx = ids[(i + 1) % ids.length];
           N.setLobby({ stage: nx[0], variant: nx[1] }); } },
-        { text: 'START!', color: 'crimson', s: 0.055, u: 0.31, v: 0.8, act: () => N.start() },
-        { text: 'LEAVE', color: 'slate', s: 0.045, u: 0.65, v: 0.8, act: () => { N.leave(); g.go('title'); } }
+        { text: 'START!', color: 'crimson', s: 0.036, u: 0.36, v: 0.8, act: () => N.start() },
+        { text: 'LEAVE', color: 'slate', s: 0.03, u: 0.66, v: 0.8, act: () => { N.leave(); g.go('title'); } }
       ];
     } else if (N.state === 'hosting' || N.state === 'joining' || N.state === 'joined' || N.state === 'loading') {
       items = [{ text: N.state === 'joining' || N.state === 'loading' ? 'CANCEL' : 'LEAVE', color: 'slate', u: 0.475, v: 0.8, act: () => { N.leave(); this.key = ''; } }];
@@ -748,8 +795,8 @@ UI.screens.lobby = {
       ];
     } else {
       items = [
-        { text: 'HOST GAME', color: 'crimson', s: 0.055, u: 0.33, v: 0.5, act: () => N.host(name) },
-        { text: 'JOIN GAME', color: 'blue', s: 0.055, u: 0.62, v: 0.5, act: () => UI.prompt('ENTER THE CODE (BLAM-XXXX)', 'BLAM-', 9, c => { if (c) N.join(c, name); else this.key = ''; }) },
+        { text: 'HOST GAME', color: 'crimson', s: 0.032, u: 0.34, v: 0.5, act: () => N.host(name) },
+        { text: 'JOIN GAME', color: 'blue', s: 0.032, u: 0.63, v: 0.5, act: () => UI.prompt('ENTER THE CODE (BLAM-XXXX)', 'BLAM-', 9, c => { if (c) N.join(c, name); else this.key = ''; }) },
         { text: 'BACK', color: 'slate', u: 0.475, v: 0.75, act: () => g.go('title') }
       ];
     }
@@ -766,18 +813,18 @@ UI.screens.lobby = {
     header('VERSUS', 'ONLINE, 2 PLAYERS, SAME STAGE, FIRST HIT TAKES IT');
     if (N.code && (N.state === 'hosting' || N.state === 'joined')) {
       H.stoneBanner(RW / 2 - 90, 38, 180, 34);
-      H.text3c(N.state === 'hosting' ? 'YOUR CODE' : 'JOINED', RW / 2, 42, 'slate', 1);
+      H.textBc(N.state === 'hosting' ? 'YOUR CODE' : 'JOINED', RW / 2, 41, 'slate', 1);
       H.text7c(N.code, RW / 2, 52, 2, 'red', 'void', 1);
     }
     if (N.state === 'hosting' || N.state === 'joined') {
       const P = N.players, y = 80;
-      H.box(RW / 2 - 132, y, 120, 16, 'red', 'coral', 'crimson'); H.text3c(P[0] ? P[0].name : '...', RW / 2 - 72, y + 4, 'bone', 2);
+      H.box(RW / 2 - 132, y, 120, 16, 'red', 'coral', 'crimson'); H.textBc(P[0] ? P[0].name : '...', RW / 2 - 72, y + 5, 'bone', 1);
       H.text7c('VS', RW / 2, y + 2, 2, 'gold', 'void', 2);
-      H.box(RW / 2 + 12, y, 120, 16, 'blue', 'cyan', 'deepblue'); H.text3c(P[1] ? P[1].name : (blink(t) ? 'WAITING' : ''), RW / 2 + 72, y + 4, 'bone', 2);
-      if (N.state === 'hosting' && !P[1]) H.text3c('TELL A FRIEND TO PICK VERSUS > JOIN GAME AND TYPE THIS CODE', RW / 2, 104, 'mist', 1, 'void');
-      if (N.state === 'joined') H.text3c('THE HOST PICKS TIER + STAGE: ' + S.TIERS[N.lobby.tier].name + ', ' + (S.get(N.lobby.stage).short || 'RANGE') + ' ' + (N.lobby.variant + 1), RW / 2, 104, 'mist', 1, 'void');
+      H.box(RW / 2 + 12, y, 120, 16, 'blue', 'cyan', 'deepblue'); H.textBc(P[1] ? P[1].name : (blink(t) ? 'WAITING' : ''), RW / 2 + 72, y + 5, 'bone', 1);
+      if (N.state === 'hosting' && !P[1]) H.textBc('TELL A FRIEND: VERSUS > JOIN GAME > THIS CODE', RW / 2, 102, 'mist', 1, 'void');
+      if (N.state === 'joined') H.textBc('THE HOST PICKS TIER + STAGE: ' + S.TIERS[N.lobby.tier].name + ', ' + (S.get(N.lobby.stage).short || 'RANGE') + ' ' + (N.lobby.variant + 1), RW / 2, 102, 'mist', 1, 'void');
     }
-    if (N.status) H.text3c(N.status, RW / 2, 114, N.state === 'offline' ? 'red' : 'yellow', 1, 'void');
+    if (N.status) linesB(N.status, RW / 2, 113, RW - 16, N.state === 'offline' ? 'red' : 'yellow');
     statusLine('BUILD ' + G().BUILD, N.state.toUpperCase());
   },
   fire(u, v, inside) { menuFire(this, u, v, inside); }
@@ -814,13 +861,13 @@ UI.screens.vsresults = {
     [0, 1].forEach(i => {
       const p = P[i], x = i ? 214 : 30, C = H.PCOL[i];
       H.box(x, 64, 150, 120, C[2], C[1], 'void', this.win === i ? 'yellow' : 'void');
-      H.text3c(p.name + (i === me ? ' (YOU)' : ''), x + 75, 70, 'bone', 2);
+      H.textBc(p.name + (i === me ? ' (YOU)' : ''), x + 75, 71, 'bone', 1);
       const shots = Math.max(p.shots, p.hits), pct = shots ? Math.round(p.hits / shots * 100) : 0;
       [['HITS', p.hits], ['HIT %', pct + '%'], ['FASTEST', isFinite(p.fastest) ? p.fastest.toFixed(2) + 'S' : '-'], ['SCORE', p.score], ['LIVES', p.lives]].forEach(([k, v], r) => {
-        H.text3(k, x + 10, 90 + r * 17, C[0], 2); H.text3r(String(v), x + 140, 90 + r * 17, 'bone', 2);
+        H.textB(k, x + 10, 91 + r * 17, C[0], 1); H.textBr(String(v), x + 140, 91 + r * 17, 'bone', 1);
       });
     });
-    if (this.t > 1.5 && blink(t)) H.text3c(G().touch ? 'TAP FOR THE LOBBY' : 'CLICK OR TAP FOR THE LOBBY', RW / 2, 224, 'yellow', 1, 'void');
+    if (this.t > 1.5 && blink(t)) H.textBc(G().touch ? 'TAP FOR THE LOBBY' : 'CLICK OR TAP FOR THE LOBBY', RW / 2, 222, 'yellow', 1, 'void');
   },
   fire() { if (this.t > 1.5) this.go(); }
 };

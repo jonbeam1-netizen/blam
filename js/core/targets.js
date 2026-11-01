@@ -5,7 +5,7 @@
    - decals: bullet holes = a void square inside a lighter rim square (two instanced meshes)
    - Target: base class. Register voxel parts with part(mesh, voxelList, size, ox, oy, oz) so a
      hit can shatter exactly those voxels into chips. kind: 'target' | 'bomb' | 'bystander' | 'sign'
-   - Sign: a hanging voxel board with 3x5 lettering (menu buttons are shootable signs)
+   - Sign: a hanging voxel board with bold 7-row lettering (menu buttons are shootable signs)
    ========================================================================================= */
 window.BLAM = window.BLAM || {};
 (function (B) {
@@ -150,8 +150,13 @@ function pick(ray, targets) {
   return h ? { target: h.object.userData.target, point: h.point, distance: h.distance, object: h.object, zone: h.object.userData.zone } : null;
 }
 
-// ---------- Sign: a hanging voxel board with 3x5 lettering (menu buttons) ----------
-// opts: { text, sub, color, frame, textCol, subCol, s (voxel size), minW (voxels), hang (rope length) }
+// ---------- Sign: a hanging voxel board with lettering (menu buttons) ----------
+// opts: { text, sub, color, frame, textCol, subCol, s (voxel size), minW (voxels), hang (rope length), font }
+// #100: both lines use the bold 7-row font (R.bold: 6-7 voxels per letter, 2-voxel strokes) so a sign reads as
+// letters, not 3x5 blocks; font: 'small' keeps the old 3x5 lettering (the tiny in-play practice tier signs).
+// A bold sign is ~1.7x wider in voxels than a 3x5 one, so menus give it ~0.6x the old voxel size: same board
+// width on screen, letters about as tall, but 7 rows of detail. Keep s >= ~0.022 (about 1.1 game px per voxel
+// at the menu plane) or the 1-voxel cross strokes start dropping out.
 const SIGN_STYLES = {
   crimson: ['crimson', 'red', 'oxblood', 'plum'], blue: ['blue', 'cyan', 'deepblue', 'deepblue'],
   green: ['green', 'lime', 'forest', 'forest'], amber: ['amber', 'yellow', 'rust', 'chestnut'],
@@ -169,8 +174,10 @@ class Sign extends Target {
     const o = this.opts, st = SIGN_STYLES[o.color] || SIGN_STYLES.crimson, s = o.s;
     if (this.mesh) { this.pivot.remove(this.mesh); this.mesh.geometry.dispose(); this.parts.length = 0; }
     if (this.rope) { this.group.remove(this.rope); this.rope.geometry.dispose(); }
-    const t = R.small(o.text), sb = o.sub ? R.small(o.sub) : null;
-    const W = Math.max(t.w, sb ? sb.w : 0, o.minW) + 8, Hh = sb ? 18 : 11;
+    const small = o.font === 'small', font = small ? R.small : R.bold, gh = small ? 5 : 7;   // glyph rows
+    const t = font(o.text), sb = o.sub ? font(o.sub) : null;
+    // rows: edge, highlight, body | main line | shadow, gap | sub line | shadow | shade, edge
+    const W = Math.max(t.w, sb ? sb.w : 0, o.minW) + 8, subY = 3 + gh + 2, Hh = sb ? subY + gh + 3 : gh + 6;
     const list = [], has = new Set();
     for (let r = 0; r < Hh; r++) for (let i = 0; i < W; i++) {
       const cx = Math.min(i, W - 1 - i), cy = Math.min(r, Hh - 1 - r);
@@ -189,7 +196,7 @@ class Sign extends Target {
       }
     };
     letters(t, Math.floor((W - t.w) / 2), 3, o.textCol);
-    if (sb) letters(sb, Math.floor((W - sb.w) / 2), 11, o.subCol);
+    if (sb) letters(sb, Math.floor((W - sb.w) / 2), subY, o.subCol);
     const ox = -(W - 1) / 2 * s, oy = -(Hh - 1) / 2 * s;
     this.mesh = new R.Vox().vox(list, s, ox, oy, 0).mesh(MAT.obj);
     this.part(this.mesh, list, s, ox, oy, 0);

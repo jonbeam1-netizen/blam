@@ -294,6 +294,101 @@ From section 2: a wall of Deputy Ducks, shoot the fakes (wrong badge, wrong hat,
 
 **Finale:** on clear the real ducks hold up cards spelling B.L.A.M. and quack in time; the HUD duck cheers. **Sound events:** `curtain`, `lineupShuffle`, `tellGlance`, `swapWhistle`, `fakeRun`, `cardsUp`, bed `lineup` (office hum, a ticking clock, distant typewriter). **Done when:** registered as 'doppelducks' (name 'DOPPELDUCKS', short 'DUCKS') after conveyor, 3 variants, 4 tiers, briefing icons, versus-safe (the lineup, tells and swaps are pure functions of seed / tier / variant and the stage clock; runners depend on run.taken), no console errors, Beginner + Insane play-checked MUTED, screenshots, ENGINE.md "DOPPELDUCKS (stage 10)".
 
+## 12. GROCERY RUN build brief (Jon's idea, Fable wrote it up 2026-11-01; stage 11) -- WAITING FOR GO
+Jon's rule for this one: **SIMPLE.** One mechanic, one variant, no extras. Everything under "NOT in this stage" is deliberately left out; do not add it.
+
+**Scene:** a SUPERMARKET AISLE seen from behind your own shopping cart. Camera unchanged (the engine's fixed camera). Shelves on BOTH sides run to a vanishing point at the far end, stocked wall to wall with standard American junk food (chips, soda, candy bars, donuts, hot dogs, corn dogs, pizza slices, cereal boxes, cookies, nachos, ice cream sandwiches, energy drinks, cupcakes; get creative, each a small toon-voxel product with a bright label, a few in the house brand "BLAM!"). Tile floor, fluorescent tube lights, price tags on the shelf lips, a "B.L.A.M. MART" sign hanging over the aisle (the fixed logo). ONE BIG SHOPPING CART (wire mesh, red handle, kid seat) sits in the bottom middle of the screen in front of you, between the HUD duck (bottom-left) and the gun (bottom-right); it must not cover the HUD, the hearts, the quota pill or the timer. Original art, pixel / dither voxel, the Bee Hive level of care.
+
+**You are always rolling.** The shelves scroll TOWARD the camera (shelf segments recycle like the Conveyor belts; a pure function of the stage clock) at the tier's aisle speed, so the whole aisle slides past you, the floor tiles too, the lights overhead too. The cart stays put, its wheels wobble.
+
+**The mechanic, part 1, JUNK IN THE CART:** products are the spawns. A product appears on a shelf slot at the far end (left / right side x low / middle / top shelf; the director spaces them), rides toward the camera on its shelf, grows, and leaves the screen at the side edge; the ride IS the pop window (pure in lt), the far end is small and hard, the near end big and brief. Shoot it: it pops off the shelf, ARCS THROUGH THE AIR INTO THE CART (cosmetic flight ~0.5 s, `cartClunk` on landing) and the PILE IN THE CART GROWS (the last ~24 shot products stay visible stacked in the cart, older ones merge / hide under them, nothing ever lands outside). HIT +1. The cart filling up is the visible progress.
+
+**The mechanic, part 2, VEGGIES CLIMBING IN:** plain FRUIT AND VEG (broccoli, carrot, spud, ribeye steak, apple, banana, corn; each with two little stick legs and stick arms, eyes optional) appear on the floor beside the cart and CLIMB its side (front, left or right face of the cart) over the tier's climb window; at the rim they hang for a beat and DROP IN. Shoot one while it climbs: it bursts into veg bits (`veggiePop`), +200, counts as a HIT. One drops in unshot: a THUD (`veggieIn`), LIFE -1, -300, the duck is sad / scared (use the engine's own penalty path exactly as INVASION's landing hook does: `run.penaltyNow(i, 'bomb', ...)` read from `run.taken`, so versus charges both tabs the same; no explosion, no fireball, no fuse, no bomb look anywhere: the veg is just food that should not be in the cart). No shaking the cart, no junk thrown back out (Jon: no). A veg that dropped in stays visible in the pile as a reminder.
+
+**Difficulty (4 tiers, every mechanic at every tier):** aisle speed = ride window (~3.2 s Beginner -> ~1.2 s Insane per product), products on screen at once (3-4 -> 6-8), top-shelf share (far corners), climber count per round (4 -> 12), climb window (~3.4 s -> ~1.5 s), two climbers at once from Very Hard. Aim travel rules as the range (#90): the director alternates sides and shelf heights, and a climber arrives while your eye is up on a top shelf. Pacing from the range director (gaps, bursts, pauses by tier).
+
+**Scoring:** product 100 (+50 on the top shelf, +50 shot in the far third of the ride), climber 200, veg in the cart -300 + LIFE -1. Quota = share rule (55 / 60 / 64 / 68 %) of (products + climbers) spawned. Briefing: "SHOOT n SNACKS OR MORE!", unit `SNACKS`, icon a bag of chips, `dont: null` (nothing is off limits), tip "KEEP THE VEGGIES OUT OF YOUR CART!" Ammo by variant (below); no shot cap anywhere.
+
+**Variants (3, Jon 2026-11-01: the SAME aisle three times, only the ammo rule differs; no other change between them):** 1 SNACK AISLE (free fire, `'unlimited'`), 2 12 ITEMS OR LESS (12 per magazine, side reload, `autoReload` off), 3 FAMILY SIZE (16 per magazine). Jon 2026-11-01: magazines BIGGER than the other stages' 8 / 12 because shots go to the climbers too; the director must leave room for reload trips at the magazine variants. Same set, same director, same climbers, same finale.
+
+**Finale:** on clear the aisle ends at a CHECKOUT LANE: the cart rolls up to the register, a CASHIER DUCK (range.js's placeholder voxel duck style with a name tag and a visor, `js/duck.js` untouched) scans the pile with `scanBeep`s, and a RECEIPT prints up out of the register reading B.L.A.M. MART with the round's score as the TOTAL (`receiptPrint`), ~4 s, then the stage ends. The HUD duck cheers.
+
+**NOT in this stage (Jon, 2026-11-01):** no bombs, no decoys / disguised products, no bystanders / shoppers / clerks, no end-cap displays, no PA announcements or sale rushes, no fuses or explosions, no freezer doors, no variant-specific mechanics (the three variants differ in ammo only).
+
+**Sound events (recipes + the bed defined INSIDE `js/stages/grocery.js` with `B.SFXKit.def` and `K.stageBeds` / the `K.beds` hook, as invasion.js hooks its bed; append NOTHING to sfx-stage.js or audio.js, hand Fable the audio.js event-list lines as text):** `shelfPop {u}`, `cartClunk`, `veggieClimb {u}` (little footsteps), `veggiePop {u}`, `veggieIn` (thud), `scanBeep`, `receiptPrint`, bed `market` (freezer hum, cart-wheel rattle, a faint overhead buzz; no PA chimes).
+
+**Parallel-agent rule (new, 2026-11-01):** the stage agent edits ONLY `js/stages/grocery.js` and creates its own harness under `review/tools/`. It hands Fable, as text in its report: the `index.html` script tag line, the audio.js event list block, the ENGINE.md "GROCERY RUN (stage 11)" section and the PLAYTEST.md checklist. Fable wires those, bumps the build and pushes. No other file is touched by the agent.
+
+**Done when:** registered as 'grocery' (name 'GROCERY RUN', short 'MART') after doppelducks, 3 variants (ammo only), 4 tiers, the chips briefing icon, versus-safe (shelf traffic, climbers and the pile are pure functions of seed / tier and the stage clock; the drop-in penalty reads `run.taken`), no console errors, Beginner + Insane play-checked MUTED with an autopilot + a deliberate veg drop-in (LIFE -1), draw calls counted, screenshots (the aisle, a full cart, a climber at the rim, the receipt), the ENGINE.md section text in the report.
+
+## 13. THE DOCK build brief (Fable, Jon answered 2026-11-01; stage 12) -- WAITING FOR GO
+SIMPLE (Jon's rule for every new level): one mechanic, three variants that differ in AMMO ONLY, nothing from the "NOT" list.
+
+**Scene:** a harbour at sunset. Deputy Duck sits in a little ROWBOAT in the lower middle of the play rect (above the HUD duck, the gun and the pills; never covering them), oars out, bobbing on the swell. Two or three PIRATE SHIPS sit on the horizon (left / centre / right), sails, lanterns, cannon ports along their sides. A pier with a lamp post at one edge, gulls, a buoy, the "B.L.A.M. HARBOUR" sign on the pier's shed (the fixed logo). Original art, pixel / dither voxel; the duck in the boat is range.js's placeholder voxel duck style (`js/duck.js` untouched).
+
+**The mechanic:** the ships FIRE CANNONBALLS at the boat (a port flashes, smoke, `cannonFire {u}`, then the ball). EVERY ball is aimed at the boat; its flight is a pure arc in lt (`ballAt(sp, lt)`), small on the horizon, growing as it comes, with a faint whistle. Shoot it out of the air: HIT, it bursts into iron bits over the water (`ballPop {u}`), +100 (+50 in the first third of its flight). One that arrives unshot: a THUD on the hull (`hullThud`), the boat rocks, a splash, LIFE -1, -300, through the engine's own penalty path exactly as INVASION's landing hook (`run.penaltyNow(i, 'bomb', ...)`, read from `run.taken`; a ball shattered locally but not awarded still lands). No explosion, no fire. The DUCK DUCKS AND COVERS when a ball is ~0.6 s from the boat (wings over his head, pure in lt), peeks out after, shakes a fist at the ships after a hit; cosmetic only.
+
+**Difficulty (4 tiers):** ships 2 / 2 / 3 / 3, flight time ~3.6 s -> ~1.6 s, balls in the air at once 1-2 -> 3-4, VOLLEYS of two or three from one ship from Very Hard (`beat` apart, aim travel per #90: alternate ships and arc heights). Pacing by the range director's gaps / bursts / pauses.
+
+**Scoring and briefing:** as above; quota = share rule of balls fired. Briefing "SHOOT n CANNONBALLS OR MORE!", unit `CANNONBALLS`, icon a cannonball with a motion whoosh, `dont: null`, tip "DON'T LET THEM HIT THE BOAT!" Ammo by variant: **DOCK 1 HARBOUR** free fire, **DOCK 2 BROADSIDE** 8 per magazine, **DOCK 3 ARMADA** 12 per magazine (ammo is the ONLY difference). No shot cap.
+
+**Finale:** on clear the ships run up white flags that spell B.L.A.M. up the masts, the duck rows off toward the pier waving. **NOT in this stage:** no near-miss balls, no ships to sink, no bombs / decoys / bystanders, no mines, no variant-specific mechanics.
+
+**Sounds (recipes + bed inside `js/stages/dock.js`, see the parallel-agent rule in section 12):** `cannonFire {u}`, `ballWhistle {u}`, `ballPop {u}`, `hullThud`, `splash {u}`, `flagUp`, bed `harbour` (waves, gulls, rope creak).
+
+**Done when:** registered as 'dock' (name 'THE DOCK', short 'DOCK') after grocery, 3 variants (ammo only), 4 tiers, briefing icon, versus-safe, no console errors, Beginner + Insane play-checked MUTED with an autopilot + a deliberate hull hit (LIFE -1), draw calls, screenshots, the ENGINE.md section + audio.js lines + PLAYTEST.md checklist + index.html tag handed to Fable as text. The agent edits ONLY `js/stages/dock.js` and its own harness under `review/tools/`.
+
+## 14. MOLE HOLES build brief (Fable, Jon answered 2026-11-01; stage 13) -- WAITING FOR GO
+SIMPLE. Whack-a-mole with a gun. Three ammo-only variants.
+
+**Scene:** a backyard lawn seen from a low angle, a GRID of 3 rows x 4 mole holes (dirt rings, the far row smaller), a picket fence, a garden gnome, a shed with the "B.L.A.M. LAWN CARE" sign (the fixed logo), a sprinkler ticking in the corner, flowers. Original art, pixel / dither voxel.
+
+**The mechanic:** MOLES pop up out of the holes (a dirt puff, `molePop {u}`), hold for the tier's window, and duck back down (`moleDown {u}`). Shoot one: HIT, it spins and flops with stars (`moleBonk {u}`), +100, +50 QUICK WHACK if shot within 0.5 s of its pop. REGULAR IRON BOMBS (`BLAM.Props.bomb`, fuse lit) pop up out of the same holes on the same timing and sink back down: the don't-shoot, LIFE -1, -300 (the engine's bomb path; a bomb that sinks unshot costs nothing). Nothing else comes out of the holes.
+
+**Difficulty (4 tiers):** hold window ~1.6 s -> ~0.55 s, up at once 2-3 -> 5-6, bomb share ~15 % -> ~35 % (bombCap as the range), the far row used more at high tiers, aim travel per #90 (the director hops rows and columns, never the same hole twice in a row), the range director's gaps / bursts / pauses. Patterns allowed because they are cheap and read instantly: a ROW of three on a beat, a DIAGONAL, a column; keep them plain (no decoys, no turncoats).
+
+**Scoring and briefing:** quota = share rule of moles. "SHOOT n MOLES OR MORE!", unit `MOLES`, icon a mole head (nose, two teeth), `dont: 'bomb'`, tip "BOMBS POP UP TOO. LET THEM SINK!" Ammo: **MOLE 1 BACKYARD** free fire, **MOLE 2 WHACK RUSH** 8 per magazine, **MOLE 3 DIRT NAP** 12 per magazine. No shot cap.
+
+**Finale:** on clear four moles come up together holding cards that spell B.L.A.M. and bob. **NOT in this stage:** no bunnies / gnomes as bystanders, no decoys, no hidden bombs behind moles, no turncoats, no variant-specific mechanics.
+
+**Sounds (inside `js/stages/moles.js`):** `molePop {u}`, `moleDown {u}`, `moleBonk {u}`, `bombUp {u}`, `moleCards`, bed `lawn` (birds, a breeze, the sprinkler tick).
+
+**Done when:** registered as 'moles' (name 'MOLE HOLES', short 'MOLE') after dock, 3 variants (ammo only), 4 tiers, briefing icons (mole / the engine's bomb), versus-safe (every pop is a pure function of seed / tier and the stage clock), no console errors, Beginner + Insane play-checked MUTED, draw calls, screenshots, the doc text handed to Fable; the agent edits ONLY `js/stages/moles.js` + its harness.
+
+## 15. SOCCER build brief (Fable, Jon answered 2026-11-01; stage 14) -- WAITING FOR GO
+SIMPLE. Shoot the ball into the goal past the goalie duck. Three ammo-only variants.
+
+**Scene:** a pitch from the penalty spot, the GOAL at the far end with a net, a GOALIE DUCK in it (range.js's placeholder voxel duck style with gloves and a cap, `js/duck.js` untouched) shuffling side to side, a little stand behind with a scoreboard reading "B.L.A.M. F.C." (the fixed logo), corner flags, floodlights. Original art, pixel / dither voxel.
+
+**The mechanic:** one BALL sits on the spot. The ball is a target with HIT ZONES on its visible face: `left`, `right`, `low`, `mid` (and the corners `lowleft` / `lowright`). Shoot it and it is KICKED AWAY FROM THE HIT: hit the right side and it curls left, hit low and it lofts, hit the middle and it goes straight; kick strength is fixed per tier. The goalie DIVES toward the ball's lane if his reach (by tier) and his position at that moment allow; the outcome is a pure function of (the award time, the zone, the goalie's pure position at that time). GOAL: the net bulges, HIT, +300 (+100 top corner = a lofted side kick). CAUGHT: he throws it back to the spot (~1 s), NO hit, no points. The next ball sits on the spot 0.8 s after a goal. Shooting the GOALIE: friendly fire, LIFE -1, -300 (kind `'bystander'`; Jon: try it, cut it if he dislikes it). Two balls on the pitch at once from Very Hard (two spots).
+
+**Engine note (Fable adds this BEFORE the agent starts; the agent must not edit stage.js):** `Run.applyHit` counts every awarded shot as a HIT. New hook: a target may define `countHit(zone, lt) -> bool`; when it returns `false` the spawn is still taken (and shattered / animated by the stage), the shot still scores `def.points` (0 here) but `P.hits`, `streak` and `fastest` are untouched and the quota is not advanced. Versus-safe: the host's awarded hit runs `applyHit` on both tabs with the same zone and time. The ball chain follows SKEE BALL's latent-spawn recipe: the timeline holds a chain of ball spawns B0, B1, ...; Bk goes live when B(k-1) is in `run.taken` (its award time + the flight), each kick is one spawn consumed, so every kick, goal and catch is a pure function of seed / tier and the shared hit record.
+
+**Difficulty (4 tiers):** goalie speed and reach, ball count (1 / 1 / 2 / 2), the ball ROLLS slowly toward you between kicks from Advanced up (a moving target), the time per ball. **Scoring and briefing:** quota = goals (share rule of the balls the timeline can supply). "SCORE n GOALS OR MORE!", unit `GOALS`, icon a ball in a net, `drawDont` the goalie duck's face, tip "SHOOT THE SIDE OF THE BALL. IT GOES THE OTHER WAY!" Ammo: **GOAL 1 KICKOFF** free fire, **GOAL 2 PENALTIES** 8 per magazine, **GOAL 3 EXTRA TIME** 12 per magazine. No shot cap.
+
+**Finale:** on clear the net bulges with the last ball and the scoreboard flips to B.L.A.M., the crowd's flags wave. **NOT in this stage:** no bombs, no decoys, no defenders, no wind, no variant-specific mechanics.
+
+**Sounds (inside `js/stages/soccer.js`):** `ballKick {u}`, `goalieDive {u}`, `goalieCatch`, `netSwish`, `whistle`, `crowdCheer`, bed `pitch` (a small crowd murmur, a distant whistle, wind in the flags).
+
+**Done when:** registered as 'soccer' (name 'SOCCER', short 'GOAL') after moles, 3 variants (ammo only), 4 tiers, briefing icons, versus-safe through the hook + latent spawns, no console errors, Beginner + Insane play-checked MUTED (goals, catches, a goalie shot = LIFE -1), draw calls, screenshots, the doc text handed to Fable; the agent edits ONLY `js/stages/soccer.js` + its harness.
+
+## 16. SHUFFLE CUPS build brief (Fable, Jon answered 2026-11-01; stage 15) -- WAITING FOR GO
+SIMPLE. Find the plate under the cups. Three ammo-only variants. No bombs anywhere (Jon).
+
+**Scene:** a carnival table under a striped awning, lit by a string of bulbs, the "B.L.A.M. MIDWAY" banner (the fixed logo), prize shelves behind. The CUPS are big tin cups upside down on the table, moving on their own: 3 at Beginner / Advanced, 4 at Very Hard, 5 at Insane. Original art, pixel / dither voxel.
+
+**The mechanic, one SET at a time:** a small hex PLATE (`BLAM.Props.paddle`) is shown on the table for the tier's LOOK time; a cup drops over it (`cupDown`); the cups SHUFFLE (a seeded list of pair swaps, pure in lt; from Very Hard some swaps are a LIFT-AND-PASS where one cup hops over another, `cupSwap {u}`); they stop; now SHOOT THE CUP WITH THE PLATE (`cupGuess`). Right cup: it flies off, the plate shatters, HIT, +300 (+100 if the set had a pass-over). WRONG cup: every cup lifts, the plate is shown where it was for a beat and whisked away, NO hit, no points, no life, the set is over (`cupWrong`). A set you never shoot ends on its own timer the same way. Then the next set. The cups are ONE target spawn per set with a hit zone per cup (`cup0`..`cup4`); a wrong zone uses the `countHit -> false` hook from section 15 (Fable adds it before the agents start), so a wrong guess takes the set without a HIT.
+
+**Difficulty (4 tiers):** look time ~1.4 s -> ~0.5 s, swaps per set 4 -> 10, swap speed, cups 3 / 3 / 4 / 5, sets per round ~10 -> ~14, the guess window ~4 s -> ~2 s. Pass-overs from Very Hard only (reading them is the Insane skill).
+
+**Scoring and briefing:** quota = share rule of sets. "FIND THE PLATE n TIMES OR MORE!", unit `PLATES`, icon a cup with a question mark, `dont: null`, tip "WATCH THE CUP. NOT THE HANDS!" Ammo: **CUPS 1 MIDWAY** free fire, **CUPS 2 QUICK HANDS** 8 per magazine, **CUPS 3 HIGH ROLLER** 12 per magazine. No shot cap.
+
+**Finale:** on clear every cup lifts at once and the plates underneath spell B.L.A.M. **NOT in this stage:** no bombs under cups, no decoys, no second guess after a wrong cup, no barker bystander, no variant-specific mechanics.
+
+**Sounds (inside `js/stages/cups.js`):** `cupDown`, `cupSwap {u}`, `cupStop`, `cupGuess`, `cupWrong`, `cupsReveal`, bed `midway` (calliope far off, crowd, bulbs buzzing).
+
+**Done when:** registered as 'cups' (name 'SHUFFLE CUPS', short 'CUPS') after soccer, 3 variants (ammo only), 4 tiers, briefing icon, versus-safe (the shuffle is pure in seed; the guess is the shared hit record), no console errors, Beginner + Insane play-checked MUTED (right, wrong, timed-out sets), draw calls, screenshots, the doc text handed to Fable; the agent edits ONLY `js/stages/cups.js` + its harness.
+
 ## 3. Open questions for Jon
 1. Approve Alley, Boneyard, Sky Show as the next three, in that order?
 2. Fake-surrender criminal: fun or unfair?

@@ -52,10 +52,16 @@ const ROWS = {
   bone: ['bone', 'bone', 'bone', 'mist', 'mist', 'haze', 'haze'],
   void: Array(7).fill('void'), lime: ['lime', 'lime', 'lime', 'lime', 'green', 'green', 'green']
 };
+// #100: glyphs the menus need that the 5x7 source font lacks (arrows, brackets, =), same doubled-stroke look;
+// added to R.F7 so the hanging signs (targets.js) and the HUD share them
+{ const dbl = r => ({ w: 6, r: r.map(v => ((v << 1) | v) & 63) });
+  Object.assign(R.F7, { '<': dbl([2, 4, 8, 16, 8, 4, 2]), '>': dbl([8, 4, 2, 1, 2, 4, 8]), '=': dbl([0, 0, 31, 0, 31, 0, 0]),
+    '(': { w: 4, r: [3, 6, 12, 12, 12, 6, 3] }, ')': { w: 4, r: [12, 6, 3, 3, 3, 6, 12] }, '*': dbl([0, 4, 21, 14, 21, 4, 0]),
+    '_': dbl([0, 0, 0, 0, 0, 0, 31]), '"': { w: 5, r: [27, 27, 18, 0, 0, 0, 0] } }); }
 const text7w = (str, sc = 1) => R.bold(clean(str)).w * sc;
 function text7(str, x, y, sc = 1, rows = 'gold', outline = 'void', ow = 2) {
   str = clean(str);
-  const rr = typeof rows === 'string' ? ROWS[rows] : rows, t = R.bold(str), w = t.w * sc;
+  const rr = typeof rows === 'string' ? (ROWS[rows] || Array(7).fill(rows)) : rows, t = R.bold(str), w = t.w * sc;
   const cv = cached('t7|' + str + '|' + rr.join(',') + '|' + sc + '|' + outline + '|' + ow, w + 2 * ow, 7 * sc + 2 * ow, g => {
     if (outline && ow) for (let oy = -ow; oy <= ow; oy++) for (let ox = -ow; ox <= ow; ox++) if (ox || oy)
       for (const [px, py] of t.px) prect(g, ow + px * sc + ox, ow + py * sc + oy, sc, sc, outline);
@@ -65,6 +71,13 @@ function text7(str, x, y, sc = 1, rows = 'gold', outline = 'void', ow = 2) {
   return w;
 }
 function text7c(str, cx, y, sc, rows, outline, ow) { return text7(str, Math.round(cx - text7w(str, sc) / 2), y, sc, rows, outline, ow); }
+// ---------- menu text (#100): the bold 7-row font in ONE colour with a 1 px outline, called like text3 ----------
+// (str, x, y, colour, sc, outline). 7 rows and 2-px strokes per letter instead of the 3x5 blocks: what menus and
+// panels use for anything a player has to read. ~7 px per character at sc 1 (text3: 4), 7 px tall (text3: 5).
+const textBw = (str, sc = 1) => text7w(str, sc);
+function textB(str, x, y, c, sc = 1, outline) { return text7(str, x, y, sc, Array(7).fill(c), outline || null, outline ? 1 : 0); }
+function textBc(str, cx, y, c, sc = 1, outline) { return textB(str, Math.round(cx - textBw(str, sc) / 2), y, c, sc, outline); }
+function textBr(str, rx, y, c, sc = 1, outline) { return textB(str, Math.round(rx - textBw(str, sc)), y, c, sc, outline); }
 // ---------- sprites (rows of chars + key) ----------
 function sprite(rows, x, y, sc, key, id) {
   const w = rows[0].length, h = rows.length;
@@ -114,7 +127,7 @@ function dim(x = 0, y = 0, w = RW, h = RH) {
 }
 const H = {
   use(c) { ctx = c; }, get ctx() { return ctx; },
-  rect, box, pill, dim, text3, text3c, text3r, text3w, text7, text7c, text7w, sprite, pixImg, draw, cached, ROWS,
+  rect, box, pill, dim, text3, text3c, text3r, text3w, text7, text7c, text7w, textB, textBc, textBr, textBw, sprite, pixImg, draw, cached, ROWS,
   HEART, HEART_KEY, HEART_OFF, INF, SKULL, prect
 };
 B.HUD = H;
@@ -630,6 +643,12 @@ function ruleLine(parts, cx, y, sc) {
   const full = parts.map(p => p[0]).join(''); let x = Math.round(cx - text3w(full, sc) / 2);
   for (const [s, c] of parts) { text3(s, x, y, c, sc); x += String(s).length * 4 * sc; }
 }
+// #100: the same in the bold menu font (textB); every part advances by its own width + the 1 px letter gap
+const ruleLineBw = (parts, sc = 1) => textBw(parts.map(p => p[0]).join(''), sc);
+function ruleLineB(parts, cx, y, sc = 1) {
+  let x = Math.round(cx - ruleLineBw(parts, sc) / 2);
+  for (const [s, c] of parts) { if (!String(s).length) continue; textB(s, x, y, c, sc); x += textBw(s, sc) + sc; }
+}
 
 // =========================================================================================
 // Outer canvas: our carnival pillar frame (+ the HUD strip in portrait)
@@ -749,5 +768,5 @@ function drawOuter(fr, t, hs) {
   R.outerDirty = true;
 }
 H.markerSpots = () => mkSpots;
-Object.assign(H, { stoneBanner, redPanel, plate, sticker, starburst, bullseyeIcon, bombIcon, redX, ruleLine, drawOuter, hash });
+Object.assign(H, { stoneBanner, redPanel, plate, sticker, starburst, bullseyeIcon, bombIcon, redX, ruleLine, ruleLineB, ruleLineBw, drawOuter, hash });
 })(window.BLAM);

@@ -97,6 +97,16 @@
      cardsUp     : the finale: the real ducks hold up B. L. A. M. and quack in time ('finale' + 'duckHappy' play too)
      + duckAngry on friendly fire (a real duck shot: 'bystander' + 'lifeLost' play too); the ambience bed 'doppelducks'
        (K.stageBeds.lineup: the strip lights' hum, the wall clock ticking, a distant typewriter)
+   GROCERY RUN (stage 11; recipes + the bed are defined in stages/grocery.js with SFXKit.def / K.stageBeds):
+     shelfPop    : a product was shot off its shelf: a cartoon pop + a bag crinkle (opts.u; 'hit' plays too)
+     cartClunk   : a shot product lands in the cart (a wire-basket clank + a soft thump)
+     veggieClimb : a veggie starts climbing the cart: little scrambling footsteps (opts.u)
+     veggiePop   : a climbing veggie was shot: a squelchy crunch (opts.u; 'hit' plays too)
+     veggieIn    : a veggie dropped into the cart unshot: the THUD (the life follows as the 'bomb' event + 'lifeLost'; the
+                   engine's 'bomb' explosion sound is silenced for that one call)
+     scanBeep    : the finale: the cashier duck scans the pile, one beep per item (opts.n)
+     receiptPrint: the finale: the receipt prints up out of the register ('finale' plays too; the HUD duck cheers)
+     + the ambience bed 'grocery' (K.stageBeds.market: a freezer hum, a faint fluorescent buzz, a far cart's wheels rattling)
    Internal (the router plays these itself): duckScared, duckRelief, duckHeckle, duckCheer, duckSad (Deputy Duck's
    pose changes, watched on BLAM.G.duck.pose; duckQuiet(s) mutes the scared / relief ones for s seconds, used by the
    bomb's silent scared face), the title-menu chiptune and a quiet ambience bed per stage.
