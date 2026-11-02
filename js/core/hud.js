@@ -486,7 +486,7 @@ function markerState(r, t) {
   if (!r) return '';
   if (r.kick > 0) return 'kick';
   if (r.empty) return ((t * 4) | 0) % 2 ? 'hotW' : 'hotR';                  // red <-> white, 2 Hz, letters only
-  return 'dim';
+  return '';                                                                 // Jon 2026-11-01: no plaque unless a reload is due
 }
 const markerKind = mode => mode === 'rclick' ? 'mouse' : mode === 'swipe' ? 'swipe' : 'arcade';
 function crosshair(u, v, hot) {
