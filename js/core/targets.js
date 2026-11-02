@@ -224,7 +224,7 @@ class Sign extends Target {
     // pixel grid and never shimmers through the palette / dither pass. The tilt, the hover shake and the scale pop
     // happen only while aimed at (hoverT) or right after a hit / text change (wob).
     const px = 2 * (R.CAM_POS.z - this.group.position.z) * R.TAN_H / R.RH;     // world height of one scene pixel here
-    const bob = Math.round(Math.sin(t * 1.1 + this.phase) * 1.5) * px;         // -2 .. +2 px ladder
+    const bob = this.opts.still ? 0 : Math.round(Math.sin(t * 1.1 + this.phase) * 1.5) * px;   // -2 .. +2 px ladder; still: in-play signs (#116)
     this.pivot.position.set(0, bob * (1 - this.hoverT), 0);
     this.pivot.rotation.z = Math.sin(t * 2.2 + this.phase) * 0.03 * this.hoverT + Math.sin(t * 14) * 0.08 * this.wob;
     this.pivot.rotation.x = Math.sin(t * 1.7 + this.phase) * 0.03 * this.hoverT;

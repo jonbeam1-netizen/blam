@@ -158,7 +158,7 @@ class Menu {
     this.items = items.map(it => {
       // signs hang on the plane z (default 1.5); sizes are authored for z = 0 and scaled by distance so they keep their screen size
       const z = it.z == null ? 1.5 : it.z, k = (R.CAM_POS.z - z) / R.CAM_POS.z;
-      const sign = new Tg.Sign({ text: it.text, sub: it.sub, color: it.color || 'crimson', s: (it.s || 0.03) * k, hang: 0, minW: it.minW || 0, font: it.font });   // ropes: routeRopes()
+      const sign = new Tg.Sign({ text: it.text, sub: it.sub, color: it.color || 'crimson', s: (it.s || 0.03) * k, hang: 0, minW: it.minW || 0, font: it.font, still: it.still });   // ropes: routeRopes()
       R.screenToWorld(it.u, it.v, z, sign.group.position);
       R.scene.add(sign.group); sign.group.updateMatrixWorld(true);   // shootable before the first render
       return Object.assign({ sign }, it);
@@ -608,7 +608,7 @@ UI.screens.play = {
     const g = G(); g.run = a.run; g.placeDuck(a.run.practice ? 'practice' : 'mini'); g.duckPose('idle');
     g.practiceMenu = this.menu = a.run.practice ? practiceMenu(a.run) : null;
     // #95: a small MENU sign in a corner on every stage (not practice, not versus): shooting it pauses the run
-    this.ctl = !this.versus && !a.run.practice ? new Menu([{ id: 'menu', text: 'MENU', keep: true, color: 'slate', s: MENU_SIGN.s, u: MENU_SIGN.u, v: MENU_SIGN.v, z: MENU_SIGN.z,
+    this.ctl = !this.versus && !a.run.practice ? new Menu([{ id: 'menu', text: 'MENU', keep: true, still: true, color: 'slate', s: MENU_SIGN.s, u: MENU_SIGN.u, v: MENU_SIGN.v, z: MENU_SIGN.z,
       act: () => this.pause() }]) : null;
   },
   exit() {
@@ -696,12 +696,12 @@ const MENU_SIGN = { u: 0.058, v: 0.092, s: 0.02, z: 3.4 };
 // the crimson FINISH sign (PC and touch), which ends the session like ESC (-> practice results). The current tier
 // wears its colour, the others are slate; shooting one switches the practice rules live (Run.setTier). Bold font
 // (#100) at 1 px a voxel; 'keep' signs: they spark, they don't shatter.
-const PRACTICE_SIGNS = { u: 0.125, v0: 0.57, dv: 0.062, s: 0.02 };
+const PRACTICE_SIGNS = { u: 0.125, v0: 0.705, dv: 0.047, s: 0.017 };   // #116: below the brown floor edge, above the HUD band, a tad smaller, still
 function practiceMenu(run) {
   const P = PRACTICE_SIGNS, minW = Math.max(...S.TIERS.map(T => R.bold(T.name).w));   // one width for the whole list
   const items = S.TIERS.map((T, i) => ({ id: 'tier' + i, text: T.name, keep: true, color: i === run.tier ? T.sign : 'slate',
-    s: P.s, u: P.u, v: P.v0 + i * P.dv, z: 1.5, minW, act: () => G().practiceTier(i) }));
-  items.push({ id: 'finish', text: 'FINISH', keep: true, color: 'crimson', s: P.s, u: P.u, v: P.v0 + 4 * P.dv, z: 1.5, minW,
+    s: P.s, u: P.u, v: P.v0 + i * P.dv, z: 1.5, minW, still: true, act: () => G().practiceTier(i) }));
+  items.push({ id: 'finish', text: 'FINISH', keep: true, color: 'crimson', s: P.s, u: P.u, v: P.v0 + 4 * P.dv, z: 1.5, minW, still: true,
     act: () => { if (run.state !== 'end') run.end('done'); } });
   const menu = new Menu(items);
   for (const it of menu.items) it.sign.phase = 0;    // the whole list bobs together, so the gaps between the boards stay even
