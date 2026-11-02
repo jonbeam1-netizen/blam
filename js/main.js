@@ -6,13 +6,13 @@
 window.BLAM = window.BLAM || {};
 (function (B) {
 const R = B.R, I = B.Input, H = B.HUD, S = B.Stage, Tg = B.Targets, Save = B.Save, SFX = B.SFX, UI = B.UI, N = B.Net;
-const BUILD = '0.036';                      // bump on every publish (shown on the title status line)
+const BUILD = '0.037';                      // bump on every publish (shown on the title status line)
 const Q = new URLSearchParams(location.search);
 // ?slow=0.25 (dev/testing): single-player stage clock runs at that rate, so slow tools (screenshot -> click
 // takes seconds) can still shoot a target that is really there. Versus always runs on the wall clock.
 const SLOW = Q.has('slow') ? Math.max(0.05, Math.min(1, parseFloat(Q.get('slow')) || 1)) : 1;
 const G = B.G = { BUILD, t: 0, screen: null, screenName: '', timers: [], fps: 60, shake: 0, crossHot: 0, run: null, course: null,
-  mode: 'title', free: { tier: 0 }, skin: 0, touch: I.touch, toastMsg: null, statusText: '', stageLabel: '', lastStep: performance.now(), slow: SLOW };
+  mode: 'title', free: { tier: 0, page: 0, level: null }, skin: 0, touch: I.touch, toastMsg: null, statusText: '', stageLabel: '', lastStep: performance.now(), slow: SLOW };
 const VS_BRIEF = 5.5;                        // seconds of versus briefing before the countdown (both sides)
 const urlSeed = () => Q.has('seed') ? (parseInt(Q.get('seed'), 10) >>> 0) : null;
 const newSeed = () => urlSeed() != null ? urlSeed() : ((Math.random() * 4294967296) >>> 0);
@@ -302,7 +302,7 @@ G.gameOver = () => {
 };
 // ---- free play ----
 G.startFree = (stage, variant, tier) => {
-  G.mode = 'free'; G.free.tier = tier;
+  G.mode = 'free'; G.free.tier = tier; G.free.level = stage;              // #110: FREE PLAY reopens on this level's screen
   const run = new S.Run({ stage, tier, variant, seed: newSeed(), gun: G.gun, names: [Save.settings.name] });
   setRun(run);
   G.statusText = 'FREE PLAY  ' + tierName(tier) + '  ' + stageName(stage, variant);
@@ -313,7 +313,7 @@ G.startFree = (stage, variant, tier) => {
 // No briefing: straight into the 3-2-1 countdown. Deputy Duck stands in the scene (placeDuck('practice')); the
 // tier signs over his head (play screen) call G.practiceTier. ESC ends it (key handler) -> practice results.
 G.startPractice = tier => {
-  G.mode = 'practice'; G.free.tier = tier;
+  G.mode = 'practice'; G.free.tier = tier; G.free.level = null;           // back from practice = the level picker
   Tg.clearDecals(); try { Tg.clearChips(); } catch (e) {}
   const run = new S.Run({ stage: 'range', tier, variant: 0, seed: newSeed(), practice: true, gun: G.gun, names: [Save.settings.name] });
   setRun(run);
@@ -371,11 +371,15 @@ I.onKey((k, e) => {
   else if (k >= '1' && k <= '3') { R.setMode(+k); G.toast('DITHER MODE ' + k + ': ' + R.MODE_NAMES[+k], 1.2); }
   else if (k === 'Escape') {
     if (G.screenName === 'title') return;
+    // #110: a screen with its own sub-level (FREE PLAY / HIGH SCORES level screens) steps back up to its picker first
+    if (G.screen && typeof G.screen.back === 'function' && G.screen.back()) return;
     // practice: ESC finishes the session (-> its results); on those results ESC goes back to FREE PLAY
     if (G.screenName === 'play' && G.run && G.run.practice) { if (G.run.state !== 'end') G.run.end('done'); return; }
     if (G.screenName === 'practiceresults') { G.go('free'); return; }
     if (G.run && G.run.versus) { N.leave(); G.vsAbort('YOU LEFT THE MATCH'); return; }
     if (G.screenName === 'lobby') N.leave();
+    // #110: a free-play round (briefing / play / results) goes back to FREE PLAY (the level's screen), like the QUIT sign
+    if (G.mode === 'free' && (G.screenName === 'briefing' || G.screenName === 'play' || G.screenName === 'results')) { G.go('free'); return; }
     G.go('title');
   }
 });

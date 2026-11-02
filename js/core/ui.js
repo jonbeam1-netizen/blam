@@ -158,9 +158,14 @@ class Menu {
     this.items = items.map(it => {
       // signs hang on the plane z (default 1.5); sizes are authored for z = 0 and scaled by distance so they keep their screen size
       const z = it.z == null ? 1.5 : it.z, k = (R.CAM_POS.z - z) / R.CAM_POS.z;
-      const sign = new Tg.Sign({ text: it.text, sub: it.sub, color: it.color || 'crimson', s: (it.s || 0.03) * k, hang: 0, minW: it.minW || 0, font: it.font, still: it.still });   // ropes: routeRopes()
-      R.screenToWorld(it.u, it.v, z, sign.group.position);
+      // #110: { card: stageId, lines, lineCols } builds a level-card board (UI.CardSign, 1 voxel = 1 scene px)
+      const pos = R.screenToWorld(it.u, it.v, z, new THREE.Vector3());
+      const sign = it.card ? new UI.CardSign({ lines: it.lines, lineCols: it.lineCols, color: it.color || 'wood', s: pxWorld(pos), hang: 0 })
+        : new Tg.Sign({ text: it.text, sub: it.sub, color: it.color || 'crimson', s: (it.s || 0.03) * k, hang: 0, minW: it.minW || 0, font: it.font, still: it.still });   // ropes: routeRopes()
+      sign.group.position.copy(pos);
+      if (it.card) sign.group.rotation.x = R.CAM_PITCH;               // square to the camera: no keystone, the picture fits its window
       R.scene.add(sign.group); sign.group.updateMatrixWorld(true);   // shootable before the first render
+      if (it.card) snapCard(sign);
       return Object.assign({ sign }, it);
     });
     this.busy = 0; this.hover = null;
@@ -274,7 +279,7 @@ UI.screens.title = {
     this.menu = new Menu([
       { text: 'PLAY', color: 'crimson', u: 0.47, v: 0.475, s: 0.046, act: () => g.go('tiers') },
       { text: 'VERSUS', color: 'blue', u: 0.33, v: 0.645, s: 0.029, act: () => g.go('lobby') },
-      { text: 'FREE PLAY', color: 'amber', u: 0.6, v: 0.645, s: 0.029, act: () => g.go('free') },
+      { text: 'FREE PLAY', color: 'amber', u: 0.6, v: 0.645, s: 0.029, act: () => g.go('free', { picker: true }) },
       { text: 'SETTINGS', color: 'slate', u: 0.33, v: 0.8, s: 0.029, act: () => g.go('settings') },
       { text: 'HIGH SCORES', color: 'plum', u: 0.6, v: 0.8, s: 0.029, act: () => g.go('scores') }
     ]);
@@ -410,105 +415,313 @@ UI.screens.tiers = {
 };
 
 // =========================================================================================
-// FREE PLAY: any stage (and variant) at any tier
+// LEVEL PICKERS (#110): FREE PLAY and HIGH SCORES are two levels deep. Screen 1 = a grid of LEVEL CARDS (a pixel
+// picture per level, core/cards.js, on a shootable wood board with the level's name), 8 a page in two rows of four,
+// NEXT > / < PREV on the right. Shooting a card opens that level's own screen: the big card + name top-left, then
+// its variants ("stages") as signs (FREE PLAY) or a table of local bests per tier (HIGH SCORES). BACK / ESC = up one.
+// Tall phones (portrait.js): the cards are tiles on the outer canvas (curtain + shelf) you tap; the game rect keeps
+// the TIER / BACK / NEXT / PREV signs.
+// =========================================================================================
+const CARD_PER = 8;
+const CARD_CX = [128, 194, 260, 326], CARD_CY = [65, 125];          // px centres of the 4 x 2 card grid (boards 62 x 56)
+const NAV_U = 0.915, NAV_S = 0.024, NAV_V = [0.42, 0.6];            // NEXT > / < PREV (right side, clear of the gun)
+const BOTTOM_V = 0.87;                                               // TIER / BACK row
+const _pj = new THREE.Vector3();
+const _pjB = new THREE.Vector3();
+function projU(p) { _pj.copy(p).project(R.camera); return [(_pj.x + 1) / 2 * RW, (1 - _pj.y) / 2 * RH]; }   // unrounded px
+// world size of one scene pixel at p (the card boards are built 1 voxel = 1 px so the HUD picture fits their window)
+function pxWorld(p) { R.camera.updateMatrixWorld(true); const a = projU(p)[0]; return 0.05 / (projU(_pjB.copy(p).setX(p.x + 0.05))[0] - a); }
+// a level card board: a wood sign with a recessed window the size of the picture + its outline (58 x 34) and the
+// level's name under it (one or two bold lines). Built from a few boxes (not one box per voxel) + the letter voxels.
+// It never tilts or grows on hover (the HUD picture has to stay on its window): hover = the hot material + a ring.
+class CardSign extends Tg.Sign {
+  build() {
+    const o = this.opts, st = Tg.SIGN_STYLES[o.color] || Tg.SIGN_STYLES.wood, s = o.s;
+    if (this.mesh) { this.pivot.remove(this.mesh); this.mesh.geometry.dispose(); this.parts.length = 0; }
+    const CW = B.Cards.W + 2, CH = B.Cards.H + 2, W = CW + 4, LH = 9, NB = 2 * LH - 2;
+    const Hh = 2 + CH + 1 + NB + 3, ox = -(W - 1) / 2 * s, oy = -(Hh - 1) / 2 * s, v = new R.Vox();
+    const box = (i0, r0, i1, r1, k0, k1, c) => v.bx(ox + (i0 - 0.5) * s, oy + (Hh - 1 - r1 - 0.5) * s, (k0 - 0.5) * s, ox + (i1 + 0.5) * s, oy + (Hh - 1 - r0 + 0.5) * s, (k1 + 0.5) * s, PAL[c]);
+    const wr1 = 2 + CH - 1;                                                    // last window row
+    box(1, 0, W - 2, 0, -1, 1, st[3]); box(1, Hh - 1, W - 2, Hh - 1, -1, 1, st[3]);   // frame (raised lip), corners cut
+    box(0, 1, 0, Hh - 2, -1, 1, st[3]); box(W - 1, 1, W - 1, Hh - 2, -1, 1, st[3]);
+    box(1, 1, W - 2, 1, -1, 0, st[1]); box(1, Hh - 2, W - 2, Hh - 2, -1, 0, st[2]);  // highlight / shade rows
+    box(1, 2, 1, Hh - 3, -1, 0, st[0]); box(W - 2, 2, W - 2, Hh - 3, -1, 0, st[0]);   // body
+    box(2, wr1 + 1, W - 3, Hh - 3, -1, 0, st[0]);
+    box(2, 2, W - 3, wr1, -1, -1, 'void');                                    // the picture window (recessed)
+    // the name: bold letters + a drop shadow, like Tg.Sign
+    const lines = (o.lines || []).slice(0, 2), cols = o.lineCols || [], list = [], has = new Set();
+    const r0 = wr1 + 2 + (lines.length < 2 ? Math.floor((NB - 7) / 2) : 0);
+    lines.forEach((ln, li) => {
+      const tt = R.bold(String(ln).toUpperCase()), x0 = Math.floor((W - tt.w) / 2), rr = r0 + li * LH, col = PAL[cols[li] || o.textCol || 'bone'];
+      for (const [x, y] of tt.px) has.add((x0 + x) + ',' + (rr + y));
+      for (const [x, y] of tt.px) {
+        list.push([x0 + x, Hh - 1 - (rr + y), 1, col]);
+        const sx = x0 + x + 1, sy = rr + y + 1;
+        if (!has.has(sx + ',' + sy)) { has.add(sx + ',' + sy); list.push([sx, Hh - 1 - sy, 1, PAL.void]); }
+      }
+    });
+    v.vox(list, s, ox, oy, 0);
+    this.mesh = v.mesh(R.MAT.obj);
+    // chips for the shatter: a coarse sample of the board's front colours (bigger chips, 5th element)
+    const chips = [];
+    for (let r = 0; r < Hh; r += 2) for (let i = 0; i < W; i += 2) {
+      const edge = i === 0 || r === 0 || i === W - 1 || r === Hh - 1, win = i >= 2 && i <= W - 3 && r >= 2 && r <= wr1;
+      chips.push([i, Hh - 1 - r, 0, PAL[edge ? st[3] : win ? (o.chipCol || 'midnight') : st[0]], 1.7]);
+    }
+    this.part(this.mesh, chips, s, ox, oy, 0);
+    this.pivot.add(this.mesh);
+    this.w = W * s; this.h = Hh * s; this.winY = ((Hh - 1) / 2 - (2 + (CH - 1) / 2)) * s; this.cw = CW; this.ch = CH;
+    this.alive = true; this.shootable = true; this.group.visible = true;
+  }
+  update(dt) { this.wob = 0; this.hoverT = this.hover ? 1 : 0; this.pivot.position.set(0, 0, 0); this.pivot.rotation.set(0, 0, 0); this.pivot.scale.set(1, 1, 1); }
+}
+UI.CardSign = CardSign;
+// top-left px of a card board's picture (inside its 1 px outline), from the live camera (shake included)
+function cardPicTL(sign) {
+  _sp.set(0, sign.winY, 0); sign.group.localToWorld(_sp);
+  const [fx, fy] = projU(_sp);
+  return [Math.round(fx - sign.cw / 2 + 0.01) + 1, Math.round(fy - sign.ch / 2 + 0.01) + 1];
+}
+// nudge a new card board so its window starts on a whole pixel (the HUD picture lands on it exactly)
+function snapCard(sign) {
+  sign.group.updateMatrixWorld(true);
+  _sp.set(0, sign.winY, 0); sign.group.localToWorld(_sp);
+  const [fx, fy] = projU(_sp), ex = fx - sign.cw / 2, ey = fy - sign.ch / 2, s = sign.opts.s;
+  sign.group.position.x += (Math.round(ex) - ex) * s; sign.group.position.y -= (Math.round(ey) - ey) * s;
+  sign.group.updateMatrixWorld(true);
+}
+// the cards on the HUD: each live board's picture, a blinking ring while aimed at
+function drawCards(menu, t) {
+  for (const it of menu.items) {
+    if (!it.card || !it.sign.alive) continue;
+    const [x, y] = cardPicTL(it.sign);
+    B.Cards.drawTL(it.card, x, y, t);
+    if (it.sign.hover && blink(t, 5)) {
+      const w = B.Cards.W + 4, h = B.Cards.H + 4;
+      H.rect(x - 2, y - 2, w, 1, 'lemon'); H.rect(x - 2, y + h - 3, w, 1, 'lemon'); H.rect(x - 2, y - 2, 1, h, 'lemon'); H.rect(x + w - 3, y - 2, 1, h, 'lemon');
+    }
+  }
+}
+// the outer-canvas layout box portrait.js gets (same numbers as HUD.drawOuter's hs.panel)
+function outerL() { const o = R.frame.outer, gy = Math.round(o.gy); return { W: o.OW, H: o.OH, top: gy, bot: gy + Math.round(o.gh), cx: Math.round(o.OW / 2) }; }
+// portrait tile slots: 3 columns, rows in the curtain under the title, then on the shelf under the game rect
+const TILE = { w: 62, h: 56, gx: 6, gy: 2 };
+function cardSlots(L) {
+  const out = [], x0 = Math.round(L.cx - (3 * TILE.w + 2 * TILE.gx) / 2);
+  const row = y => { for (let c = 0; c < 3; c++) out.push({ x: x0 + c * (TILE.w + TILE.gx), y }); };
+  for (let y = 33; y + TILE.h <= L.top - 3; y += TILE.h + TILE.gy) row(y);
+  for (let y = L.bot + 5; y + TILE.h <= L.H - 12; y += TILE.h + TILE.gy) row(y);
+  if (!out.length) row(L.bot + 5);
+  return out;
+}
+UI.cardSlots = cardSlots; UI.TILE = TILE; UI.outerL = outerL;
+const perPage = () => tall() ? cardSlots(outerL()).length : CARD_PER;
+// a picker entry -> what its card says and looks like
+function cardLook(id) {
+  if (id === 'practice') return { lines: ['PRACTICE', 'NO CLOCK'], lineCols: ['bone', 'lime'], color: 'green' };
+  if (id === 'course') return { lines: ['COURSE'], color: 'plum' };
+  return { lines: B.Cards.label(id, B.Cards.W), color: 'wood' };
+}
+UI.cardLook = cardLook;
+// the big card + level name, top-left (landscape level screens)
+function levelHead(id, t, sub, sub2) {
+  const x = 12, y = 9, cw = B.Cards.W * 2, ch = B.Cards.H * 2;
+  H.box(x - 5, y - 5, cw + 10, ch + 10, 'chestnut', 'tan', 'walnut');
+  B.Cards.drawTL(id, x, y, t, 2);
+  const d = S.defs[id], name = id === 'course' ? 'COURSE' : String(d ? d.name : id).toUpperCase(), nx = x + cw + 14;
+  const sc = H.text7w(name, 2) <= RW - nx - 6 ? 2 : 1;
+  H.text7(name, nx, 12, sc, 'gold', 'void', 2);
+  let yy = 12 + 7 * sc + 8;
+  if (sub) { yy = linesB(sub, nx, yy, RW - nx - 8, 'cyan', 'l'); }
+  if (sub2) linesB(sub2, nx, yy + 2, RW - nx - 8, 'mist', 'l');
+}
+UI.levelHead = levelHead;
+// one picker page of card items (+ NEXT / PREV when paged). entries: ids; act(id); state: {page}
+function pickerItems(scr, entries, state, act) {
+  const per = perPage(), pages = Math.max(1, Math.ceil(entries.length / per));
+  state.page = Math.max(0, Math.min(pages - 1, state.page | 0)); scr.pages = pages; scr.per = per;
+  const items = [], tok = scr.tok;
+  if (!tall()) entries.slice(state.page * per, state.page * per + per).forEach((id, i) => {
+    items.push(Object.assign({ id: 'card:' + id, card: id, u: CARD_CX[i % 4] / RW, v: CARD_CY[i >> 2] / RH, act: () => { if (G().screen === scr && scr.tok === tok) act(id); } }, cardLook(id)));
+  });
+  const flip = d => { if (G().screen !== scr || scr.tok !== tok) return; state.page = (state.page + d + pages) % pages; scr.rebuild(); };
+  if (pages > 1) {
+    items.push({ id: 'page', text: 'NEXT >', color: 'blue', s: NAV_S, u: NAV_U, v: NAV_V[0], act: () => flip(1) });
+    items.push({ id: 'pageprev', text: '< PREV', color: 'blue', s: NAV_S, u: NAV_U, v: NAV_V[1], act: () => flip(-1) });
+  }
+  return items;
+}
+// portrait tap on a tile (outer px); tiles are laid out by drawPortrait: [{x, y, w, h, act}]
+function tapTile(scr, u, v) {
+  const o = R.frame.outer, ox = o.gx + u * o.gw, oy = o.gy + v * o.gh, tok = scr.tok;
+  const tl = (scr.tiles || []).find(r => ox >= r.x && ox < r.x + r.w && oy >= r.y && oy < r.y + r.h);
+  if (!tl) return false;
+  SFX.play('menuShoot'); scr.tapFlash = { key: tl.key, t: 0.18 };
+  G().after(0.12, () => { if (G().screen === scr && scr.tok === tok) tl.act(); });
+  return true;
+}
+UI.tapTile = tapTile;
+const tierSignItem = (g, onChange) => {
+  const T = S.TIERS[g.free.tier];
+  return { id: 'tier', text: 'TIER: ' + T.name, keep: true, color: T.sign, s: 0.024, u: 0.37, v: BOTTOM_V, act: sign => {
+    g.free.tier = (g.free.tier + 1) % 4; const T2 = S.TIERS[g.free.tier]; sign.opts.color = T2.sign; sign.setText('TIER: ' + T2.name); if (onChange) onChange(); } };
+};
+// a variant sign's two lines: "MART 2  12 ITEMS OR LESS" / "12 PER MAG   BEST 4520"
+function variantText(id, v, tier) {
+  const d = S.get(id), b = B.Save.best(id + ':' + v, tier);
+  return { text: (d.short || d.name) + ' ' + (v + 1) + '  ' + ((d.variantNames || [])[v] || ''), sub: B.Ammo.describe(d.config(tier, v).ammo) + '   ' + (b ? 'BEST ' + b : 'NO BEST YET'), best: b };
+}
+UI.variantText = variantText;
+
+// =========================================================================================
+// FREE PLAY: the level picker (PRACTICE first, then every level), then a level's own screen with its stages
+// state lives in G.free: { tier, page, level } (level = the stage id whose screen is open, null = the picker)
 // =========================================================================================
 UI.screens.free = {
-  enter() {
+  enter(a) {
     const g = G(); g.placeDuck('title'); g.duckPose('idle'); rangeRoom();
-    this.build();
+    if (a && a.picker) g.free.level = null;
+    this.tok = 0; this.build();
   },
-  // the 6-slot grid: PRACTICE always takes the top-left slot (every page), then 5 stage signs per page; with more
-  // registered stage variants a PAGE sign (right side) cycles the pages
+  entries: () => ['practice'].concat(S.order),
   build() {
-    const g = G(), items = [], PER = 5;
-    for (const id of S.order) { const d = S.get(id); for (let v = 0; v < d.variants; v++) items.push({ stage: id, variant: v }); }
-    const pages = Math.max(1, Math.ceil(items.length / PER));
-    g.free.page = Math.max(0, Math.min(pages - 1, g.free.page | 0));
-    // #100 bold lettering: the stage signs carry long variant names (COUNT YOUR SHOTS), so they run at 0.022
-    const slot = i => ({ u: [0.34, 0.655][i % 2], v: [0.27, 0.49, 0.71][i >> 1] });
-    const menuItems = [Object.assign({ id: 'practice', text: 'PRACTICE', sub: 'RANGE, NO CLOCK', color: 'green', s: 0.022,
-      act: () => g.startPractice(g.free.tier) }, slot(0))];
-    items.slice(g.free.page * PER, g.free.page * PER + PER).forEach((it, i) => menuItems.push(Object.assign({ text: (S.get(it.stage).short || 'RANGE') + ' ' + (it.variant + 1), sub: (S.get(it.stage).variantNames || [])[it.variant] || '',
-      color: 'wood', s: 0.022, stage: it.stage, variant: it.variant,
-      act: () => g.startFree(it.stage, it.variant, g.free.tier) }, slot(i + 1))));
-    const T = S.TIERS[g.free.tier];
-    const lastRow = pages > 1 || Math.ceil(menuItems.length / 2) >= 3 ? 0.87 : 0.75;   // paged: the bottom row stays put
-    menuItems.push({ id: 'tier', text: 'TIER: ' + T.name, keep: true, color: T.sign, s: 0.024, u: 0.37, v: lastRow, act: sign => {
-      g.free.tier = (g.free.tier + 1) % 4; const T2 = S.TIERS[g.free.tier]; sign.opts.color = T2.sign; sign.setText('TIER: ' + T2.name); } });
-    menuItems.push({ text: 'BACK', color: 'slate', s: 0.026, u: 0.64, v: lastRow, act: () => g.go('title') });
-    // paging (#99): NEXT > above, < PREV below, both on the right side (the big duck stands bottom-left); both wrap.
-    // #100: one-line signs (bold lettering is wider); the page number is a caption under NEXT (draw)
-    const flip = d => { if (G().screen !== this) return; g.free.page = (g.free.page + d + pages) % pages; this.menu.dispose(); this.build(); };
-    this.pages = pages;
-    if (pages > 1) menuItems.push({ id: 'page', text: 'NEXT >', color: 'blue', s: 0.026, u: 0.9, v: 0.42, act: () => flip(1) });
-    if (pages > 1) menuItems.push({ id: 'pageprev', text: '< PREV', color: 'blue', s: 0.026, u: 0.9, v: 0.6, act: () => flip(-1) });
-    this.menu = new Menu(menuItems);
+    const g = G(), F = g.free; this.tok = (this.tok | 0) + 1; this.tallBuilt = tall(); this.tiles = [];
+    if (F.level && !S.defs[F.level]) F.level = null;
+    let items;
+    if (!F.level) {
+      items = pickerItems(this, this.entries(), F, id => {
+        if (id === 'practice') { g.startPractice(F.tier); return; }
+        F.level = id; this.rebuild();
+      });
+      items.push(tierSignItem(g));
+      items.push({ text: 'BACK', color: 'slate', s: 0.026, u: 0.64, v: BOTTOM_V, act: () => { if (G().screen === this) g.go('title'); } });
+    } else {
+      const id = F.level, d = S.get(id), n = d.variants | 0, tok = this.tok;
+      items = [];
+      if (!tall()) {
+        // one sign a stage: name line + "ammo   BEST n"; one shared width; stacked under the big card
+        const tx = []; for (let v = 0; v < n; v++) tx.push(variantText(id, v, F.tier));
+        const minW = Math.max(...tx.map(o => Math.max(R.bold(o.text).w, R.bold(o.sub).w)));
+        const sh = 25, y0 = 84, y1 = 196, gap = n > 1 ? Math.min(10, (y1 - y0 - n * sh) / (n - 1)) : 0, top = y0 + ((y1 - y0) - (n * sh + (n - 1) * gap)) / 2;
+        tx.forEach((o, v) => items.push({ id: 'var' + v, variant: v, text: o.text, sub: o.sub, subCol: 'yellow', color: 'wood', s: 0.022, minW,
+          u: 0.563, v: (top + sh / 2 + v * (sh + gap)) / RH, act: () => { if (G().screen === this && this.tok === tok) g.startFree(id, v, F.tier); } }));
+      }
+      items.push(tierSignItem(g, () => this.refreshVariants()));
+      items.push({ text: 'BACK', color: 'slate', s: 0.026, u: 0.64, v: BOTTOM_V, act: () => { if (G().screen === this && this.tok === tok) this.back(); } });
+    }
+    this.menu = new Menu(items);
+  },
+  rebuild() { if (this.menu) this.menu.dispose(); this.build(); },
+  // the tier changed: every stage sign shows that tier's ammo rule and best
+  refreshVariants() {
+    const F = G().free;
+    for (const it of this.menu.items) if (it.variant != null && it.sign.alive) { const o = variantText(F.level, it.variant, F.tier); it.sign.setText(o.text, o.sub); }
+  },
+  // ESC / BACK on a level's screen: up to the picker, on the page that holds this level
+  back() {
+    const F = G().free; if (!F.level) return false;
+    const i = this.entries().indexOf(F.level); F.level = null;
+    if (i >= 0) F.page = Math.floor(i / perPage());
+    this.rebuild(); return true;
   },
   exit() { this.menu.dispose(); },
-  update(dt, t) { this.menu.update(dt, t); },
+  update(dt, t) {
+    if (tall() !== this.tallBuilt || (tall() && !G().free.level && perPage() !== this.per)) this.rebuild();   // rotated / resized
+    this.menu.update(dt, t);
+    if (this.tapFlash) { this.tapFlash.t -= dt; if (this.tapFlash.t <= 0) this.tapFlash = null; }
+  },
   draw(t) {
     if (tall()) return;                                                       // portrait: drawPortrait() has the text
-    header('FREE PLAY', 'SHOOT A STAGE TO PLAY IT');
-    const pr = this.menu.find('practice'); if (pr) caption(pr.sign, 'NO TIMER, NO QUOTA', 'lime', 3);
-    const pg = this.menu.find('page'); if (pg) caption(pg.sign, 'PAGE ' + (G().free.page + 1) + '/' + this.pages, 'cyan', 5);
-    for (const it of this.menu.items) if (it.stage) {
-      const b = B.Save.best(it.stage + ':' + it.variant, G().free.tier);
-      caption(it.sign, b ? 'BEST ' + b : B.Ammo.describe(S.get(it.stage).config(G().free.tier, it.variant).ammo), b ? 'yellow' : 'mist', 3);
+    const F = G().free;
+    if (!F.level) {
+      header('FREE PLAY', 'SHOOT A LEVEL TO PICK A STAGE');
+      drawCards(this.menu, t);
+      const pg = this.menu.find('page'); if (pg) caption(pg.sign, 'PAGE ' + (F.page + 1) + '/' + this.pages, 'cyan', 5);
+    } else {
+      const d = S.get(F.level), n = d.variants | 0;
+      levelHead(F.level, t, 'SHOOT A STAGE TO PLAY IT', n + (n === 1 ? ' STAGE' : ' STAGES'));
     }
     statusLine('BUILD ' + G().BUILD);
   },
-  fire(u, v, inside) { menuFire(this, u, v, inside); }
+  fire(u, v, inside) { if (tall() && !inside && tapTile(this, u, v)) return; menuFire(this, u, v, inside); }
 };
 
 // =========================================================================================
-// HIGH SCORES: local bests per stage / tier
+// HIGH SCORES: the same picker (COURSE first, then every level); a level's screen is its table of local bests:
+// one row a stage (variant), one column a tier, "-" where there is none
 // =========================================================================================
-// every stage variant + COURSE, as [label, save key] (shared with the portrait layout)
+// every stage variant + COURSE, as [label, save key] (kept for anything that wants the flat list)
 const scoreRows = UI.scoreRows = () => {
   const rows = [];
   for (const id of S.order) { const d = S.get(id); for (let v = 0; v < d.variants; v++) rows.push([(d.short || 'RANGE') + ' ' + (v + 1), id + ':' + v]); }
   rows.push(['COURSE', 'course']);
   return rows;
 };
+// one level's rows: [label, save key] (COURSE: one row)
+const levelScoreRows = UI.levelScoreRows = id => {
+  if (id === 'course') return [['COURSE TOTAL', 'course']];
+  const d = S.get(id), rows = [];
+  for (let v = 0; v < d.variants; v++) rows.push([(v + 1) + ' ' + ((d.variantNames || [])[v] || (d.short || d.name) + ' ' + (v + 1)), id + ':' + v]);
+  return rows;
+};
+const TIER_AB = UI.TIER_AB = ['BEG', 'ADV', 'V.HARD', 'INSANE'];
 UI.screens.scores = {
   enter() {
     const g = G(); g.placeDuck('title'); g.duckPose('cheer', 'idle', 1.2); rangeRoom();
-    this.page = 0; this.pages = 1;
-    // #100: rows are in the bold menu font now, so the table is paged (22 rows a page here, the portrait strip
-    // fits its own count); NEXT > cycles the pages and wraps (a keep sign: it sparks, it doesn't shatter)
-    const items = [{ text: 'BACK', color: 'crimson', u: 0.6, v: 0.86, s: 0.03, act: () => g.go('title') }];
-    if (scoreRows().length > 16) items.push({ id: 'next', text: 'NEXT >', color: 'blue', keep: true, u: 0.4, v: 0.86, s: 0.03,
-      act: () => { this.page = (this.page + 1) % Math.max(1, this.pages); } });
+    this.state = { page: 0 }; this.level = null; this.tok = 0;
+    this.build();
+  },
+  entries: () => ['course'].concat(S.order),
+  build() {
+    const g = G(); this.tok = (this.tok | 0) + 1; this.tallBuilt = tall(); this.tiles = [];
+    const tok = this.tok;
+    let items;
+    if (!this.level) {
+      items = pickerItems(this, this.entries(), this.state, id => { this.level = id; this.rebuild(); });
+      items.push({ text: 'BACK', color: 'crimson', u: 0.6, v: BOTTOM_V, s: 0.03, act: () => { if (G().screen === this && this.tok === tok) g.go('title'); } });
+    } else {
+      items = [{ text: 'BACK', color: 'crimson', u: 0.6, v: BOTTOM_V, s: 0.03, act: () => { if (G().screen === this && this.tok === tok) this.back(); } }];
+    }
     this.menu = new Menu(items);
   },
+  rebuild() { if (this.menu) this.menu.dispose(); this.build(); },
+  back() {
+    if (!this.level) return false;
+    const i = this.entries().indexOf(this.level); this.level = null;
+    if (i >= 0) this.state.page = Math.floor(i / perPage());
+    this.rebuild(); return true;
+  },
   exit() { this.menu.dispose(); },
-  update(dt, t) { this.menu.update(dt, t); },
+  update(dt, t) {
+    if (tall() !== this.tallBuilt || (tall() && !this.level && perPage() !== this.per)) this.rebuild();
+    this.menu.update(dt, t);
+    if (this.tapFlash) { this.tapFlash.t -= dt; if (this.tapFlash.t <= 0) this.tapFlash = null; }
+  },
   draw(t) {
     if (tall()) return;                                                       // portrait: drawPortrait() has the text
-    header('HIGH SCORES', 'LOCAL BESTS ON THIS DEVICE');
-    // 0.021: TWO BLOCKS side by side. #100: bold rows, 11 per block, 22 a page; NEXT > pages through the rest
-    const rows = scoreRows(), PB = 11, per = PB * 2;
-    this.pages = Math.max(1, Math.ceil(rows.length / per)); this.page = Math.min(this.page, this.pages - 1);
-    const pr = rows.slice(this.page * per, this.page * per + per), hb = Math.ceil(pr.length / 2), blocks = [pr.slice(0, hb), pr.slice(hb)];
-    const lw = 48, cw = 38, bw = lw + 4 * cw, gapB = 10, totalW = bw * 2 + gapB, xL = Math.round((RW - totalW) / 2), y0 = 40, rh = 11;
-    H.plate(xL - 7, y0 - 4, totalW + 14, 28 + PB * rh);
-    const hx = [0, 0, -3, 3];                                                // V.HARD / INSANE are wide: nudge them apart
-    const ab = ['BEG', 'ADV', 'V.HARD', 'INSANE'];
-    blocks.forEach((blk, bi) => {
-      const x0 = xL + bi * (bw + gapB);
-      if (!blk.length) return;
-      ab.forEach((n, i) => H.textBc(n, x0 + lw + i * cw + cw / 2 + hx[i], y0 + 5, 'oxblood', 1, 'bone'));
-      blk.forEach(([label, key], r) => {
-        const y = y0 + 20 + r * rh;
+    if (!this.level) {
+      header('HIGH SCORES', 'SHOOT A LEVEL TO SEE ITS BESTS');
+      drawCards(this.menu, t);
+      const pg = this.menu.find('page'); if (pg) caption(pg.sign, 'PAGE ' + (this.state.page + 1) + '/' + this.pages, 'cyan', 5);
+    } else {
+      levelHead(this.level, t, 'LOCAL BESTS ON THIS DEVICE', this.level === 'course' ? '4 STAGES, ONE TOTAL' : null);
+      // the brass plate: a row a stage, a column a tier
+      const rows = levelScoreRows(this.level), lw = Math.max(64, ...rows.map(r => H.textBw(r[0]))) + 8;
+      // the plate keeps right of Deputy Duck (x < ~92 below y 118) and ends above the gun (y 158)
+      const cw = Math.max(38, Math.min(46, Math.floor((RW - 12 - 102 - lw) / 4))), bw = lw + 4 * cw, x0 = Math.round(Math.max(102, Math.min(RW - 12 - bw, 250 - bw / 2))), y0 = 88, rh = 11;
+      H.plate(x0 - 7, y0 - 4, bw + 14, 26 + rows.length * rh);
+      const hx = [0, 0, -1, 1];
+      TIER_AB.forEach((n, i) => H.textBc(n, x0 + lw + i * cw + cw / 2 + hx[i], y0 + 4, 'oxblood', 1, 'bone'));
+      rows.forEach(([label, key], r) => {
+        const y = y0 + 19 + r * rh;
         H.rect(x0, y - 2, bw, 1, 'rust');
         H.textB(label, x0, y + 1, 'umber', 1, 'bone');
         for (let i = 0; i < 4; i++) { const b = B.Save.best(key, i); H.textBc(b ? String(b) : '-', x0 + lw + i * cw + cw / 2, y + 1, b ? 'void' : 'chestnut', 1, 'bone'); }
       });
-    });
-    const nx = this.menu.find('next'); if (nx) caption(nx.sign, 'PAGE ' + (this.page + 1) + '/' + this.pages, 'cyan', 3);
+    }
     statusLine('BUILD ' + G().BUILD);
   },
-  fire(u, v, inside) { menuFire(this, u, v, inside); }
+  fire(u, v, inside) { if (tall() && !inside && tapTile(this, u, v)) return; menuFire(this, u, v, inside); }
 };
 
 // =========================================================================================
@@ -890,7 +1103,7 @@ UI.screens.lobby = {
       items = [{ text: N.state === 'joining' || N.state === 'loading' ? 'CANCEL' : 'LEAVE', color: 'slate', u: 0.475, v: 0.8, act: () => { N.leave(); this.key = ''; } }];
     } else if (N.state === 'offline') {
       items = [
-        { text: 'PLAY SOLO', color: 'amber', u: 0.33, v: 0.62, act: () => { N.leave(); g.go('free'); } },
+        { text: 'PLAY SOLO', color: 'amber', u: 0.33, v: 0.62, act: () => { N.leave(); g.go('free', { picker: true }); } },
         { text: 'TRY AGAIN', color: 'blue', u: 0.62, v: 0.62, act: () => { N.state = 'idle'; N.status = ''; this.key = ''; } },
         { text: 'BACK', color: 'slate', u: 0.475, v: 0.8, act: () => { N.leave(); g.go('title'); } }
       ];

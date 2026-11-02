@@ -121,34 +121,74 @@ SC.tiers.drawPortrait = function (t, L) {
   });
   foot(L, 'BUILD ' + G().BUILD);
 };
+// #110: FREE PLAY / HIGH SCORES are level pickers. Portrait: the cards are TILES you tap (3 columns, rows in the
+// curtain under the title and on the shelf; UI.cardSlots lays them out, the screen's fire() hit-tests this.tiles);
+// a level's screen puts its big card + name in the curtain and its stages (FREE PLAY) or its bests table (HIGH
+// SCORES) on the shelf. The game rect keeps the TIER / BACK / NEXT / PREV signs.
+const STY = () => B.Targets.SIGN_STYLES;
+function tile(scr, sl, id, t, act) {
+  const T = UI.TILE, look = UI.cardLook(id), st = STY()[look.color] || STY().wood, hot = scr.tapFlash && scr.tapFlash.key === id;
+  H.box(sl.x, sl.y, T.w, T.h, hot ? st[1] : st[0], st[1], st[2], hot ? 'lemon' : 'void');
+  B.Cards.drawTL(id, sl.x + 3, sl.y + 3, t);
+  const ln = look.lines, y0 = sl.y + 39 + (ln.length < 2 ? 4 : 0);
+  ln.forEach((l, i) => H.textBc(l, sl.x + T.w / 2, y0 + i * 9, (look.lineCols || [])[i] || 'bone', 1, 'void'));
+  scr.tiles.push({ x: sl.x - 1, y: sl.y - 1, w: T.w + 2, h: T.h + 2, key: id, act });
+}
+function pickerPortrait(scr, t, L, title, entries, page, act) {
+  H.text7c(title, L.cx, 4, 2, 'gold', 'void', 2);
+  H.textBc((G().touch ? 'TAP' : 'CLICK') + ' A LEVEL', L.cx, 22, 'cyan', 1, 'void');
+  const slots = UI.cardSlots(L), per = slots.length;
+  scr.tiles = [];
+  entries.slice(page * per, page * per + per).forEach((id, i) => tile(scr, slots[i], id, t, () => act(id)));
+  foot(L, 'BUILD ' + G().BUILD, scr.pages > 1 ? 'PAGE ' + (page + 1) + '/' + scr.pages + ': NEXT >' : '');
+}
+// curtain of a level's screen: the level name, its big card (2x when the curtain is tall enough), a cyan line
+function levelCurtain(L, id, t, sub) {
+  const d = S.defs[id], name = id === 'course' ? 'COURSE' : String(d ? d.name : id).toUpperCase();
+  const nsc = H.text7w(name, 2) <= L.W - 8 ? 2 : 1;
+  H.text7c(name, L.cx, 4, nsc, 'gold', 'void', 2);
+  let y = 4 + 7 * nsc + 6;
+  const sc = L.top - y - 16 >= B.Cards.H * 2 + 6 ? 2 : 1, cw = B.Cards.W * sc, ch = B.Cards.H * sc;
+  if (L.top - y - 16 >= ch + 4) {
+    H.box(L.cx - cw / 2 - 4, y, cw + 8, ch + 8, 'chestnut', 'tan', 'walnut');
+    B.Cards.drawTL(id, L.cx - cw / 2, y + 4, t, sc); y += ch + 12;
+  }
+  if (sub) H.textBc(sub, L.cx, Math.min(y, L.top - 12), 'cyan', 1, 'void');
+}
 SC.free.drawPortrait = function (t, L) {
-  headline(L, 'FREE PLAY', 'TAP A STAGE TO PLAY IT');
-  const tier = G().free.tier; let y = shelf(L);
-  H.textBc('TIER: ' + S.TIERS[tier].name + '   PAGE ' + (G().free.page + 1) + '/' + (this.pages || 1), L.cx, y, 'yellow', 1, 'void'); y += 13;
-  // #100: two bold lines a stage (name + variant, then best / ammo) so nothing has to shrink to fit the width
-  for (const it of this.menu.items) if (it.stage) {
-    const d = S.get(it.stage), b = B.Save.best(it.stage + ':' + it.variant, tier);
-    H.textB((d.short || 'RANGE') + ' ' + (it.variant + 1) + '  ' + ((d.variantNames || [])[it.variant] || ''), 5, y, 'bone', 1, 'void');
-    H.textBr(b ? 'BEST ' + b : B.Ammo.describe(d.config(tier, it.variant).ammo), L.W - 5, y + 9, b ? 'lemon' : 'haze', 1, 'void');
-    y += 21;
+  const g = G(), F = g.free;
+  if (!F.level) { pickerPortrait(this, t, L, 'FREE PLAY', this.entries(), F.page | 0, id => { if (id === 'practice') g.startPractice(F.tier); else { F.level = id; this.rebuild(); } }); return; }
+  const id = F.level, d = S.get(id), tier = F.tier;
+  levelCurtain(L, id, t, tapWord() + ' A STAGE TO PLAY IT');
+  let y = shelf(L) - 6;
+  H.textBc('TIER: ' + S.TIERS[tier].name, L.cx, y, 'yellow', 1, 'void'); y += 12;
+  this.tiles = [];
+  // one tappable row a stage: name line, then the ammo rule left and the best right
+  for (let v = 0; v < d.variants; v++) {
+    const o = UI.variantText(id, v, tier), hot = this.tapFlash && this.tapFlash.key === 'v' + v, w = L.W - 8;
+    H.box(4, y, w, 22, hot ? 'tan' : 'chestnut', 'tan', 'walnut', hot ? 'lemon' : 'void');
+    fit(o.text, L.cx, y + 3, 'bone', w - 6, 'void');
+    H.textB(B.Ammo.describe(d.config(tier, v).ammo), 9, y + 12, 'lemon', 1, 'void');
+    H.textBr(o.best ? 'BEST ' + o.best : 'NO BEST', L.W - 9, y + 12, o.best ? 'yellow' : 'sand', 1, 'void');
+    this.tiles.push({ x: 3, y: y - 1, w: w + 2, h: 24, key: 'v' + v, act: () => g.startFree(id, v, F.tier) });
+    y += 25;
   }
   foot(L, 'BUILD ' + G().BUILD);
 };
 SC.scores.drawPortrait = function (t, L) {
-  headline(L, 'HIGH SCORES', 'LOCAL BESTS ON THIS DEVICE');
-  // #100: bold rows, 11 px apart, paged to what the shelf holds (the NEXT > sign in the game rect turns the page)
-  const rows = UI.scoreRows(), rh = 11, y0 = shelf(L) - 2, per = Math.max(4, Math.floor((L.H - 26 - y0 - 24) / rh));
-  this.pages = Math.max(1, Math.ceil(rows.length / per)); this.page = Math.min(this.page || 0, this.pages - 1);
-  const pr = rows.slice(this.page * per, this.page * per + per);
-  const w = Math.min(L.W - 4, 209), x0 = Math.round(L.cx - w / 2), lw = 48, cw = (w - lw - 6) / 4, hx = [-1, -2, -4, 2];
-  H.plate(x0, y0, w, 24 + pr.length * rh);
-  ['BEG', 'ADV', 'V.HARD', 'INSANE'].forEach((a, i) => H.textBc(a, x0 + lw + cw * i + cw / 2 + hx[i], y0 + 7, 'oxblood', 1, 'bone'));
-  pr.forEach(([label, key], r) => {
-    const y = y0 + 20 + r * rh;
-    H.rect(x0 + 4, y - 2, w - 8, 1, 'rust'); H.textB(label, x0 + 5, y + 1, 'umber', 1, 'bone');
-    for (let i = 0; i < 4; i++) { const b = B.Save.best(key, i); H.textBc(b ? String(b) : '-', x0 + lw + cw * i + cw / 2, y + 1, b ? 'void' : 'chestnut', 1, 'bone'); }
+  if (!this.level) { pickerPortrait(this, t, L, 'HIGH SCORES', this.entries(), this.state.page | 0, id => { this.level = id; this.rebuild(); }); return; }
+  this.tiles = [];
+  levelCurtain(L, this.level, t, 'LOCAL BESTS ON THIS DEVICE');
+  // the plate: two lines a stage (its name, then its four bests under the tier columns)
+  const rows = UI.levelScoreRows(this.level), rh = 21, y0 = shelf(L) - 4, w = Math.min(L.W - 4, 209), x0 = Math.round(L.cx - w / 2), cw = (w - 10) / 4, hx = [0, 0, -2, 2];
+  H.plate(x0, y0, w, 20 + rows.length * rh);
+  UI.TIER_AB.forEach((a, i) => H.textBc(a, x0 + 5 + cw * i + cw / 2 + hx[i], y0 + 6, 'oxblood', 1, 'bone'));
+  rows.forEach(([label, key], r) => {
+    const y = y0 + 18 + r * rh;
+    H.rect(x0 + 4, y - 2, w - 8, 1, 'rust');
+    fit(label, L.cx, y + 1, 'umber', w - 10, 'bone');
+    for (let i = 0; i < 4; i++) { const b = B.Save.best(key, i); H.textBc(b ? String(b) : '-', x0 + 5 + cw * i + cw / 2, y + 10, b ? 'void' : 'chestnut', 1, 'bone'); }
   });
-  if (this.pages > 1) H.textBc('PAGE ' + (this.page + 1) + '/' + this.pages + ': SHOOT NEXT >', L.cx, y0 + 28 + pr.length * rh, 'cyan', 1, 'void');
   foot(L, 'BUILD ' + G().BUILD);
 };
 SC.lobby.drawPortrait = function (t, L) {
