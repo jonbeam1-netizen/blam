@@ -6,7 +6,7 @@
 window.BLAM = window.BLAM || {};
 (function (B) {
 const R = B.R, I = B.Input, H = B.HUD, S = B.Stage, Tg = B.Targets, Save = B.Save, SFX = B.SFX, UI = B.UI, N = B.Net;
-const BUILD = '0.030';                      // bump on every publish (shown on the title status line)
+const BUILD = '0.031';                      // bump on every publish (shown on the title status line)
 const Q = new URLSearchParams(location.search);
 // ?slow=0.25 (dev/testing): single-player stage clock runs at that rate, so slow tools (screenshot -> click
 // takes seconds) can still shoot a target that is really there. Versus always runs on the wall clock.
@@ -317,14 +317,14 @@ G.startPractice = tier => {
   Tg.clearDecals(); try { Tg.clearChips(); } catch (e) {}
   const run = new S.Run({ stage: 'range', tier, variant: 0, seed: newSeed(), practice: true, gun: G.gun, names: [Save.settings.name] });
   setRun(run);
-  G.statusText = 'PRACTICE  ' + tierName(tier) + '  ESC TO FINISH';
+  G.statusText = 'PRACTICE  ' + tierName(tier) + '  SHOOT FINISH TO END';
   G.stageLabel = 'PRACTICE';
   G.go('play', { run });
 };
 G.practiceTier = tier => {
   const run = G.run; if (!run || !run.practice) return;
   run.setTier(tier); G.free.tier = run.tier;
-  G.statusText = 'PRACTICE  ' + tierName(run.tier) + '  ESC TO FINISH';
+  G.statusText = 'PRACTICE  ' + tierName(run.tier) + '  SHOOT FINISH TO END';
 };
 // ---- a stage finished (play screen calls this ~1.3 s after the end) ----
 G.stageEnded = run => {

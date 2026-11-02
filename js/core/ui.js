@@ -256,13 +256,20 @@ function statusLine(left, right) {
   if (right) H.textBr(right, RW - 4, RH - 9, 'lime', 1, 'void');
 }
 UI.caption = caption; UI.statusLine = statusLine;
+// #109: every menu screen is set in the range room. A free-play round leaves its own set showing (the Grocery
+// aisle's shelves round the big duck), so each menu switches back on enter; the last set's bullet holes go with it
+function rangeRoom() {
+  const e = S.env('range');
+  if (!e.visible) { S.showEnv('range'); Tg.clearDecals(); }
+}
+UI.rangeRoom = rangeRoom;
 
 // =========================================================================================
 // TITLE: an interactive shooting range. Marquee on top, Deputy Duck big, menu signs in the middle.
 // =========================================================================================
 UI.screens.title = {
   enter() {
-    const g = G(); g.placeDuck('title'); g.duckPose('present', 'idle', 2.5); marquee.visible = true; S.showEnv('range');
+    const g = G(); g.placeDuck('title'); g.duckPose('present', 'idle', 2.5); marquee.visible = true; rangeRoom();
     this.decor = S.get('range').decor(); this.decor.targets.forEach(t => R.scene.add(t.group));
     this.menu = new Menu([
       { text: 'PLAY', color: 'crimson', u: 0.47, v: 0.475, s: 0.046, act: () => g.go('tiers') },
@@ -319,45 +326,63 @@ UI.reloadTip = (tip, ammo) => {
 };
 UI.reloadHelp = () => { const touch = B.Input.touch, m = G().reloadMode();
   return { group: touch ? 'PHONE: SWIPE DOWN / TAP SIDES' : 'PC: ARCADE / RIGHT CLICK', help: RELOAD_HELP[m] + (touch ? '' : '. KEY R ALWAYS WORKS') }; };
+// #114: the settings in four groups, one row each, evenly spaced: DISPLAY / CONTROLS / AUDIO / PLAYER, a bold group
+// caption over each row, each option's helper line right under its own sign, BACK bottom centre. The big duck stands
+// bottom-left and the gun bottom-right, so the lower rows keep to the middle. Rows are SET_ROWS (sign centres, v).
+const SET_ROWS = [0.26, 0.425, 0.59, 0.755], SET_BACK = 0.888, SET_S = 0.022;
+const SET_GROUPS = [['DISPLAY', 0.5], ['CONTROLS', 0.5], ['AUDIO', 0.47], ['PLAYER', 0.47]];   // [caption, u]
+const RELOAD_SHORT = { arcade: 'SHOOT THE SIDE PILLARS', rclick: 'RIGHT MOUSE BUTTON', swipe: 'SWIPE DOWN ANYWHERE', tap: 'TAP THE SCREEN SIDES' };
+UI.settingsHelp = {                                                          // shared with the portrait layout
+  dither: 'OFF = FLAT PALETTE', crosshair: 'OFF = MOUSE ARROW', shake: 'KICK ON EVERY SHOT',
+  reload: () => RELOAD_SHORT[G().reloadMode()] + (B.Input.touch ? '' : ' / KEY R'), gun: () => B.Input.touch ? 'TAP TO SWAP GUNS' : 'KEY 4 CYCLES GUNS',
+  sound: 'OFF 15 35 60 100', music: 'ON OR OFF', name: 'YOUR NAME IN VERSUS'
+};
 UI.screens.settings = {
   enter() {
-    const g = G(), st = B.Save.settings; g.placeDuck('title'); g.duckPose('idle');
-    const tog = (key, label, apply) => ({ text: label + ': ' + onOff(st[key]), keep: true, color: 'slate', s: 0.024, act: sign => {
+    const g = G(), st = B.Save.settings; g.placeDuck('title'); g.duckPose('idle'); rangeRoom();
+    const R0 = SET_ROWS, s = SET_S;
+    const tog = (key, label, apply) => ({ id: key, text: label + ': ' + onOff(st[key]), keep: true, color: 'slate', s, act: sign => {
       B.Save.set(key, !B.Save.settings[key]); apply && apply(); sign.setText(label + ': ' + onOff(B.Save.settings[key])); } });
     this.menu = new Menu([
-      // #100 bold lettering: rows 0.24 / 0.38 / 0.52 / 0.66 / 0.8, columns 0.33 / 0.66 (the big duck stands bottom-left)
-      Object.assign(tog('dither', 'DITHER', () => g.applySettings()), { u: 0.33, v: 0.24 }),
-      Object.assign(tog('crosshair', 'CROSSHAIR', () => g.applySettings()), { u: 0.33, v: 0.38 }),
-      Object.assign(tog('shake', 'SCREEN SHAKE'), { u: 0.34, v: 0.52 }),
-      { text: 'GUN: ' + g.skinName(), keep: true, color: 'plum', s: 0.024, u: 0.66, v: 0.24, act: sign => { g.setSkin(g.skin + 1); sign.setText('GUN: ' + g.skinName()); } },
-      { text: 'NAME: ' + st.name, keep: true, color: 'blue', s: 0.024, u: 0.67, v: 0.38, act: sign => UI.prompt('PLAYER NAME (VERSUS)', B.Save.settings.name, 10, v => { if (v) { B.Save.set('name', v); sign.setText('NAME: ' + v); } }) },
-      { text: 'BACK', color: 'crimson', s: 0.03, u: 0.66, v: 0.52, act: () => g.go('title') },
-      { text: reloadSignText(), keep: true, color: 'amber', s: 0.024, u: 0.48, v: 0.8, act: sign => {
+      // DISPLAY
+      Object.assign(tog('dither', 'DITHER', () => g.applySettings()), { u: 0.17, v: R0[0] }),
+      Object.assign(tog('crosshair', 'CROSSHAIR', () => g.applySettings()), { u: 0.5, v: R0[0] }),
+      Object.assign(tog('shake', 'SCREEN SHAKE'), { u: 0.83, v: R0[0] }),
+      // CONTROLS
+      { id: 'reload', text: reloadSignText(), keep: true, color: 'amber', s, u: 0.3, v: R0[1], act: sign => {
         const touch = B.Input.touch, key = touch ? 'reloadTouch' : 'reloadPC', list = RELOAD_TYPES[touch ? 'touch' : 'pc'];
         B.Save.set(key, list[(list.indexOf(g.reloadMode()) + 1) % list.length]); sign.setText(reloadSignText()); } },
-      { text: soundSignText(), keep: true, color: 'green', s: 0.024, u: 0.33, v: 0.66, act: sign => {
+      { id: 'gun', text: 'GUN: ' + g.skinName(), keep: true, color: 'plum', s, u: 0.72, v: R0[1], act: sign => { g.setSkin(g.skin + 1); sign.setText('GUN: ' + g.skinName()); } },
+      // AUDIO
+      { id: 'sound', text: soundSignText(), keep: true, color: 'green', s, u: 0.34, v: R0[2], act: sign => {
         const S = B.SFX, steps = [0, 0.15, 0.35, 0.6, 1], cur = S.muted ? 0 : (S.volume == null ? 0.35 : S.volume);
         let i = steps.findIndex(x => Math.abs(x - cur) < 0.02); i = (i + 1) % steps.length;
         if (S.setVolume) S.setVolume(steps[i]); S.muted = steps[i] === 0; sign.setText(soundSignText()); } },
-      { text: musicSignText(), keep: true, color: 'green', s: 0.024, u: 0.66, v: 0.66, act: sign => {
-        const S = B.SFX, on = !(B.Save.settings.music !== false); B.Save.set('music', on); if (S.music) S.music(on); sign.setText(musicSignText()); } }
+      { id: 'music', text: musicSignText(), keep: true, color: 'green', s, u: 0.6, v: R0[2], act: sign => {
+        const S = B.SFX, on = !(B.Save.settings.music !== false); B.Save.set('music', on); if (S.music) S.music(on); sign.setText(musicSignText()); } },
+      // PLAYER
+      { id: 'name', text: 'NAME: ' + st.name, keep: true, color: 'blue', s, u: 0.47, v: R0[3], act: sign => UI.prompt('PLAYER NAME (VERSUS)', B.Save.settings.name, 10, v => { if (v) { B.Save.set('name', v); sign.setText('NAME: ' + v); } }) },
+      { id: 'back', text: 'BACK', color: 'crimson', s: 0.026, u: 0.47, v: SET_BACK, z: 3, act: () => g.go('title') }
     ]);
   },
   exit() { this.menu.dispose(); },
   update(dt, t) {
     this.menu.update(dt, t);
-    const gs = this.menu.items[3].sign, want = 'GUN: ' + G().skinName();   // key 4 changes the skin anywhere
+    const gs = this.menu.find('gun').sign, want = 'GUN: ' + G().skinName();   // key 4 changes the skin anywhere
     if (gs.alive && gs.opts.text !== want) gs.setText(want);
-    const rs = this.menu.items[6].sign, rw = reloadSignText();              // mouse <-> touch swaps the option group
+    const rs = this.menu.find('reload').sign, rw = reloadSignText();         // mouse <-> touch swaps the option group
     if (rs.alive && rs.opts.text !== rw) rs.setText(rw);
   },
   draw(t) {
     if (tall()) return;                                                       // portrait: drawPortrait() has the text
     header('SETTINGS', 'SHOOT A SIGN TO CHANGE IT');
-    const m = this.menu.items;
-    caption(m[0].sign, 'OFF = PALETTE SNAP');
-    caption(m[3].sign, 'KEY 4 CYCLES GUNS');
-    const rh = UI.reloadHelp(); caption(m[6].sign, rh.group, 'yellow'); caption(m[6].sign, rh.help, 'mist', 14);
+    // group captions: gold, 10 px over the top edge of their row's signs
+    SET_GROUPS.forEach(([cap, u], i) => H.textBc(cap, Math.round(u * RW), Math.round(SET_ROWS[i] * RH) - 19, 'gold', 1, 'void'));
+    const hp = UI.settingsHelp;
+    for (const it of this.menu.items) {
+      const h = hp[it.id]; if (!h) continue;
+      caption(it.sign, typeof h === 'function' ? h() : h, 'mist', 3);
+    }
     statusLine('BUILD ' + G().BUILD, B.R.MODE_NAMES[B.R.mode]);
   },
   fire(u, v, inside) { menuFire(this, u, v, inside); }
@@ -368,7 +393,7 @@ UI.screens.settings = {
 // =========================================================================================
 UI.screens.tiers = {
   enter() {
-    const g = G(); g.placeDuck('title'); g.duckPose('present', 'idle', 1.5);
+    const g = G(); g.placeDuck('title'); g.duckPose('present', 'idle', 1.5); rangeRoom();
     const items = S.TIERS.map((T, i) => ({ text: T.name, sub: T.lives + ' LIVES', color: T.sign, s: 0.029, u: [0.34, 0.63][i % 2], v: [0.3, 0.56][i >> 1], act: () => g.startCourse(i) }));
     items.push({ text: 'BACK', color: 'slate', s: 0.03, u: 0.485, v: 0.82, act: () => g.go('title') });
     this.menu = new Menu(items);
@@ -389,7 +414,7 @@ UI.screens.tiers = {
 // =========================================================================================
 UI.screens.free = {
   enter() {
-    const g = G(); g.placeDuck('title'); g.duckPose('idle');
+    const g = G(); g.placeDuck('title'); g.duckPose('idle'); rangeRoom();
     this.build();
   },
   // the 6-slot grid: PRACTICE always takes the top-left slot (every page), then 5 stage signs per page; with more
@@ -447,7 +472,7 @@ const scoreRows = UI.scoreRows = () => {
 };
 UI.screens.scores = {
   enter() {
-    const g = G(); g.placeDuck('title'); g.duckPose('cheer', 'idle', 1.2);
+    const g = G(); g.placeDuck('title'); g.duckPose('cheer', 'idle', 1.2); rangeRoom();
     this.page = 0; this.pages = 1;
     // #100: rows are in the bold menu font now, so the table is paged (22 rows a page here, the portrait strip
     // fits its own count); NEXT > cycles the pages and wraps (a keep sign: it sparks, it doesn't shatter)
@@ -523,9 +548,17 @@ UI.screens.briefing = {
   enter(a) {
     this.a = a; this.t = 0; this.done = false;
     const g = G(); g.placeDuck('brief'); g.duckPose('present'); S.showEnv(a.run.stage);
+    // #95: free play gets a BACK sign (top-right, over Deputy Duck's head) back to the FREE PLAY menu; a click anywhere
+    // else still skips the card. The course has no BACK (a click skips, ESC leaves)
+    this.menu = g.mode === 'free' && !a.versus ? new Menu([{ id: 'back', text: 'BACK', color: 'slate', s: 0.026, u: 0.885, v: 0.215, z: 3.4,
+      act: () => { if (G().screen === this) { this.done = true; g.go('free'); } } }]) : null;
   },
-  exit() {},
-  update(dt) { this.t += dt; if (this.a.versus ? performance.now() >= this.a.run.wall0 : this.t > 9) this.go(); },
+  exit() { if (this.menu) this.menu.dispose(); this.menu = null; },
+  update(dt, t) {
+    this.t += dt; if (this.menu) this.menu.update(dt, t);
+    if (this.menu && this.menu.busy > 0) return;                              // BACK was shot: don't auto-start under it
+    if (this.a.versus ? performance.now() >= this.a.run.wall0 : this.t > 9) this.go();
+  },
   go() { if (this.done) return; this.done = true; G().go('play', { run: this.a.run, versus: this.a.versus }); },
   draw(t) {
     if (tall()) return;                                                       // portrait: drawPortrait() has the text
@@ -560,7 +593,10 @@ UI.screens.briefing = {
     if (vs) H.textBr('GET READY... ' + Math.max(0, Math.ceil((run.wall0 - performance.now()) / 1000)), RW - 4, RH - 9, 'yellow', 1, 'void');
     statusLine(this.a.status || '');
   },
-  fire() { if (!this.a.versus && this.t > 0.35) this.go(); }
+  fire(u, v, inside) {
+    if (this.menu && (this.menu.busy > 0 || (inside && Tg.pick(R.rayAt(u, v), this.menu.items.map(i => i.sign))))) { if (this.menu.busy <= 0) this.menu.fire(G().shoot(u, v)); return; }
+    if (!this.a.versus && this.t > 0.35) this.go();
+  }
 };
 
 // =========================================================================================
@@ -568,13 +604,39 @@ UI.screens.briefing = {
 // =========================================================================================
 UI.screens.play = {
   enter(a) {
-    this.run = a.run; this.versus = !!a.versus; this.left = false; this.pop = null;
+    this.run = a.run; this.versus = !!a.versus; this.left = false; this.pop = null; this.paused = false; this.pmenu = null;
     const g = G(); g.run = a.run; g.placeDuck(a.run.practice ? 'practice' : 'mini'); g.duckPose('idle');
     g.practiceMenu = this.menu = a.run.practice ? practiceMenu(a.run) : null;
+    // #95: a small MENU sign in a corner on every stage (not practice, not versus): shooting it pauses the run
+    this.ctl = !this.versus && !a.run.practice ? new Menu([{ id: 'menu', text: 'MENU', keep: true, color: 'slate', s: MENU_SIGN.s, u: MENU_SIGN.u, v: MENU_SIGN.v, z: MENU_SIGN.z,
+      act: () => this.pause() }]) : null;
   },
-  exit() { if (this.menu) this.menu.dispose(); this.menu = null; G().practiceMenu = null; },
+  exit() {
+    if (this.menu) this.menu.dispose(); this.menu = null; G().practiceMenu = null;
+    if (this.ctl) this.ctl.dispose(); this.ctl = null;
+    if (this.pmenu) this.pmenu.dispose(); this.pmenu = null;
+    this.paused = false; if (this.run) this.run.paused = false;
+  },
+  // #95 pause: the stage clock stops (run.update is skipped; Run.canShoot() is false, so R / frame reloads wait too).
+  // QUIT leaves like ESC (free play -> FREE PLAY, course -> title), RESUME carries on
+  pause() {
+    const run = this.run, g = G();
+    if (this.paused || run.state === 'end' || g.screen !== this) return;
+    this.paused = true; run.paused = true;
+    this.pmenu = new Menu([
+      { id: 'quit', text: 'QUIT', color: 'crimson', s: 0.03, u: 0.37, v: 0.52, z: 3.4, act: () => { if (G().screen === this) g.go(g.mode === 'free' ? 'free' : 'title'); } },
+      { id: 'resume', text: 'RESUME', color: 'green', s: 0.03, u: 0.62, v: 0.52, z: 3.4, act: () => this.resume() }
+    ]);
+  },
+  resume() {
+    if (!this.paused) return;
+    this.paused = false; this.run.paused = false;
+    if (this.pmenu) this.pmenu.dispose(); this.pmenu = null;
+  },
   update(dt, t) {
     const run = this.run, g = G();
+    if (this.ctl) { const sg = this.ctl.items[0].sign; sg.group.visible = run.state !== 'end' && !this.paused; this.ctl.update(dt, t); }
+    if (this.paused) { if (this.pmenu) this.pmenu.update(dt, t); return; }   // frozen: no clock, no spawns, no events
     run.update(run.versus ? dt : dt * (g.slow || 1));                       // ?slow= (testing) slows a solo stage
     if (this.menu) { this.menu.paint(); this.menu.update(dt, t); }
     // Deputy Duck in play: a hit = a silent happy hop; a bomb = his scared face (hands up) for 1 s, silent, straight back
@@ -595,6 +657,12 @@ UI.screens.play = {
   draw(t) {
     const run = this.run, g = G();
     H.drawPlay(g.hudState(run), t);
+    if (this.paused) {                                                        // dim round the QUIT / RESUME row (the signs stay bright)
+      H.dim(0, 0, RW, 104); H.dim(0, 146, RW, RH - 146);
+      H.text7c('PAUSED', RW / 2, 50, 4, 'gold', 'void', 2);
+      H.textBc(g.mode === 'free' ? 'QUIT: BACK TO FREE PLAY' : 'QUIT: END THE COURSE', RW / 2, 152, 'mist', 1, 'void');
+      return;
+    }
     if (run.state === 'count') {
       const n = Math.ceil(-run.t - 0.2);
       if (n >= 1 && n <= 3) { H.text7c(String(n), RW / 2, 70, 7, 'gold', 'void', 2); H.text3c('READY?', RW / 2, 124, 'bone', 2, 'void'); }
@@ -606,23 +674,37 @@ UI.screens.play = {
     }
     if (this.pop && ((this.pop.t * 10) | 0) % 2 === 0) H.text7c(this.pop.text, RW / 2, 40, 2, this.pop.rows, 'void', 2);
     if (run.versus && run.me.lives <= 0 && run.state === 'play') H.text3c('OUT OF LIVES - WATCH THE REST!', RW / 2, 40, 'red', 1, 'void');
-    if (run.practice && run.state === 'play' && !tall()) H.text3c(G().touch ? 'PRACTICE' : 'ESC TO FINISH', RW / 2, 4, 'mist', 1, 'void');
+    if (run.practice && run.state === 'play' && !tall()) H.text3c(G().touch ? 'SHOOT FINISH TO END' : 'SHOOT FINISH (OR ESC) TO END', RW / 2, 4, 'mist', 1, 'void');
   },
-  fire(u, v, inside, touch) { G().playFire(this.run, u, v, inside, touch); }
+  fire(u, v, inside, touch) {
+    const g = G(), run = this.run;
+    // #95: the pause signs / the MENU sign come before the stage (never shots: no ammo, no stats)
+    if (this.paused) { if (inside && this.pmenu) this.pmenu.fire(g.shoot(u, v)); return; }
+    if (inside && this.ctl && run.state !== 'end' && Tg.pick(R.rayAt(u, v), this.ctl.items.map(i => i.sign)) && !Tg.pick(R.rayAt(u, v), run.live)) { this.ctl.fire(g.shoot(u, v)); return; }
+    // #112: the practice list (tiers + FINISH) likewise, even with an empty magazine
+    if (inside && this.menu && run.state !== 'end' && Tg.pick(R.rayAt(u, v), this.menu.items.map(i => i.sign))) { this.menu.fire(g.shoot(u, v)); return; }
+    g.playFire(run, u, v, inside, touch);
+  }
 };
+// #95 the MENU sign: top-left right under the SCORE / BEST lines, on the near plane (z 3.4, in front of every stage's
+// foreground). Scanned over every stage / variant (ENGINE.md "Build 0.031 UI batch"): only INVASION's saucers ever
+// cross that corner (~0.3 s a round); a shot that also hits a live target goes to the target, never to MENU
+const MENU_SIGN = { u: 0.058, v: 0.092, s: 0.02, z: 3.4 };
 
-// PRACTICE tier signs: four small signs in a row in the low band over Deputy Duck's head, under the lanes' lowest
-// paddle (so they never cover a target). The current tier wears its colour, the others are slate; shooting one
-// switches the practice rules live (Run.setTier). They are 'keep' signs: they spark, they don't shatter.
-const PRACTICE_SIGNS = { v: 0.6, u: [0.26, 0.42, 0.58, 0.74], s: 0.022 };
+// PRACTICE list (#111, #112): a vertical list on the LEFT of the play rect, on the empty floor under lane 1 and above
+// the HUD strip (Deputy Duck stands in the middle, the gun on the right): BEGINNER / ADVANCED / VERY HARD / INSANE, then
+// the crimson FINISH sign (PC and touch), which ends the session like ESC (-> practice results). The current tier
+// wears its colour, the others are slate; shooting one switches the practice rules live (Run.setTier). Bold font
+// (#100) at 1 px a voxel; 'keep' signs: they spark, they don't shatter.
+const PRACTICE_SIGNS = { u: 0.125, v0: 0.57, dv: 0.062, s: 0.02 };
 function practiceMenu(run) {
+  const P = PRACTICE_SIGNS, minW = Math.max(...S.TIERS.map(T => R.bold(T.name).w));   // one width for the whole list
   const items = S.TIERS.map((T, i) => ({ id: 'tier' + i, text: T.name, keep: true, color: i === run.tier ? T.sign : 'slate',
-    s: PRACTICE_SIGNS.s, u: PRACTICE_SIGNS.u[i], v: PRACTICE_SIGNS.v, z: 1.5, font: 'small',   // in play, tiny: keeps the 3x5 (#100)
-    act: () => G().practiceTier(i) }));
-  // #77 touch has no ESC: a FINISH sign left of the tiers ends the session (-> practice results)
-  if (G().touch) items.push({ id: 'finish', text: 'FINISH', keep: true, color: 'crimson', s: PRACTICE_SIGNS.s, u: 0.1, v: PRACTICE_SIGNS.v, z: 1.5, font: 'small',
+    s: P.s, u: P.u, v: P.v0 + i * P.dv, z: 1.5, minW, act: () => G().practiceTier(i) }));
+  items.push({ id: 'finish', text: 'FINISH', keep: true, color: 'crimson', s: P.s, u: P.u, v: P.v0 + 4 * P.dv, z: 1.5, minW,
     act: () => { if (run.state !== 'end') run.end('done'); } });
   const menu = new Menu(items);
+  for (const it of menu.items) it.sign.phase = 0;    // the whole list bobs together, so the gaps between the boards stay even
   function paint() {
     S.TIERS.forEach((T, i) => { const it = menu.items[i], c = i === run.tier ? T.sign : 'slate'; if (it.sign.opts.color !== c) { it.sign.opts.color = c; it.sign.setText(T.name); } });
   }
@@ -635,7 +717,7 @@ function practiceMenu(run) {
 // =========================================================================================
 UI.screens.practiceresults = {
   enter(a) {
-    this.a = a; const g = G(); g.placeDuck('results'); g.duckPose('cheer', 'idle', 1.5);
+    this.a = a; const g = G(); g.placeDuck('results'); g.duckPose('cheer', 'idle', 1.5); rangeRoom();
     this.menu = new Menu([
       { text: 'AGAIN', color: 'green', s: 0.03, u: 0.3, v: 0.86, z: 3.4, act: () => g.startPractice(g.free.tier) },
       { text: 'BACK', color: 'slate', s: 0.03, u: 0.56, v: 0.86, z: 3.4, act: () => g.go('free') }
@@ -675,14 +757,22 @@ UI.screens.results = {
       { text: 'AGAIN', color: 'green', s: 0.03, u: 0.3, v: 0.86, z: 3.4, act: () => g.startFree(a.free.stage, a.free.variant, a.free.tier) },   // #94: z 3.4 = in front of every stage's foreground (Laser Tag's barrier sits at z 3)
       { text: 'BACK', color: 'slate', s: 0.03, u: 0.56, v: 0.86, z: 3.4, act: () => g.go('free') }
     ]) : null;
+    // #95 course: a MENU sign (bottom, right of the plate) leaves to the title like ESC; a click anywhere else continues
+    this.ctl = a.free || a.versus ? null : new Menu([{ id: 'menu', text: 'MENU', color: 'slate', s: 0.026, u: 0.68, v: 0.86, z: 3.4,
+      act: () => { if (G().screen === this) { this.done = true; g.go('title'); } } }]);
   },
-  exit() { if (this.menu) this.menu.dispose(); this.menu = null; },
-  update(dt, t) { this.t += dt; if (this.menu) this.menu.update(dt, t); else if (this.t > 14) this.go(); },
+  exit() { if (this.menu) this.menu.dispose(); this.menu = null; if (this.ctl) this.ctl.dispose(); this.ctl = null; },
+  update(dt, t) {
+    this.t += dt; if (this.ctl) this.ctl.update(dt, t);
+    if (this.menu) this.menu.update(dt, t); else if (this.t > 14 && !(this.ctl && this.ctl.busy > 0)) this.go();
+  },
   go() { if (this.done) return; this.done = true; this.a.next(); },
   draw(t) {
     if (tall()) return;                                                       // portrait: drawPortrait() has the text
     const r = this.a.res;
-    H.dim(0, 0, 356, this.menu ? 190 : RH); H.dim(356, 0, RW - 356, 60);    // free play: the signs below stay bright
+    if (this.ctl) { H.dim(0, 0, 356, 188); H.dim(0, 188, 252, RH - 188); }   // course: the MENU sign stays bright
+    else H.dim(0, 0, 356, this.menu ? 190 : RH);
+    H.dim(356, 0, RW - 356, 60);                                              // free play: the signs below stay bright
     if (r.cleared) H.starburst(RW / 2, 30, 34, t * 0.8, 'yellow', 'orange', 14);
     H.text7c(r.cleared ? 'CLEARED!' : 'FAILED!', RW / 2, 14, 5, r.cleared ? 'gold' : 'red', 'void', 2);
     H.plate(18, 66, 196, 118);
@@ -705,7 +795,11 @@ UI.screens.results = {
     if (!this.menu && this.t > 1.0 && blink(t)) H.textBc(G().touch ? 'TAP TO CONTINUE' : 'CLICK OR TAP TO CONTINUE', RW / 2, 222, 'yellow', 1, 'void');
     statusLine(this.a.status || '');
   },
-  fire(u, v, inside) { if (this.menu) { if (this.t > 0.6) menuFire(this, u, v, inside); } else if (this.t > 1.0) this.go(); }
+  fire(u, v, inside) {
+    if (this.menu) { if (this.t > 0.6) menuFire(this, u, v, inside); return; }
+    if (this.ctl && (this.ctl.busy > 0 || (inside && this.t > 0.6 && Tg.pick(R.rayAt(u, v), this.ctl.items.map(i => i.sign))))) { if (this.ctl.busy <= 0) this.ctl.fire(G().shoot(u, v)); return; }
+    if (this.t > 1.0) this.go();
+  }
 };
 
 // =========================================================================================
@@ -714,7 +808,7 @@ UI.screens.results = {
 UI.screens.gameover = {
   enter(a) {
     this.a = a; this.count = 10; const g = G();
-    g.placeDuck('title'); g.duckPose('sad'); SFX.play('gameOver');
+    g.placeDuck('title'); g.duckPose('sad'); SFX.play('gameOver'); rangeRoom();
     this.menu = new Menu([
       { text: 'CONTINUE', color: 'green', u: 0.35, v: 0.66, s: 0.038, act: () => { SFX.play('continue'); a.onContinue(); } },
       { text: 'QUIT', color: 'slate', u: 0.63, v: 0.66, s: 0.032, act: () => g.go('title') }
@@ -733,18 +827,22 @@ UI.screens.gameover = {
   fire(u, v, inside) { menuFire(this, u, v, inside); }
 };
 UI.screens.final = {
-  enter(a) { this.a = a; this.t = 0; this.done = false; const g = G(); g.placeDuck('results'); g.duckPose('cheer'); SFX.play('courseClear'); if (a.newRecord) SFX.play('newRecord'); this.conf = 0; },
-  exit() {},
-  update(dt) {
-    this.t += dt; this.conf -= dt;
+  enter(a) {
+    this.a = a; this.t = 0; this.done = false; const g = G(); g.placeDuck('results'); g.duckPose('cheer'); rangeRoom(); SFX.play('courseClear'); if (a.newRecord) SFX.play('newRecord'); this.conf = 0;
+    // #95: a MENU sign (bottom-left) back to the title; a click anywhere else does the same, as before
+    this.menu = new Menu([{ id: 'menu', text: 'MENU', color: 'slate', s: 0.026, u: 0.16, v: 0.86, z: 3.4, act: () => this.go() }]);
+  },
+  exit() { if (this.menu) this.menu.dispose(); this.menu = null; },
+  update(dt, t) {
+    this.t += dt; this.conf -= dt; if (this.menu) this.menu.update(dt, t);
     if (this.conf <= 0) {                                                     // confetti from the ceiling
       this.conf = 0.06; const cols = ['pink', 'yellow', 'cyan', 'lime', 'orange', 'bone'];
       const p = R.screenToWorld(Math.random(), 0.05, 0.5);
       Tg.spawnChip(p, new THREE.Vector3(R.rnd(-0.6, 0.6), R.rnd(-0.5, 0.5), R.rnd(-0.3, 0.3)), 0.05, PAL[cols[(Math.random() * cols.length) | 0]], 2.6, 0.12);
     }
-    if (this.t > 20) this.go();
+    if (this.t > 20 && !(this.menu && this.menu.busy > 0)) this.go();
   },
-  go() { if (this.done) return; this.done = true; G().go('title'); },
+  go() { if (this.done || G().screen !== this) return; this.done = true; G().go('title'); },
   draw(t) {
     if (tall()) return;                                                       // portrait: drawPortrait() has the text
     H.starburst(RW / 2, 40, 44, t * 0.6, 'yellow', 'orange', 16);
@@ -757,7 +855,10 @@ UI.screens.final = {
     if (this.a.newRecord && blink(t, 6)) H.text7c('NEW RECORD!', RW / 2, 188, 2, 'hot', 'void', 2);
     if (this.t > 1.5 && blink(t)) H.textBc(G().touch ? 'TAP TO CONTINUE' : 'CLICK OR TAP TO CONTINUE', RW / 2, 222, 'yellow', 1, 'void');
   },
-  fire() { if (this.t > 1.5) this.go(); }
+  fire(u, v, inside) {
+    if (this.menu && (this.menu.busy > 0 || (inside && this.t > 0.6 && Tg.pick(R.rayAt(u, v), this.menu.items.map(i => i.sign))))) { if (this.menu.busy <= 0) this.menu.fire(G().shoot(u, v)); return; }
+    if (this.t > 1.5) this.go();
+  }
 };
 
 // =========================================================================================
@@ -765,7 +866,7 @@ UI.screens.final = {
 // =========================================================================================
 UI.screens.lobby = {
   enter(a) {
-    const g = G(), N = B.Net; g.placeDuck('title'); g.duckPose('present', 'idle', 1.5);
+    const g = G(), N = B.Net; g.placeDuck('title'); g.duckPose('present', 'idle', 1.5); rangeRoom();
     this.key = ''; this.menu = null; if (a && a.toast) g.toast(a.toast, 3);
     N.on.update = () => { this.key = ''; };
   },

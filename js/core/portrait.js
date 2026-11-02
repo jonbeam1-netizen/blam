@@ -92,14 +92,22 @@ SC.title.drawPortrait = function (t, L) {
   lines('PLAY: A 4 STAGE COURSE.  VERSUS: A FRIEND ONLINE.  FREE PLAY: ANY STAGE.', L.cx, shelf(L) + 26, L.W - 16, 'mist');
   foot(L, 'BUILD ' + G().BUILD);
 };
+// #114: the same four groups as the landscape screen (DISPLAY / CONTROLS / AUDIO / PLAYER): a gold group caption, then
+// one line per option (its name, then its helper); the signs themselves stay in the game rect, in the same rows
 SC.settings.drawPortrait = function (t, L) {
   headline(L, 'SETTINGS', 'TAP A SIGN TO CHANGE IT');
-  let y = lines('DITHER OFF = PALETTE SNAP ONLY', L.cx, shelf(L), L.W - 12, 'mist');
-  y = lines('NAME = WHAT YOUR RIVAL SEES IN VERSUS', L.cx, y + 3, L.W - 12, 'mist');
-  if (!G().touch) y = lines('KEY 4 CYCLES GUNS ANYWHERE', L.cx, y + 3, L.W - 12, 'mist');
-  const rh = B.UI.reloadHelp();                                              // RELOAD TYPE (build 0.005)
-  y = lines('RELOAD TYPE ' + rh.group, L.cx, y + 6, L.W - 12, 'yellow');
-  lines(rh.help, L.cx, y + 3, L.W - 12, 'mist');
+  const hp = UI.settingsHelp, help = k => typeof hp[k] === 'function' ? hp[k]() : hp[k];
+  const groups = [['DISPLAY', [['DITHER', 'dither'], ['CROSSHAIR', 'crosshair'], ['SHAKE', 'shake']]],
+    ['CONTROLS', [['RELOAD', 'reload'], ['GUN', 'gun']]], ['AUDIO', [['SOUND', 'sound'], ['MUSIC', 'music']]], ['PLAYER', [['NAME', 'name']]]];
+  let y = shelf(L) - 4;
+  for (const [cap, opts] of groups) {
+    H.textBc(cap, L.cx, y, 'gold', 1, 'void'); y += 11;
+    for (const [n, k] of opts) {
+      if (k === 'crosshair' && G().touch) continue;                          // a finger has no crosshair
+      H.textB(n, 6, y, 'bone', 1, 'void'); H.textBr(help(k), L.W - 6, y, 'mist', 1, 'void'); y += 10;
+    }
+    y += 4;
+  }
   foot(L, 'BUILD ' + G().BUILD, R.MODE_NAMES[R.mode]);
 };
 SC.tiers.drawPortrait = function (t, L) {

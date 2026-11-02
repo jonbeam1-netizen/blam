@@ -3,6 +3,31 @@
 Everything that changed since you last played a build by ear, in one place. Tick what is good, gripe what is not.
 Live link: https://jonbeam1-netizen.github.io/blam/ (hard refresh once: Ctrl+Shift+R).
 
+## Build 0.031: GROCERY RUN round 2 (2026-11-01): #101-#108
+- [ ] ART SIGN-OFF FIRST: open http://localhost:8790/review/grocery/itemviewer.html (the same builders the stage uses). Every snack look (23) and every climber (7) with its name, slowly turning. 1-9 / A-U = one item big, 0 = back, SPACE = far / near (FAR = the size it pops in at), `-` = full turn / the in-game +-20 turn, `=` = climber pose. Tick or gripe item by item.
+- [ ] #101 The snacks SIT on the shelf (base on the board, a gap under the board above, never through the lip, the back or each other), are full 3D (backs, sides) and slowly turn about +-20 deg with a slight bob. Do they read as 3D now?
+- [ ] #102 Climbers only climb the cart's FRONT (the two front corners or the front face) and are drawn in front of the wires, the handle and the pile the whole climb. Bigger and chunkier. Fair now? (They overlap the red handle at the start of a climb; does that look odd?)
+- [ ] #103 Shelf stock = plain muted boxes and cans, no labels, no motion; only the live snacks are bright, detailed and moving; no outlines on snacks. Easy to tell what is shootable?
+- [ ] #104 The hanging sign is gone; the big B.L.A.M. MART sign is on the far END WALL over the checkout lanes; it gets closer all round.
+- [ ] #105 FINALE: the aisle ends, the cart rolls out past the shelf ends, swings round into CHECKOUT LANE 3 where the cashier duck stands at the register, the scanner beeps over your pile, the receipt prints your TOTAL. About 6 s. Too long / short? Swing too strong?
+- [ ] #106 The shelf stock never changes colour (fixed per shelf section).
+- [ ] #107 Snacks grouped under their aisle header: CHIPS (classic, nacho, cheesy puffs, cool ranch), SODA (red cola, blue cola, lemon-lime, citrus, pepper, energy), CEREAL (rainbow loops, frosted flakes, oat rings), CANDY (swirl pop, choco bar torn open, gummies), BAKERY (donut, cupcake, cookies), HOT FOOD (hot dog, corn dog, pizza), FROZEN (ice cream cone). Nachos are gone.
+- [ ] #108 The new STEAK (red slab, fat cap, fat eye, a curved rib bone) and the other six climbers.
+- NOT VERIFIED: real mouse / touch play (script-driven stills in the preview only); anything by ear (muted; no sound changes); portrait; a real frame rate; a two-browser versus (parity checked with two runs in one page). Draw calls 33-40 (round 1 32-49).
+- Rough spots (agent): snacks are ~15 % smaller than round 1 (they had to fit under the next board); the hot dog is a short target; the scan laser is hard to see (red on red); the receipt covers part of MART; a snack born right at a section edge can sit under two headers.
+- Agent's open questions: (1) The brief said 22 looks; its list adds up to 23 (6 sodas incl. energy): keep all 23? (2) Climbers drawn in front of the handle at the bottom of their climb: OK, or lower / thin the cart's near end? (3) Want the stock a touch more colourful (it is quite grey now) or keep it this calm? (4) Our checkout counter sits LEFT of the cart (the gun hides the right); fine?
+
+## Build 0.031 UI batch (2026-11-01): #109 #111 #112 #95 #114
+- [ ] #109 Play any stage from FREE PLAY (try MART 1 or ALLEY 1), finish, BACK: the FREE PLAY menu is back in the shooting range (no grocery shelves round the big duck). Same for SETTINGS / HIGH SCORES / course pick / VERSUS reached afterwards.
+- [ ] #111 PRACTICE: the four tier signs are now a list down the LEFT side, on the floor under lane 1 (bold letters). Readable? In the way of anything?
+- [ ] #112 The crimson FINISH sign at the bottom of that list ends practice (-> the practice results), on PC too. ESC still works. Would you rather it say BACK?
+- [ ] #95 Every stage (not practice, not versus) has a small MENU sign top-left under the score. Shoot it: the game PAUSES (clock and targets freeze), QUIT / RESUME signs. QUIT from free play goes to FREE PLAY, from a course to the title. A shot that also hits a target goes to the target, never to MENU.
+- [ ] #95 The FREE PLAY briefing card has a BACK sign top-right (back to FREE PLAY); clicking anywhere else still skips the card.
+- [ ] #95 Course results have a MENU sign (bottom, right of the score plate) and COURSE CLEAR has one bottom-left: both go to the title. Clicking elsewhere still continues.
+- [ ] #114 SETTINGS in four rows: DISPLAY (dither, crosshair, screen shake), CONTROLS (reload, gun), AUDIO (sound, music), PLAYER (name), each with its helper line under it, BACK bottom centre. On a phone the shelf under the picture lists the same groups. Less weird now?
+- NOT VERIFIED: real mouse / touch play (all checked by script-driven shots in the preview); anything by ear (muted); the pause does not stop stage ambience / music.
+- Agent's open questions: INVASION's saucers can fly through the MENU corner for a moment (a shot that hits both goes to the saucer); FINISH vs BACK wording; QUIT from free play goes to FREE PLAY although ESC from free play still goes to the title.
+
 ## Build 0.029 (2026-11-01): GROCERY RUN (stage 11)
 - [ ] GROCERY RUN = MART 1-3 in FREE PLAY (page 7/7) and in the course pool. A supermarket aisle from behind your own cart: shelves of junk food both sides running to the far wall, aisle headers (CHIPS / SODA / CANDY / COOKIES), price tags, tube lights, the B.L.A.M. MART sign over the aisle. You are always rolling: shelves, floor and lights slide toward you. Does the store read? Bright enough?
 - [ ] THE CART sits bottom-middle (wire basket, red handle, the kid seat folded on the back gate, wobbly front wheels) between the HUD duck and the gun. Does it cover anything you need (hearts, timer, HITS pill)?

@@ -101,7 +101,7 @@ class Run {
   }
   get practiceTime() { return Math.max(0, this.state === 'end' ? this.endAt || 0 : this.t); }
   get timeLeft() { return Math.max(0, this.cfg.time - Math.max(0, this.t)); }
-  canShoot() { return this.state === 'play' && this.me.lives > 0 && this.t < this.cfg.time; }
+  canShoot() { return !this.paused && this.state === 'play' && this.me.lives > 0 && this.t < this.cfg.time; }   // paused: ui.js play pause (#95)
   update(dt) {
     if (this.state === 'end') { this.endT += dt; this.updateTargets(); return; }
     if (this.versus) dt = Math.max(0, Math.min(1, -COUNTDOWN + (performance.now() - this.wall0) / 1000 - this.t));
