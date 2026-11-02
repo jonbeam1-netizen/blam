@@ -696,7 +696,7 @@ const MENU_SIGN = { u: 0.058, v: 0.092, s: 0.02, z: 3.4 };
 // the crimson FINISH sign (PC and touch), which ends the session like ESC (-> practice results). The current tier
 // wears its colour, the others are slate; shooting one switches the practice rules live (Run.setTier). Bold font
 // (#100) at 1 px a voxel; 'keep' signs: they spark, they don't shatter.
-const PRACTICE_SIGNS = { u: 0.125, v0: 0.705, dv: 0.047, s: 0.017 };   // #116: below the brown floor edge, above the HUD band, a tad smaller, still
+const PRACTICE_SIGNS = { u: 0.13, v0: 0.70, dv: 0.0465, s: 0.019 };   // #116: below the brown floor edge, above the HUD band, a tad smaller, still
 function practiceMenu(run) {
   const P = PRACTICE_SIGNS, minW = Math.max(...S.TIERS.map(T => R.bold(T.name).w));   // one width for the whole list
   const items = S.TIERS.map((T, i) => ({ id: 'tier' + i, text: T.name, keep: true, color: i === run.tier ? T.sign : 'slate',
