@@ -196,6 +196,7 @@ function applyVolume() {
 // ---------- SAMPLES: recorded files for the core events (loaded by sfx-samples.js) ----------
 let SAMPLE_GAIN = 0.9;          // the whole sample layer against the synth events (match by ear)
 let SHOT_GAIN = 1.41;           // the gun shots only, on top of SAMPLE_GAIN (+3 dB, #56)
+let DING_GAIN = 2.8;            // the glass ding on a target hit (+9 dB, Jon 2026-11-01: 'i cant hear it at all')
 const SKIN_GAIN = { aquapro: 1.33 };   // per-gun trim by ear (Jon 2026-10-30: AQUA PRO sat quieter; its takes peak 3-4 dB under the others)
 const SKIN_KEYS = ['aquapro', 'hotrod', 'ray85', 'candysix'];   // guns.js SKINS order (the index fallback)
 const SKIN_IDS = { justifier: 'hotrod', guncon: 'aquapro', zapper: 'ray85', revolver: 'candysix' };   // guns.js SKINS ids
@@ -237,7 +238,7 @@ const ROUTE = {
   hit(o, def, f, d) {
     const p = panOf(o, def);
     if (!sample('hit', 'hitBreak', 'hit', def.pri, { gain: f, delay: d, pan: p, rate: jit(0.03) })) return false;
-    sample('ding', 'hitDing', 'hitDing', def.pri, { gain: f, delay: d + 0.012, pan: p, rate: Math.pow(2, dingStep / 12) });
+    sample('ding', 'hitDing', 'hitDing', def.pri, { gain: f * DING_GAIN, delay: d + 0.012, pan: p, rate: Math.pow(2, dingStep / 12) });
     return true;
   },
   miss(o, def, f, d) { sample('ricochet', 'ricochet', 'ricochet', def.pri, { gain: f, delay: d, pan: randPan() }); return false; },
@@ -333,6 +334,7 @@ const SFX = {
   EVENTS, log, debug: false, mix: MIX, SAMPLE_SETS,
   get SAMPLE_GAIN() { return SAMPLE_GAIN; }, set SAMPLE_GAIN(x) { if (isFinite(+x)) SAMPLE_GAIN = +x; },
   get SHOT_GAIN() { return SHOT_GAIN; }, set SHOT_GAIN(x) { if (isFinite(+x)) SHOT_GAIN = +x; },
+  get DING_GAIN() { return DING_GAIN; }, set DING_GAIN(x) { if (isFinite(+x)) DING_GAIN = +x; },
   get ready() { return !!(ctx && unlocked); },
   get ctx() { return ctx; },
   get _mix() { return M; },
