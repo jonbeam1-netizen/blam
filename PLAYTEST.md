@@ -3,6 +3,33 @@
 Everything that changed since you last played a build by ear, in one place. Tick what is good, gripe what is not.
 Live link: https://jonbeam1-netizen.github.io/blam/ (hard refresh once: Ctrl+Shift+R).
 
+## Build 0.037 (2026-11-01): #110 FREE PLAY / HIGH SCORES by level
+- [ ] FREE PLAY: a page of level cards (pictures), PRACTICE first; NEXT > / < PREV flip to page 2
+- [ ] Every card's picture reads as its level; the little animations look right
+- [ ] Shoot a card -> that level's screen: big card + name top-left, one sign per stage with ammo + BEST
+- [ ] TIER sign cycles; the stage signs update their ammo / BEST for that tier
+- [ ] Shoot a stage -> briefing -> play. ESC (briefing, play, results), the pause QUIT and the results BACK all land back on that level's screen
+- [ ] BACK / ESC on the level screen -> the picker on the right page; BACK / ESC on the picker -> title
+- [ ] PRACTICE card -> practice; its results BACK -> the picker
+- [ ] HIGH SCORES: same cards with COURSE first; a card shows its stages x tiers table; COURSE shows the course totals
+- [ ] Phone (portrait): tap tiles above and below the game; tap a stage row to play; TIER / BACK / NEXT signs still in the game
+- [ ] Nothing covers Deputy Duck or the gun
+- Also in 0.032-0.036: practice list below the floor edge (static), every menu sign static, pillar RELOAD markers only when empty, hit ding +9 dB.
+
+## Build 0.038: GROCERY RUN round 3 (2026-11-01)
+- [ ] PACKED SHELVES: every board now carries live snacks (turning, bobbing, shootable): about 14 on screen at Beginner, 20+ at Insane, on top of the stock. Enough? Too much? (The stock is warmer now: dusty reds / oranges / navy / green instead of grey.)
+- [ ] CLIMBER WAVES: veggies come in waves (Beginner 2-4 at a time, 14 a round; Insane 5-8 at a time, 36 a round) with a breather between (about 3 s Beginner, about 1.2 s Insane), never more than 3 (Beginner) .. 6 (Insane) on the cart at once. A scurry sound + the HUD duck's angry face says a wave is coming. Chaos but not impossible?
+- [ ] SIDES ARE BACK: they climb the LEFT and RIGHT side (the outside, facing you), the front corners and the front face, always drawn in front of the cart. Easy to see and shoot now? Anything hidden behind the gun / HUD?
+- [ ] GRASP JOLTS: every grasp shakes the cart and the pile a little (two at once: more) with a wire clink; your aim never shakes. Felt or too subtle?
+- [ ] PATTERNS: LADDER (steady), SPRINTER (fast, then stops just under the rim), PEEKER (climbs, ducks back down, comes again), PAIR (two on one side a beat apart), ROPE SWINGER (swings in from off the screen on a rope, lands on the rim, a beat, jumps in; shoot it mid-swing = 300), ZIPLINE (Very Hard / Insane: slides down a line from the top shelf). Can you tell them apart?
+- [ ] NEW RULE: a veggie that gets in costs NO life. It stands on your pile and THROWS SNACKS OUT (one every 0.8 s Beginner .. 0.5 s Insane: you see it hold one up, then fling it out); every thrown snack takes one off your HITS. Shoot it in the cart (+200) to stop it. No lives lost anywhere in this stage now.
+- [ ] HITS = SNACKS ONLY: climbers are points (200, a swinger mid-swing 300) but do not count toward the quota. Briefing: SHOOT n SNACKS OR MORE! / VEGGIES IN THE CART THROW SNACKS OUT. SHOOT THEM!
+- [ ] VARIANTS (ammo unchanged, all packed): MART 1 SNACK AISLE = the standard mix; MART 2 12 ITEMS OR LESS = more rope swingers and peekers; MART 3 FAMILY SIZE = bigger waves with longer breathers.
+- [ ] Sounds (synth, untested by ear): cart jolt clink, snack thrown out, swing bonus ding, wave scurry, rope whoosh, zipline zzzip.
+- NOT VERIFIED: anything by ear (muted throughout); real mouse / touch play (script-driven autopilot + stills only); a real frame rate (the preview pane was hidden); portrait; a two-browser versus (parity checked with two runs in one page); the jolt in motion (numbers only).
+- Rough spots (agent): a busy wave is a crowd round the cart (veggies on a tall pile overlap the front-face climbers); the climb is short on screen (a ~0.9 m veggie on a 1 m cart); one veggie left in the cart all round throws 25-40 snacks (harsh, by the rule); Insane's quota (~27) is now lower than Very Hard's (~35) (Insane has 36 climbers); the rope is a thin 2 px line.
+- Agent's open questions: (1) Density: keep ~14 / ~22 live snacks on screen or go back to the brief's 8-10 / 15? (2) Should climbers in the cart stop throwing when the cart is empty (now they just keep flinging nothing)? (3) Rope swingers only come from the left / right edge; want them from the top too? (4) The quota counts a share of the director's "stream" snacks (about a quarter of all snacks); OK?
+
 ## Build 0.031: GROCERY RUN round 2 (2026-11-01): #101-#108
 - [ ] ART SIGN-OFF FIRST: open http://localhost:8790/review/grocery/itemviewer.html (the same builders the stage uses). Every snack look (23) and every climber (7) with its name, slowly turning. 1-9 / A-U = one item big, 0 = back, SPACE = far / near (FAR = the size it pops in at), `-` = full turn / the in-game +-20 turn, `=` = climber pose. Tick or gripe item by item.
 - [ ] #101 The snacks SIT on the shelf (base on the board, a gap under the board above, never through the lip, the back or each other), are full 3D (backs, sides) and slowly turn about +-20 deg with a slight bob. Do they read as 3D now?

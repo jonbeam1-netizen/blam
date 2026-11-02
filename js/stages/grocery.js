@@ -14,12 +14,17 @@
    camera with the shelves; the ride IS the pop window. The product's kind matches the header of the bay it is on.
    Shot: it pops off the shelf, arcs into the cart (cosmetic, 0.5 s, cartClunk) and the PILE grows (the last 24
    products stay visible on a junk heap that rises with the count; one merged mesh). HIT +1.
-   PART 2, VEGGIES CLIMBING IN: fruit, veg and a steak with stick legs and arms run up to the cart's FRONT face (its two
-   front corners or the face itself) and climb it over the tier's climb window, hang at the rim for a beat and DROP IN.
-   They are always drawn in front of the cart (wires, handle, pile): each climber is drawn scaled toward the camera, so
-   it projects exactly where it is but wins every depth test. Shot while climbing: veg bits, +200, a HIT. Dropped in
-   unshot: a THUD, LIFE -1, -300 through the engine's own penalty path exactly as INVASION's landing hook
-   (run.penaltyNow(i, 'bomb', ...) read from run.taken; the engine's explosion SOUND is swapped out for that one call).
+   PART 2, VEGGIES CLIMBING IN (round 3): fruit, veg and a steak with stick legs and arms come at the cart in WAVES
+   (a few over a few seconds, then a breather) and climb its LEFT / RIGHT side (the outer face, toward you), its front
+   corners or its front face, hand over hand: every GRASP jolts the cart (the cart and the pile shake, a wire clink; the
+   camera never shakes). Patterns: LADDER, SPRINTER (fast, then a stop under the rim), PEEKER (ducks back down, comes
+   again), PAIR (two on one side a beat apart), ROPE SWINGER (swings in from off the screen edge on a rope, lands on the
+   rim, a beat, jumps in; shot mid-swing = +100 more) and from Very Hard the ZIPLINE (slides down a line from the top
+   shelf to the rim). Always drawn in front of the cart (scaled toward the camera: same projection, wins every depth
+   test). Shot: veg bits, +200 POINTS (not a snack: HITS count snacks only).
+   IN THE CART (round 3 rule): a veggie that gets in costs no life; it stands on the pile and THROWS SNACKS OUT (one every
+   ~0.8 s .. 0.5 s by tier) until it is shot (+200): each thrown snack leaves the pile and takes one HIT off the player
+   whose snack it was (pure in the shared hit record). No life is lost anywhere in this stage.
    FINALE (a real ride out): the aisle ends; the cart rolls out past the end panels, swings round into checkout lane 3
    where the cashier duck already stands at the register; the scanner beeps over the pile and a receipt prints up
    reading B.L.A.M. MART with the round's score as the TOTAL (HUD-drawn so it reads), the HUD duck cheers. About 6 s.
@@ -56,14 +61,16 @@ const DECK = 0.18, UNIT_TOP = 2.5;
 const H_MAX = 0.5, LANE_HW = 0.255, BOB = 0.012, YAW_A = 0.35, YAW_W = 1.15;   // product fit (height, lane half depth), bob, turntable
 // the aisle headers (one per shelf bay, the pattern repeats every NBP bays; the right run is offset by RSH bays) and the
 // product LOOKS each one stocks (indices into PRODUCTS, filled in below)
+// stock colours (round 3, Jon: round 2 read grey): muted but real supermarket colours, the dark / dusty palette tones
+// (oxblood, rust, sand, navy, forest, plum ...) so the saturated, lit, turning live snacks still pop out of it
 const HEADERS = [
-  { label: 'CHIPS', bd: 'red', tx: 'yellow', kinds: ['CHIPS'], stock: 'bag', cols: ['tan', 'chestnut', 'sand', 'steel'] },
-  { label: 'SODA', bd: 'blue', tx: 'bone', kinds: ['SODA'], stock: 'can', cols: ['steel', 'slate', 'haze', 'walnut'] },
-  { label: 'CEREAL', bd: 'orange', tx: 'bone', kinds: ['CEREAL'], stock: 'tall', cols: ['sand', 'tan', 'haze', 'steel'] },
-  { label: 'CANDY', bd: 'magenta', tx: 'lemon', kinds: ['CANDY'], stock: 'small', cols: ['steel', 'walnut', 'haze', 'slate'] },
-  { label: 'BAKERY', bd: 'pink', tx: 'bone', kinds: ['DONUT', 'CUPCAKE', 'COOKIES'], stock: 'box', cols: ['sand', 'chestnut', 'tan', 'haze'] },
-  { label: 'HOT FOOD', bd: 'crimson', tx: 'yellow', kinds: ['HOTDOG', 'CORNDOG', 'PIZZA'], stock: 'box', cols: ['walnut', 'tan', 'steel', 'chestnut'] },
-  { label: 'FROZEN', bd: 'cyan', tx: 'navy', kinds: ['ICECREAM'], stock: 'box', cols: ['haze', 'steel', 'slate', 'walnut'] }
+  { label: 'CHIPS', bd: 'red', tx: 'yellow', kinds: ['CHIPS'], stock: 'bag', cols: ['oxblood', 'rust', 'sand', 'navy', 'tan'] },
+  { label: 'SODA', bd: 'blue', tx: 'bone', kinds: ['SODA'], stock: 'can', cols: ['oxblood', 'navy', 'forest', 'chestnut', 'slate'] },
+  { label: 'CEREAL', bd: 'orange', tx: 'bone', kinds: ['CEREAL'], stock: 'tall', cols: ['rust', 'sand', 'oxblood', 'tan', 'navy'] },
+  { label: 'CANDY', bd: 'magenta', tx: 'lemon', kinds: ['CANDY'], stock: 'small', cols: ['plum', 'oxblood', 'indigo', 'chestnut', 'tan'] },
+  { label: 'BAKERY', bd: 'pink', tx: 'bone', kinds: ['DONUT', 'CUPCAKE', 'COOKIES'], stock: 'box', cols: ['sand', 'plum', 'chestnut', 'tan', 'oxblood'] },
+  { label: 'HOT FOOD', bd: 'crimson', tx: 'yellow', kinds: ['HOTDOG', 'CORNDOG', 'PIZZA'], stock: 'box', cols: ['oxblood', 'sand', 'rust', 'chestnut', 'tan'] },
+  { label: 'FROZEN', bd: 'cyan', tx: 'navy', kinds: ['ICECREAM'], stock: 'box', cols: ['steel', 'navy', 'slate', 'haze', 'indigo'] }
 ];
 const BAY = 2.4, NBP = HEADERS.length, PERIOD = BAY * NBP, RSH = 3;
 const patOf = (b, sd) => (((b % NBP) + NBP) % NBP + (sd > 0 ? RSH : 0)) % NBP;
@@ -75,8 +82,16 @@ const NBAYS = Math.ceil((ZS1 - ZS0) / BAY);
 const Z0 = -9.4, POP_T = 0.2, PROD_RA = 0.1;                    // a product appears here (the far end); pop-in; shootable from
 const CX = -0.1, CZ = 0.95, RIM = 1.02, BOT = 0.46, CHW = 0.8, CHL = 0.95;   // THE CART: centre, rim / basket floor y, half sizes
 const PILE_Z1 = 0.8;                                            // cart-local z: the pile fills -CHL..PILE_Z1
-const FLY = 0.5, PILE_N = 24, PILE_SC = 0.72, VEG_N = 6, VEG_PSC = 0.78;
-const HANG_Y = 0.36, DROP_T = 0.3, CHARGE_VS = 0.6, KN = 0.45;  // climber hang (feet y, nominal); the drop; versus grace; near-scale
+const FLY = 0.5, PILE_N = 24, PILE_SC = 0.72;
+const HANG_Y = 0.36, DROP_T = 0.3, KN = 0.45;                  // climber hang (feet y, nominal); the drop into the cart; near-scale
+// climbers (round 3): side spots on the OUTER side faces (cart-local z), the climb's start (feet y), the hop onto the cart,
+// a grasp's pull, a peeker's duck, the mantle over the rim; rope (pivot out / up), zipline anchor (top shelf, cart frame);
+// in the cart: the wind-up before a throw, the thrown snack's flight; pools: live-snack slots, rope lines, thrown snacks
+const SIDE_XL = CHW + 0.18, SIDE_XR = CHW + 0.12, Y0C = 0.05, HOP = 0.22, PULL = 0.2, DUCK_T = 0.25, MANTLE = 0.2;
+const ROPE_OUT = 0.8, ROPE_PY = 4.6, RIM_PAUSE = 0.6, ZIP_X = 1.95, ZIP_Y = 2.62, ZIP_DZ = -3.2, ZIP_PAUSE = 0.35;
+const THROW_UP = 0.3, TOSS_T = 0.6, LOOK = 0.35, ROPE_N = 10, TOSS_N = 4;
+const NSLOT = (() => { try { const u = R.renderer.capabilities.maxVertexUniforms | 0; return clamp(Math.floor((u - 40) / 2), 0, 64); } catch (e) { return 40; } })();
+const PAT = ['LADDER', 'SPRINTER', 'PEEKER', 'ROPE', 'ZIPLINE'];
 // the finale: the ride out (FIN_RIDE s along the path below), the scan, the receipt; the stage holds FIN_HOLD after the last item
 const FIN_RIDE = 2.4, SCAN_T = 2.75, SCAN_N = 8, SCAN_DT = 0.17, RCPT_T = 4.2, FIN_HOLD = 6.2, FIN_SLOT = 6.6;
 // the front of the store (end frame): the camera's path out of the aisle, the lanes, the end wall
@@ -424,7 +439,9 @@ const POSES = {
   clb1: { a: [[-0.14, 0.0, 0.05], [0.03, 0.26, 0.05]], l: [[-0.05, -0.14, 0.03], [0.08, -0.07, 0.06]] },
   hng0: { a: [[-0.04, 0.28, 0.03], [0.04, 0.28, 0.03]], l: [[-0.06, -0.14, 0.0], [0.09, -0.12, 0.05]] },
   hng1: { a: [[-0.04, 0.27, 0.03], [0.04, 0.28, 0.03]], l: [[-0.09, -0.12, 0.05], [0.06, -0.14, 0.0]] },
-  fall: { a: [[-0.15, 0.16, 0.03], [0.15, 0.16, 0.03]], l: [[-0.13, -0.06, 0.03], [0.13, -0.06, 0.03]] }
+  fall: { a: [[-0.15, 0.16, 0.03], [0.15, 0.16, 0.03]], l: [[-0.13, -0.06, 0.03], [0.13, -0.06, 0.03]] },
+  stand: { a: [[-0.13, -0.1, 0.04], [0.13, -0.1, 0.04]], l: [[-0.05, -0.14, 0.01], [0.05, -0.14, 0.01]] },   // round 3: on the rim / in the cart
+  thr: { a: [[-0.05, 0.27, -0.02], [0.05, 0.27, -0.02]], l: [[-0.07, -0.14, 0.02], [0.07, -0.14, 0.02]] }    // a snack held over the head
 };
 const POSE_K = Object.keys(POSES);
 let ART = null;
@@ -487,10 +504,10 @@ function stockRun(env, sd, pat, li, y, yTop, z0, z1, aisle) {
   let z = z0 + 0.1, q = 0, blk = 0, col = null, w = 0, h = 0;
   while (z < z1 - 0.12) {
     if (blk <= 0) {
-      blk = 2 + Math.floor(rr(q * 3 + 11) * 4); col = PAL[H.cols[Math.floor(rr(q * 3 + 2) * H.cols.length) % H.cols.length]];
-      const s = H.stock;
+      blk = 2 + Math.floor(rr(q * 3 + 11) * 5); col = PAL[H.cols[Math.floor(rr(q * 3 + 2) * H.cols.length) % H.cols.length]];
+      const s = H.stock;                                        // round 3: fuller boards (taller facings, longer blocks)
       w = s === 'can' ? 0.13 : s === 'small' ? 0.1 + rr(q * 3) * 0.05 : s === 'tall' ? 0.2 + rr(q * 3) * 0.06 : s === 'bag' ? 0.24 + rr(q * 3) * 0.06 : 0.15 + rr(q * 3) * 0.12;
-      h = s === 'can' ? 0 : s === 'tall' ? avail * (0.86 + rr(q * 3 + 1) * 0.1) : s === 'small' ? avail * (0.4 + rr(q * 3 + 1) * 0.2) : avail * (0.6 + rr(q * 3 + 1) * 0.3);
+      h = s === 'can' ? 0 : s === 'tall' ? avail * (0.88 + rr(q * 3 + 1) * 0.09) : s === 'small' ? avail * (0.55 + rr(q * 3 + 1) * 0.25) : avail * (0.74 + rr(q * 3 + 1) * 0.22);
     }
     blk--;
     const ze = Math.min(z + w, z1 - 0.08), dx0 = STK + rr(q * 5 + 7) * 0.03, dx1 = BACKX - 0.06;
@@ -632,11 +649,13 @@ function buildFar(env, glow, obj) {
 const RZ = -1.5;                                                 // the register's spot on the counter (stand-local z)
 // ---------- THE CART: wire basket (object class, unlit, baked), red plastic handle / kid seat / bumpers (toon), wheels ----------
 function buildCartWires(v) {
-  const w = 0.011, X = CHW, L = CHL, rail = (x0, y0, z0, x1, y1, z1, c) => v.bx(x0 - w, y0 - w, z0 - w, x1 + w, y1 + w, z1 + w, PAL[c]);
+  // round 3: thinner wire (0.011 -> 0.008) and SPARSE side walls (an upright every 0.63, one mid rail): the climbers on the
+  // sides read clearly (they are drawn in front of the cart anyway)
+  const w = 0.008, X = CHW, L = CHL, rail = (x0, y0, z0, x1, y1, z1, c) => v.bx(x0 - w, y0 - w, z0 - w, x1 + w, y1 + w, z1 + w, PAL[c]);
   for (const z of [-L, L]) { rail(-X, RIM, z, X, RIM, z, 'mist'); v.bx(-X, RIM - 0.02, z - 0.02, X, RIM + 0.02, z + 0.02, PAL.haze); }
   for (const x of [-X, X]) { rail(x, RIM, -L, x, RIM, L, 'mist'); v.bx(x - 0.02, RIM - 0.02, -L, x + 0.02, RIM + 0.02, L, PAL.haze); }
-  for (let z = -L + 0.38; z < L - 0.2; z += 0.38) for (const x of [-X, X]) rail(x, BOT, z, x, RIM, z, 'steel');
-  for (const y of [BOT + 0.19, BOT + 0.38]) for (const x of [-X, X]) rail(x, y, -L, x, y, L, 'haze');
+  for (let z = -L + 0.63; z < L - 0.2; z += 0.63) for (const x of [-X, X]) rail(x, BOT, z, x, RIM, z, 'steel');
+  for (const y of [BOT + 0.28]) for (const x of [-X, X]) rail(x, y, -L, x, y, L, 'haze');
   for (let x = -X + 0.11; x < X - 0.05; x += 0.12) for (const z of [-L, L]) rail(x, BOT, z, x, RIM, z, 'steel');
   for (let y = BOT; y < RIM - 0.05; y += 0.14) for (const z of [-L, L]) rail(-X, y, z, X, y, z, 'haze');
   for (const x of [-X, X]) for (const z of [-L, L]) v.bx(x - 0.02, BOT, z - 0.02, x + 0.02, RIM, z + 0.02, PAL.haze);
@@ -752,6 +771,83 @@ function pileWrite(mesh, list) {                                 // list: [[geom
   G.index.needsUpdate = true; G.setDrawRange(0, io); mesh.visible = io > 0;
 }
 
+// ---------- round 3: ALL the live snacks on the shelves in ONE draw call ----------
+// NSLOT fixed slots; a slot's vertex / index region holds one look's geometry (written only when the slot takes a new look,
+// uploaded as a sub-range), its pose is two uniforms (x, y, z, yaw) + (scale x, y, z): the toon shader is the shared
+// Props.mat with its vertex transform swapped for the slot's (so the look is identical; a free slot has scale 0).
+// A product that finds no free slot draws its own mesh (fallback).
+function batchMat() {
+  const a = 'vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);', b = 'vC = (modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;', c = 'vec3 nor = normal, sn = position;';
+  const vs0 = TOON.vertexShader; if (!vs0.includes(a) || !vs0.includes(b) || !vs0.includes(c)) return null;
+  const vs = 'attribute float aSlot;\nuniform vec4 uSl[' + (NSLOT * 2) + '];\n' + vs0
+    .replace(a, 'int si = int(aSlot + 0.5); vec4 sA = uSl[si * 2], sB = uSl[si * 2 + 1]; float cq = cos(sA.w), sq = sin(sA.w);\n  vec3 lp = position * sB.xyz;\n' +
+      '  vec4 mvPosition = modelViewMatrix * vec4(cq * lp.x + sq * lp.z + sA.x, lp.y + sA.y, -sq * lp.x + cq * lp.z + sA.z, 1.0);')
+    .replace(b, 'vC = (modelViewMatrix * vec4(sA.xyz, 1.0)).xyz;')
+    .replace(c, 'vec3 nor = vec3(cq * normal.x + sq * normal.z, normal.y, -sq * normal.x + cq * normal.z), sn = nor;');
+  const u = Object.assign({}, TOON.uniforms, { uSl: { value: Array.from({ length: NSLOT * 2 }, () => new THREE.Vector4(0, 0, 0, 0)) } });
+  return new THREE.ShaderMaterial({ uniforms: u, vertexShader: vs, fragmentShader: TOON.fragmentShader, fog: TOON.fog });
+}
+function makeBatch(A) {
+  if (NSLOT < 8) return null;                                    // a tiny uniform budget: every product draws its own mesh
+  const mat = batchMat(); if (!mat) return null;
+  const maxV = Math.max(...A.prod.map(p => p.verts)), maxI = Math.max(...A.prod.map(p => p.idx)), N = NSLOT, g = new THREE.BufferGeometry();
+  for (const [n, k] of PILE_ATTR) { const at = new THREE.BufferAttribute(new Float32Array(N * maxV * k), k); at.setUsage(THREE.DynamicDrawUsage); g.setAttribute(n, at); }
+  const sl = new Float32Array(N * maxV); for (let s = 0; s < N; s++) sl.fill(s, s * maxV, (s + 1) * maxV); g.setAttribute('aSlot', new THREE.BufferAttribute(sl, 1));
+  const ix = new THREE.BufferAttribute(new Uint32Array(N * maxI), 1); ix.setUsage(THREE.DynamicDrawUsage);
+  for (let s = 0; s < N; s++) ix.array.fill(s * maxV, s * maxI, (s + 1) * maxI);
+  g.setIndex(ix);
+  const mesh = noRay(new THREE.Mesh(g, mat)); mesh.frustumCulled = false; mesh.userData.sharedGeo = true;
+  return { mesh, maxV, maxI, used: new Array(N).fill(null), look: new Array(N).fill(-1), u: mat.uniforms.uSl.value, mat, lo: 0, hi: -1, writes: 0 };
+}
+function slotDirty(Bt, s) {
+  const G = Bt.mesh.geometry, pos = G.attributes.position;
+  if (pos.updateRange.count === -1 || Bt.hi < 0) { Bt.lo = s; Bt.hi = s; } else { Bt.lo = Math.min(Bt.lo, s); Bt.hi = Math.max(Bt.hi, s); }
+  for (const [n, k] of PILE_ATTR) { const at = G.attributes[n]; at.updateRange.offset = Bt.lo * Bt.maxV * k; at.updateRange.count = (Bt.hi - Bt.lo + 1) * Bt.maxV * k; at.needsUpdate = true; }
+  G.index.updateRange.offset = Bt.lo * Bt.maxI; G.index.updateRange.count = (Bt.hi - Bt.lo + 1) * Bt.maxI; G.index.needsUpdate = true;
+}
+function slotClaim(owner, pk) {
+  const Bt = PARTS && PARTS.batch; if (!Bt) return -1;
+  let s = -1; for (let i = 0; i < NSLOT; i++) if (!Bt.used[i]) { if (Bt.look[i] === pk) { s = i; break; } if (s < 0) s = i; }
+  if (s < 0) return -1;
+  Bt.used[s] = owner;
+  if (Bt.look[s] !== pk) {                                       // write the look into the slot's region
+    const src = buildArt().prod[pk].geo, G = Bt.mesh.geometry, n = src.attributes.position.count;
+    for (const [nm, k] of PILE_ATTR) G.attributes[nm].array.set(src.attributes[nm].array.subarray(0, n * k), s * Bt.maxV * k);
+    const si = src.index.array, di = G.index.array, o = s * Bt.maxI, base = s * Bt.maxV;
+    for (let i = 0; i < si.length; i++) di[o + i] = si[i] + base;
+    di.fill(base, o + si.length, o + Bt.maxI);
+    Bt.look[s] = pk; Bt.writes++; slotDirty(Bt, s);
+  }
+  Bt.u[s * 2 + 1].set(0, 0, 0, 0); Bt.mat.uniformsNeedUpdate = true;
+  return s;
+}
+function slotPose(s, x, y, z, yaw, sx, sy, sz) { const Bt = PARTS.batch; Bt.u[s * 2].set(x, y, z, yaw); Bt.u[s * 2 + 1].set(sx, sy, sz, 0); Bt.mat.uniformsNeedUpdate = true; }
+function slotFree(owner) {
+  const Bt = PARTS && PARTS.batch; if (!Bt || !owner || owner.slot < 0) return;
+  const s = owner.slot; owner.slot = -1;
+  if (Bt.used[s] === owner) { Bt.used[s] = null; Bt.u[s * 2 + 1].set(0, 0, 0, 0); Bt.mat.uniformsNeedUpdate = true; }
+}
+function slotsReset() { const Bt = PARTS && PARTS.batch; if (!Bt) return; for (let s = 0; s < NSLOT; s++) { if (Bt.used[s]) Bt.used[s].slot = -1; Bt.used[s] = null; Bt.u[s * 2 + 1].set(0, 0, 0, 0); } Bt.mat.uniformsNeedUpdate = true; }
+// ---------- round 3: rope / zipline lines (one LineSegments, ROPE_N segments, drawn over the set, under the climbers) ----------
+const _rc = new THREE.Color();
+function ropeSet(i, a, b, col) {                                 // a rope = 2 segments: the line + a darker one 1 px over (2 px thick)
+  const L = PARTS && PARTS.ropes; if (!L || i < 0) return;
+  const p = L.geometry.attributes.position, c = L.geometry.attributes.color, o = i * 4;
+  if (!a) { for (let k = 0; k < 4; k++) p.setXYZ(o + k, 0, -9, 0); }
+  else {
+    const px = (x, y, z) => 1.05 / scr(x, y, z)[2];             // one game px in world units at that depth
+    p.setXYZ(o, a[0], a[1], a[2]); p.setXYZ(o + 1, b[0], b[1], b[2]);
+    p.setXYZ(o + 2, a[0] + px(a[0], a[1], a[2]), a[1], a[2]); p.setXYZ(o + 3, b[0] + px(b[0], b[1], b[2]), b[1], b[2]);
+    _rc.set(col); for (let k = 0; k < 2; k++) c.setXYZ(o + k, _rc.r, _rc.g, _rc.b);
+    _rc.multiplyScalar(0.6); for (let k = 2; k < 4; k++) c.setXYZ(o + k, _rc.r, _rc.g, _rc.b);
+    c.needsUpdate = true;
+  }
+  p.needsUpdate = true;
+}
+const ROPES = new Array(ROPE_N).fill(null);
+function ropeClaim(owner) { const i = ROPES.indexOf(null); if (i >= 0) ROPES[i] = owner; return i; }
+function ropeFree(owner) { const i = owner ? owner.rope : -1; if (i >= 0 && ROPES[i] === owner) { ROPES[i] = null; ropeSet(i, null); } if (owner) owner.rope = -1; }
+
 let PARTS = null;
 function buildEnv() {
   const A = buildArt();
@@ -784,14 +880,21 @@ function buildEnv() {
   const cg = casterGeo(), wl = shared(cg, TOON), wr = shared(cg, TOON);
   wl.position.set(-CHW + 0.08, 0, -CHL + 0.1); wr.position.set(CHW - 0.08, 0, -CHL + 0.1);
   const heap = noRay(shared(heapGeo(), MAT.obj)); heap.position.y = BOT; heap.visible = false;
-  // the pile: ONE merged mesh (24 products + 6 veggies) + the scanned item's flash copy
+  // the pile: ONE merged mesh (the last 24 products; round 3: the veggies in the cart are live targets, not pile items)
+  // + the scanned item's flash copy
   const maxPV = Math.max(...A.prod.map(p => p.verts)), maxPI = Math.max(...A.prod.map(p => p.idx));
-  const maxVV = Math.max(...A.veg.map(v => v.poses.fall.attributes.position.count)), maxVI = Math.max(...A.veg.map(v => v.poses.fall.index.count));
-  const pile = pileMesh(PILE_N * maxPV + VEG_N * maxVV, PILE_N * maxPI + VEG_N * maxVI);
+  const pile = pileMesh(PILE_N * maxPV, PILE_N * maxPI);
   const flash = noRay(new THREE.Mesh(A.prod[0].geo, TOON)); flash.userData.sharedGeo = true; flash.visible = false; flash.frustumCulled = false;
   cart.add(wires, plastic, wl, wr, heap, pile, flash);
   const beam = noRay(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), M_BEAM)); beam.visible = false; beam.frustumCulled = false; beam.renderOrder = 7;
   group.add(world, cart, beam);
+  // round 3: the live snacks' batch (one draw call), the rope / zipline lines, the thrown-out snacks (drawn near)
+  const batch = makeBatch(A); if (batch) group.add(batch.mesh);
+  const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ROPE_N * 12).fill(-9), 3)); rg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(ROPE_N * 12), 3));
+  rg.attributes.position.setUsage(THREE.DynamicDrawUsage);
+  const ropes = noRay(new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ vertexColors: true, fog: false, depthTest: false, depthWrite: false, transparent: true, blending: THREE.NoBlending })));
+  ropes.frustumCulled = false; ropes.renderOrder = 5.9; ropes.userData.sharedGeo = true; group.add(ropes);
+  const toss = []; for (let i = 0; i < TOSS_N; i++) { const m = noRay(new THREE.Mesh(A.prod[0].geo, TOON)); m.userData.sharedGeo = true; m.visible = false; m.frustumCulled = false; toss.push(m); group.add(m); }
   // misses: the set's only shootable is a proxy that hits the set's meshes (the tracer / ricochet land there); the engine's
   // square bullet hole is wiped by a microtask (the shelves roll: a hole would hang in the air)
   const proxy = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.01, 0.01), new THREE.MeshBasicMaterial({ visible: false }));
@@ -805,7 +908,7 @@ function buildEnv() {
     if (B.G && B.G.run && B.G.run.stage === ID) Promise.resolve().then(() => T.clearDecals());
   };
   group.add(proxy);
-  PARTS = { world, aisle, cart, wl, wr, heap, pile, flash, duck, arm, beam, envMesh, pileSig: '' };
+  PARTS = { world, aisle, cart, wl, wr, heap, pile, flash, duck, arm, beam, envMesh, pileSig: '', batch, ropes, toss, jolt: { x: 0, y: 0, rx: 0, rz: 0, pile: 0 } };
   group.userData.shootables = [proxy];
   return group;
 }
@@ -861,6 +964,10 @@ function envStep() {
   const moving = !(sp.f >= 0 && sp.f > FIN_RIDE), spd = dir ? dir.v : 2.2, w = moving ? 0.22 + 0.04 * spd : 0.02;
   PARTS.wl.rotation.y = w * Math.sin(t * (7 + spd) + 0.3) + 0.1 * Math.sin(t * 2.3);
   PARTS.wr.rotation.y = w * Math.sin(t * (7.6 + spd) + 1.9) - 0.1 * Math.sin(t * 1.9);
+  // round 3: the GRASP JOLTS (the director sums them, pure in the stage clock): the cart mesh shakes, the pile jiggles
+  const J = PARTS.jolt, jon = dir && run.state !== 'end';
+  PARTS.cart.position.set(CX + (jon ? J.x : 0), jon ? J.y : 0, CZ); PARTS.cart.rotation.set(jon ? J.rx : 0, 0, jon ? J.rz : 0);
+  PARTS.pile.position.y = jon ? J.pile : 0;
   // the cashier: idles at the register; waves while you roll in, scans, hops when the receipt prints
   const f = sp.f, scan = f - SCAN_T, wave = f > FIN_RIDE * 0.5 && f < SCAN_T;
   PARTS.duck.rotation.y = (f >= 0 ? 0.95 : 0.5) + (wave ? 0.15 * Math.sin(f * 14) : 0.05 * Math.sin(t * 1.3));
@@ -879,13 +986,52 @@ const SCAN_PTS = [[-0.3, -0.5], [0.25, -0.35], [-0.05, -0.15], [0.4, -0.6], [-0.
 function scanPoint(i, o) { const p = SCAN_PTS[i % SCAN_PTS.length]; return o.set(CX + p[0], heapTop(PILE.nProd, p[0], p[1]) + 0.32, CZ + p[1]); }
 
 // =========================================================================================
-// THE PILE: the shot products (in hit order, the last 24 on the heap) + the veggies that dropped in. Pure in run.taken,
-// the SHARED hit times (points()) and the stage clock. Updated by the director spawn every frame; the merged mesh is
-// rewritten only when the set of items in the cart changes.
+// THE CART'S CONTENTS (round 3). cartState(run, t): the shot products in the cart (by the SHARED hit time + the flight),
+// the veggies that got in, their THROWS (each takes the snack that landed last; none in the cart: it finds nothing) and
+// each player's HITS = their snacks still in the cart. A pure function of the timeline, run.taken and the shared hit times
+// points() records (versus-safe), memoised per (run, t, taken count). The pile, the HITS, the thrown snacks read it.
 // =========================================================================================
 const HIT = new WeakMap();
 const PILE = { nProd: 0, n: 0, run: null };
-function prodSlot(k, n, o) {                                     // the k-th product in (n landed so far) -> cart-local pose
+const hitT = s => (HIT.has(s) ? HIT.get(s) : s.t0);
+const VEGL = new WeakMap();
+function vegsOf(run) { let l = VEGL.get(run.timeline); if (!l) { l = run.timeline.filter(s => s.kind === 'veg'); VEGL.set(run.timeline, l); } return l; }
+// a veggie in the cart throws at land + th0, then every thd, while it is in the cart and the stream runs
+function throwTimes(s, shot, last, upto, out) {
+  const L = s.t0 + s.land, end = Math.min(shot, last, upto);
+  for (let k = 0; k < 400; k++) { const tt = +(L + s.th0 + k * s.thd).toFixed(4); if (tt >= end) break; out.push([tt, s.id]); }
+}
+const CS = { run: null, t: NaN, n: -1, out: null };
+function cartState(run, t) {
+  if (CS.out && CS.run === run && CS.t === t && CS.n === run.taken.size) return CS.out;
+  const tl = run.timeline, dir = dirOf(run), last = dir ? dir.last : Infinity, prods = [], throws = [], inCart = [];
+  for (const [id, by] of run.taken) { if (by < 0) continue; const s = tl[id]; if (s && s.kind === 'prod') prods.push([hitT(s) + FLY, id, by]); }
+  prods.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  for (const s of vegsOf(run)) {
+    const L = s.t0 + s.land; if (L > last) continue;
+    const shot = run.taken.has(s.id) ? hitT(s) : Infinity;
+    if (shot < L) continue;                                         // shot before it got in
+    if (L <= t && shot > t) inCart.push(s.id);
+    throwTimes(s, shot, last, t + LOOK, throws);
+  }
+  throws.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const toss = [], gone = new Map(), stack = []; let qi = 0;
+  for (const [tt, vid] of throws) {
+    while (qi < prods.length && prods[qi][0] <= tt - THROW_UP) stack.push(prods[qi++]);   // in the cart when the wind-up starts
+    const p = stack.pop(); toss.push([tt, vid, p ? p[1] : -1]); if (p) gone.set(p[1], tt);
+  }
+  const hits = run.players.map(() => 0); let out = 0;
+  for (const p of prods) { const g = gone.get(p[1]); if (g != null && g <= t) out++; else hits[p[2]]++; }
+  CS.run = run; CS.t = t; CS.n = run.taken.size;
+  return (CS.out = { prods, toss, gone, hits, inCart, out, last });
+}
+// the products lying in the cart now (land order; a snack being wound up for a throw has left the pile)
+function pileList(run, t) {
+  const cs = cartState(run, t), out = [];
+  for (const p of cs.prods) { if (p[0] > t) break; const g = cs.gone.get(p[1]); if (g != null && g - THROW_UP <= t) continue; out.push(p); }
+  return out;
+}
+function prodSlot(k, n, o) {                                     // the k-th product in (n in the cart) -> cart-local pose
   const slot = k % PILE_N, col = slot % 6, row = Math.floor(slot / 6) % 4, h = q => hash3(k, slot, q);
   const order = [0, 2, 1, 3][row];                             // the front rows fill first (they show best over the kid seat)
   const x = -0.6 + col * 0.24 + (h(1) - 0.5) * 0.08, z = -CHL + 0.22 + order * 0.42 + (h(2) - 0.5) * 0.1;
@@ -893,28 +1039,16 @@ function prodSlot(k, n, o) {                                     // the k-th pro
   o.ry = (h(3) - 0.5) * 1.6; o.rx = -0.35 - h(4) * 0.6; o.rz = (h(5) - 0.5) * 0.9;
   return o;
 }
-const VSLOT = [[-0.25, -0.45], [0.3, -0.25], [0.0, 0.05], [-0.48, -0.05], [0.45, -0.62], [0.08, -0.72]];
-function vegSlot(j, n, o) {
-  const p = VSLOT[j % VSLOT.length]; o.x = p[0]; o.z = p[1]; o.y = heapTop(n, p[0], p[1]) + (n ? 0.16 : 0.03);   // on top of the snacks: a reminder
-  o.ry = (hash1(j * 7 + 3) - 0.5) * 1.2; o.rx = -1.15; o.rz = (hash1(j * 5 + 1) - 0.5) * 0.6;
-  return o;
-}
-// the pile state at stage time t (products by hit time, then id; veggies that landed unshot by land time)
-function pileState(run, t) {
-  const tl = run.timeline, prods = [], vegs = [];
-  for (const [id, by] of run.taken) { if (by < 0) continue; const s = tl[id]; if (s && s.kind === 'prod') prods.push([(HIT.get(s) != null ? HIT.get(s) : s.t0) + FLY, id]); }
-  prods.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-  for (const s of tl) if (s.kind === 'veg' && s.t0 + s.land <= t && !run.taken.has(s.id)) vegs.push([s.t0 + s.land, s.id]);
-  vegs.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-  return { prods, vegs };
-}
+// where a veggie in the cart stands (on the heap, its spot by its index among the round's climbers)
+const VSLOT = [[-0.32, -0.42], [0.3, -0.2], [-0.04, 0.08], [-0.5, 0.02], [0.44, -0.62], [0.06, -0.72]];
+function cartSpot(sp, n, o) { const p = VSLOT[sp.cs % VSLOT.length]; o.cx = CX + p[0]; o.cz = CZ + p[1]; o.cy = heapTop(n, p[0], p[1]) + 0.01; o.dx = p[0] >= 0 ? 1 : -1; return o; }
 const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _sl = {};
 function updatePile(run, t, flash) {
   if (!PARTS) return;
-  const A = buildArt(), st = pileState(run, t), landed = st.prods.filter(p => p[0] <= t), n = landed.length, tl = run.timeline;
+  const A = buildArt(), landed = pileList(run, t), n = landed.length, tl = run.timeline;
   PILE.nProd = n; PILE.n = n; PILE.run = run;
-  const k0 = Math.max(0, n - PILE_N), vegs = st.vegs.slice(0, VEG_N);
-  let sig = n + '|'; for (let k = k0; k < n; k++) sig += tl[landed[k][1]].pk + ','; sig += '|'; for (const e of vegs) sig += tl[e[1]].vk + ',';
+  const k0 = Math.max(0, n - PILE_N);
+  let sig = n + '|'; for (let k = k0; k < n; k++) sig += tl[landed[k][1]].pk + ',';
   if (sig !== PARTS.pileSig) {
     PARTS.pileSig = sig;
     const list = [];
@@ -923,11 +1057,6 @@ function updatePile(run, t, flash) {
       prodSlot(k, n, _sl); const sc = a.fit * PILE_SC;
       list.push([a.geo, new THREE.Matrix4().compose(_p.set(_sl.x, _sl.y, _sl.z), _q.setFromEuler(_e.set(_sl.rx, _sl.ry, _sl.rz)), _s.setScalar(sc)), sc]);
     }
-    vegs.forEach((e, j) => {
-      const s = tl[e[1]], a = A.veg[s.vk]; if (!a) return;
-      vegSlot(j, n, _sl);
-      list.push([a.poses.fall, new THREE.Matrix4().compose(_p.set(_sl.x, _sl.y, _sl.z), _q.setFromEuler(_e.set(_sl.rx, _sl.ry, _sl.rz)), _s.setScalar(VEG_PSC)), VEG_PSC]);
-    });
     pileWrite(PARTS.pile, list);
   }
   // the scanned item pops: a bigger copy over its pile slot
@@ -944,6 +1073,8 @@ function clearPile() {
   if (!PARTS) return;
   PARTS.pile.visible = false; PARTS.pile.geometry.setDrawRange(0, 0); PARTS.pileSig = ''; PARTS.flash.visible = false;
   PARTS.heap.visible = false; PILE.nProd = 0; PILE.n = 0;
+  for (const m of PARTS.toss) m.visible = false;
+  const J = PARTS.jolt; J.x = J.y = J.rx = J.rz = J.pile = 0;
 }
 
 // =========================================================================================
@@ -969,11 +1100,12 @@ function proxyFor(tg, parent) { const m = new THREE.Mesh(PROXY_GEO, PROXY_MAT); 
 // ---------- a product sitting on its shelf ----------
 // pose (pure in lt): z = Z0 + v lt on its track (side, level), its base ON the board, faced to you and turning +-20 deg
 // (a display turntable), bobbing a little (never below the board); a pop-in at the far end; shootable from PROD_RA to the
-// end of its ride (span). Shot: it pops off the shelf and flies into the cart.
+// end of its ride (span). Shot: it pops off the shelf and flies into the cart. Round 3: drawn by the shelf BATCH (one draw
+// call for every live snack: its slot takes the pose); its own mesh only shows in flight (or when no slot is free).
 class Product extends T.Target {
   constructor(sp, run) {
     super('target');
-    this.sp = sp; this.run = run; this.flyT = -1; this.lastT = sp.t0;
+    this.sp = sp; this.run = run; this.flyT = -1; this.lastT = sp.t0; this.slot = -1;
     const A = buildArt().prod[sp.pk];
     this.A = A; this.hw = A.hw; this.hh = A.hh; this.sc = 1;
     this.body = new THREE.Group(); this.group.add(this.body);
@@ -996,11 +1128,18 @@ class Product extends T.Target {
     this.body.position.y = BOB * (0.5 - 0.5 * Math.cos(lt * 3.3 + this.ph));
     this.group.visible = lt < sp.gone;
     this.shootable = lt >= sp.ra && lt < sp.ra + sp.span;
+    if (this.slot < 0 && this.group.visible) this.slot = slotClaim(this, sp.pk);
+    this.mesh.visible = this.slot < 0;
+    if (this.slot >= 0) {
+      const g = this.group.position, f = this.group.visible ? this.A.fit : 0, bs = this.body.scale;
+      slotPose(this.slot, g.x, g.y + this.body.position.y, g.z, this.group.rotation.y, bs.x * f, bs.y * f, bs.z * f);
+    }
     return lt >= sp.gone;
   }
   // shot (applyHit / a versus optimistic hit): a pop and a few sparks; it flies on an arc into its pile slot in the cart
   shatter(point) {
     if (this.flyT >= 0) return;
+    slotFree(this); this.mesh.visible = true;
     this.alive = false; this.shootable = false; this.flyT = this.lastT; this.deadT = this.lastT;
     this.group.updateMatrixWorld(true); this.from = this.group.position.clone(); this.fromRy = this.group.rotation.y;
     const c = this.mesh.getWorldPosition(new THREE.Vector3()); c.y += this.hh;
@@ -1010,9 +1149,9 @@ class Product extends T.Target {
   updateFly(t) {
     const q = (t - this.flyT) / FLY, run = this.run;
     if (q >= 1) { this.group.visible = false; if (!this.clunked) { this.clunked = true; if (q < 1.25) B.SFX.play('cartClunk', { u: 0.48 }); } return true; }
-    // the destination: this product's slot in the pile (its index among the products in by hit time)
-    const st = pileState(run, t), k = st.prods.findIndex(p => p[1] === this.sp.id), n = Math.max(st.prods.filter(p => p[0] <= t).length, 0);
-    prodSlot(k >= 0 ? k : n, n + 1, _sl);
+    // the destination: on top of the pile (the next slot)
+    const n = pileList(run, t).length;
+    prodSlot(n, n + 1, _sl);
     const tx = CX + _sl.x, ty = _sl.y, tz = CZ + _sl.z, e = E.inOut(q), F = this.from;
     const h = 0.55 + 0.12 * Math.hypot(tx - F.x, tz - F.z);
     this.group.position.set(lerp(F.x, tx, e), lerp(F.y, ty, e) + h * 4 * q * (1 - q), lerp(F.z, tz, e));
@@ -1021,50 +1160,98 @@ class Product extends T.Target {
     this.group.visible = true;
     return false;
   }
+  dispose() { slotFree(this); super.dispose(); }
 }
-// ---------- a veggie climbing the cart's FRONT ----------
-// phases (pure in lt): IN (runs up to the front of the cart) -> CLIMB (up the front face or a front corner) -> HANG (at the
-// rim, legs kicking) -> DROP (tumbles over the rim onto the heap). Shootable from 0.08 s to the drop. The drop-in costs a
-// life at landing (+ CHARGE_VS in versus) if run.taken has no claim on it. Spots: 'L' / 'R' = the front-left / front-right
-// corner, 'F' = the front face (left or right of its middle by side). DRAWN NEAR: the group is scaled by KN toward the
-// camera (same projection, nearer than the whole cart), so nothing of the cart ever covers it (#102).
+// ---------- a veggie climbing the cart (round 3) ----------
+// spots: 'L' / 'R' = the OUTER face of the left / right side (cart-local z = sp.zl, the front half of the side), 'FL' /
+// 'FR' = a front corner, 'F' = the front face left or right of its middle. Patterns (sp.pat): 0 LADDER / 1 SPRINTER /
+// 2 PEEKER: HOP onto the cart (from below / outside), CLIMB by the grasp keyframes sp.g ([lt, climb fraction, 0 grasp | 1
+// duck, pull s] x n), HANG at the rim (legs kicking), MANTLE onto the rim; 3 ROPE: SWING in from off the screen edge on a
+// rope (a pendulum from a pivot above and outside the landing spot), land on the rim, a beat (RIM_PAUSE); 4 ZIPLINE: SLIDE
+// down a line from the top shelf to the rim, a beat. Then (all) DROP into the cart (DROP_T) and stand on the pile, THROWING
+// SNACKS OUT until shot. Shootable from 0.08 s to the drop and in the cart (until the stream ends). DRAWN NEAR (scaled KN
+// toward the camera: same projection, nearer than the whole cart), so nothing of the cart ever covers one.
 function vegSpot(sp, o) {
-  const zf = CZ - CHL - 0.14;
-  if (sp.face === 'L' || sp.face === 'R') { const s = sp.face === 'L' ? -1 : 1; o.x = CX + s * (CHW + 0.02); o.z = zf; o.fx = o.x + s * 0.62; o.fz = zf - 0.35; o.s = s; }
-  else { const s = sp.side; o.x = CX + s * 0.3; o.z = zf; o.fx = o.x + s * 0.55; o.fz = zf - 0.6; o.s = s; }
+  const s = sp.side;
+  o.ho = 0.4;                                                    // the hop's outward start (the right side: mostly from below, the gun is there)
+  if (sp.face === 'L' || sp.face === 'R') { o.x = CX + (s < 0 ? -SIDE_XL : SIDE_XR); o.z = CZ + sp.zl; o.ox = s; o.oz = 0; o.rx = CX + s * (CHW - 0.02); o.rz = o.z; if (s > 0) o.ho = 0.12; }
+  else if (sp.face === 'F') { o.x = CX + s * 0.3; o.z = CZ - CHL - 0.14; o.ox = 0.3 * s; o.oz = -1; o.rx = o.x; o.rz = CZ - CHL + 0.04; }
+  else { o.x = CX + s * (CHW + 0.04); o.z = CZ - CHL - 0.14; o.ox = 0.6 * s; o.oz = -0.8; o.rx = CX + s * (CHW - 0.06); o.rz = CZ - CHL + 0.04; }
   return o;
 }
+const _cl = { y: 0, k: -1, duck: false };
+function climbAt(sp, lt) {                                       // the climb fraction (0 start .. 1 hands at the rim) at lt
+  const g = sp.g; let y = 0, k = -1, duck = false;
+  for (let i = 0; i < g.length; i += 4) {
+    if (lt < g[i]) break;
+    const q = clamp((lt - g[i]) / g[i + 3], 0, 1), y0 = i ? g[i - 3] : 0;
+    y = lerp(y0, g[i + 1], g[i + 2] ? q * q : E.outCubic(q)); k = i / 4; duck = g[i + 2] === 1 && q < 1;
+  }
+  _cl.y = y; _cl.k = k; _cl.duck = duck; return _cl;
+}
+const handOf = vk => (ART ? ART.veg[vk].sy + 0.28 : 0.75);       // feet -> hands up (the hang poses)
+function ropeGeom(sp, o, hand, R) {
+  const s = sp.side, lx = o.rx, ly = RIM + 0.01 + hand, px = lx + s * ROPE_OUT;
+  R.px = px; R.L = hyp(lx - px, ROPE_PY - ly); R.th1 = Math.atan2(lx - px, ROPE_PY - ly); R.th0 = s * 1.4; return R;
+}
+const _rg = {};
+// the pose of a climber before it drops in (pure in lt): feet (px, py, pz), pose, tilt, squash; o.line = a rope / zipline
 function vegPose(sp, lt, o) {
   vegSpot(sp, o);
-  const W = sp.win, IN = sp.tin, HG = sp.thang, CL = W - IN - HG, hy = ART ? ART.veg[sp.vk].hangY : HANG_Y;
-  if (lt < IN) {
-    const k = E.outCubic(clamp(lt / IN, 0, 1));
-    o.ph = 'in'; o.px = lerp(o.fx, o.x, k); o.pz = lerp(o.fz, o.z, k); o.py = 0.04 * Math.abs(Math.sin(lt * 20)); o.pose = (Math.floor(lt * 11) & 1) ? 'run1' : 'run0';
-  } else if (lt < IN + CL) {
-    const k = (lt - IN) / CL, steps = Math.max(3, Math.round(CL * 4));
-    o.ph = 'climb'; o.px = o.x; o.pz = o.z; o.py = hy * (k - 0.035 * Math.sin(k * steps * Math.PI * 2) / Math.PI); o.pose = (Math.floor(k * steps * 2) & 1) ? 'clb1' : 'clb0';
-  } else if (lt < W) {
-    o.ph = 'hang'; o.px = o.x + 0.012 * Math.sin(lt * 31); o.pz = o.z; o.py = hy + 0.012 * Math.sin(lt * 19); o.pose = (Math.floor(lt * 9) & 1) ? 'hng1' : 'hng0';
-  } else { o.ph = 'drop'; o.px = o.x; o.pz = o.z; o.py = hy; o.pose = 'fall'; }
+  const hy = ART ? ART.veg[sp.vk].hangY : HANG_Y, hand = handOf(sp.vk);
+  o.tilt = 0; o.sq = 1; o.line = null; o.lcol = 0;
+  if (sp.pat <= 2) {
+    if (lt < HOP) {
+      const k = clamp(lt / HOP, 0, 1); o.ph = 'hop';
+      o.px = o.x + o.ox * o.ho * (1 - k); o.pz = o.z + o.oz * o.ho * (1 - k); o.py = lerp(-0.1, Y0C, k) + 0.16 * Math.sin(Math.PI * k); o.pose = 'run1';
+    } else if (lt < sp.hg) {
+      const c = climbAt(sp, lt); o.ph = 'climb'; o.px = o.x; o.pz = o.z; o.py = lerp(Y0C, hy, c.y);
+      o.pose = c.duck ? 'hng0' : (c.k & 1) ? 'clb1' : 'clb0'; o.tilt = 0.05 * Math.sin(lt * 13);
+    } else if (lt < sp.win - MANTLE) {
+      o.ph = 'hang'; o.px = o.x + 0.012 * Math.sin(lt * 31); o.pz = o.z; o.py = hy + 0.012 * Math.sin(lt * 19); o.pose = (Math.floor(lt * 9) & 1) ? 'hng1' : 'hng0';
+    } else {
+      const k = E.outCubic(clamp((lt - sp.win + MANTLE) / MANTLE, 0, 1)); o.ph = 'mantle';
+      o.px = lerp(o.x, o.rx, k); o.pz = lerp(o.z, o.rz, k); o.py = lerp(hy, RIM + 0.01, k); o.pose = 'clb0';
+    }
+  } else if (sp.pat === 3) {                                     // ROPE SWINGER
+    const Rg = ropeGeom(sp, o, hand, _rg);
+    if (lt < sp.sw) {
+      const k = clamp(lt / sp.sw, 0, 1), e = k * k * (3 - 2 * k), th = lerp(Rg.th0, Rg.th1, e), phi = 0.7 * th;
+      const hx = Rg.px + Rg.L * Math.sin(th), hyy = ROPE_PY - Rg.L * Math.cos(th);
+      o.ph = 'swing'; o.px = hx + hand * Math.sin(phi); o.py = hyy - hand * Math.cos(phi); o.pz = o.rz; o.pose = 'hng0'; o.tilt = phi;
+      o.line = [Rg.px, ROPE_PY, o.rz, hx, hyy, o.rz]; o.lcol = PAL.tan;
+    } else {
+      const k = lt - sp.sw; o.ph = 'rim'; o.px = o.rx; o.pz = o.rz; o.py = RIM + 0.01; o.pose = k < 0.1 ? 'fall' : 'stand';
+      o.sq = 1 - 0.2 * Math.exp(-k * 12) * Math.cos(k * 26);
+      const q = clamp(k / 0.45, 0, 1);                           // the empty rope swings back out and is pulled up
+      if (q < 1) { const th = lerp(Rg.th1, Rg.th0 * 0.5, q), Lq = Rg.L * (1 - q * q); o.line = [Rg.px, ROPE_PY, o.rz, Rg.px + Lq * Math.sin(th), ROPE_PY - Lq * Math.cos(th), o.rz]; o.lcol = PAL.tan; }
+    }
+  } else {                                                       // ZIPLINE
+    const s = sp.side, a0 = CX + s * ZIP_X, a1 = ZIP_Y, a2 = CZ + ZIP_DZ, b0 = o.rx, b1 = RIM + 0.01 + hand, b2 = o.rz;
+    o.line = [a0, a1, a2, b0, b1, b2]; o.lcol = PAL.steel;
+    if (lt < sp.sw) {
+      const k = clamp(lt / sp.sw, 0, 1), e = k * k; o.ph = 'zip';
+      o.px = lerp(a0, b0, e); o.py = lerp(a1, b1, e) - hand; o.pz = lerp(a2, b2, e); o.pose = 'hng1'; o.tilt = -s * 0.22 + 0.06 * Math.sin(lt * 23);
+    } else {
+      const k = lt - sp.sw; o.ph = 'rim'; o.px = o.rx; o.pz = o.rz; o.py = RIM + 0.01; o.pose = k < 0.1 ? 'fall' : 'stand';
+      o.sq = 1 - 0.2 * Math.exp(-k * 12) * Math.cos(k * 26);
+    }
+  }
   return o;
 }
-function chargeVeg(run) {
-  if (!run || run.state !== 'play') return;
-  // the engine's own penalty: LIFE -1, -300, the 'bomb' event (shake, LIFE -1 pop, the duck's scared face), 'lifeLost'.
-  // Its 'bomb' SOUND is an explosion: silenced for this one synchronous call (the THUD already played at the landing)
-  const S = B.SFX, P0 = S && S.play;
-  if (P0) S.play = function (n, o) { return n === 'bomb' ? 0 : P0.call(this, n, o); };
-  try { run.players.forEach((Pl, i) => { if (Pl.lives > 0) run.penaltyNow(i, 'bomb', null, null); }); }
-  finally { if (P0) S.play = P0; }
-}
-const _vp = {};
+const _vp = {}, _cq = {}, _cq2 = {};
 function placeNear(g, x, y, z) {                                // put a group at (x, y, z) drawn KN of the way from the camera
   g.position.set(CAMP.x + (x - CAMP.x) * KN, CAMP.y + (y - CAMP.y) * KN, CAMP.z + (z - CAMP.z) * KN); g.scale.setScalar(KN);
+}
+// this veggie's throw phase at t (the cart's shared state): 'thr' = winding up a snack over its head, 'fall' = the release
+function throwPose(cs, id, t) {
+  for (const e of cs.toss) { if (e[1] !== id || e[0] < t - 0.18) continue; if (t >= e[0]) return 'fall'; if (t >= e[0] - THROW_UP) return e[2] >= 0 ? 'thr' : 'hng0'; return null; }
+  return null;
 }
 class Veg extends T.Target {
   constructor(sp, run) {
     super('target');
-    this.sp = sp; this.run = run; this.lastT = sp.t0; this.thud = false; this.charged = false; this.climbing = false;
+    this.sp = sp; this.run = run; this.lastT = sp.t0; this.thud = false; this.climbing = false; this.rope = -1; this.lastLine = null; this.cue = false;
     const A = buildArt().veg[sp.vk];
     this.A = A; this.hw = A.hw; this.hh = A.hh; this.sc = KN;
     this.mesh = shared(A.poses.run0, TOON); this.group.add(this.mesh); this.curPose = 'run0';
@@ -1075,54 +1262,98 @@ class Veg extends T.Target {
   }
   meshes() { return [this.proxy]; }
   setPose(k) { if (k !== this.curPose) { this.curPose = k; this.mesh.geometry = this.A.poses[k]; } }
-  update(lt, run) {
-    const sp = this.sp, t = sp.t0 + lt; this.run = run; this.lastT = t;
-    if (!this.alive) return true;
-    const o = vegPose(sp, lt, _vp);
-    if (o.ph === 'drop') {
-      // over the rim and onto the heap (its veggie slot = its place among the veggies that dropped in)
-      const q = clamp((lt - sp.win) / DROP_T, 0, 1);
-      if (q < 1) {
-        const st = pileState(run, t + DROP_T + 1), j = Math.max(0, st.vegs.findIndex(e => e[1] === sp.id));
-        vegSlot(j, PILE.nProd, _sl);
-        const tx = CX + _sl.x, ty = _sl.y, tz = CZ + _sl.z, e = E.inOut(q);
-        this.tp.set(lerp(o.px, tx, e), lerp(o.py, ty, e) + 0.55 * 4 * q * (1 - q), lerp(o.pz, tz, e));
-        placeNear(this.group, this.tp.x, this.tp.y, this.tp.z); this.group.scale.setScalar(KN * lerp(1, VEG_PSC, e));
-        this.group.rotation.set(-q * Math.PI * 1.3, faceCam(o.px, o.pz), 0);
-        this.setPose('fall'); this.shootable = false; this.group.visible = true;
-        return false;
-      }
-      // landed: the THUD now; the life when the grace runs out (only if nobody got it)
-      this.group.visible = false; this.shootable = false;
-      if (!this.thud) { this.thud = true; if (!run.taken.has(sp.id) && run.state === 'play') { B.SFX.play('veggieIn', { u: 0.48 }); if (inPlay() && B.G.shakeIt) B.G.shakeIt(0.12); } }
-      const grace = run.versus ? CHARGE_VS : 0;
-      if (!this.charged && lt >= sp.land + grace) { this.charged = true; if (!run.taken.has(sp.id)) chargeVeg(run); }
-      return this.charged;
-    }
-    this.tp.set(o.px, o.py, o.pz); placeNear(this.group, o.px, o.py, o.pz);
-    this.group.rotation.set(0, faceCam(o.px, o.pz), o.ph === 'climb' ? 0.08 * Math.sin(lt * 14) : 0);
-    this.setPose(o.pose);
-    this.group.visible = true;
-    this.shootable = lt >= 0.08 && lt < sp.win;
-    if (o.ph !== 'in' && !this.climbing) { this.climbing = true; if (run.state === 'play') B.SFX.play('veggieClimb', { u: uOfPx(scr(o.px, 0.3, o.pz)[0]) }); }
-    return false;
+  show(x, y, z, yaw, tilt, sq, pose) {
+    this.tp.set(x, y, z); placeNear(this.group, x, y, z);
+    const w = sq < 1 ? 1 + (1 - sq) * 0.6 : 1; this.group.scale.set(KN * w, KN * sq, KN * w);
+    this.group.rotation.set(0, yaw, tilt); this.setPose(pose); this.group.visible = true;
   }
-  // shot: veg bits burst off (its own chips, a few leafy flecks), a squelch. The chips fly from its TRUE pose.
+  update(lt, run) {
+    const sp = this.sp, t = sp.t0 + lt, dir = dirOf(run), last = dir ? dir.last : 1e9, play = run.state === 'play';
+    this.run = run; this.lastT = t;
+    if (!this.alive) {                                          // shot: a swinger's rope is pulled back up, empty
+      const L = this.deadLine;
+      if (L && this.rope >= 0) { const q = clamp((lt - this.deadLt) / 0.4, 0, 1); if (q < 1) { ropeSet(this.rope, [L[0], L[1], L[2]], [lerp(L[3], L[0], q), lerp(L[4], L[1], q), L[5]], PAL.tan); return false; } }
+      ropeFree(this); return true;
+    }
+    if (!this.cue && play) { this.cue = true; const u = uOfPx(scr(vegSpot(sp, _cq2).x, 0.5, _cq2.z)[0]); if (sp.pat === 3) B.SFX.play('ropeSwing', { u }); else if (sp.pat === 4) B.SFX.play('zipLine', { u }); }
+    if (lt < sp.win) {
+      const o = vegPose(sp, lt, _vp);
+      this.show(o.px, o.py, o.pz, faceCam(o.px, o.pz), o.tilt, o.sq, o.pose);
+      this.shootable = lt >= 0.08;
+      if (o.line) { if (this.rope < 0) this.rope = ropeClaim(this); ropeSet(this.rope, [o.line[0], o.line[1], o.line[2]], [o.line[3], o.line[4], o.line[5]], o.lcol); this.lastLine = o.line; }
+      else { this.lastLine = null; if (this.rope >= 0) ropeFree(this); }
+      if (sp.pat <= 2 && lt >= HOP && !this.climbing) { this.climbing = true; if (play) B.SFX.play('veggieClimb', { u: uOfPx(scr(o.px, 0.3, o.pz)[0]) }); }
+      return false;
+    }
+    if (this.rope >= 0) ropeFree(this);
+    this.lastLine = null;
+    const n = PILE.nProd, c = cartSpot(sp, n, _cq);
+    if (lt < sp.land) {                                          // over the rim and onto the pile
+      const q = clamp((lt - sp.win) / DROP_T, 0, 1), e = E.inOut(q), r = vegSpot(sp, _cq2);
+      const x = lerp(r.rx, c.cx, e), y = lerp(RIM + 0.01, c.cy, e) + 0.45 * 4 * q * (1 - q), z = lerp(r.rz, c.cz, e);
+      this.show(x, y, z, faceCam(x, z), -c.dx * Math.sin(q * Math.PI) * 0.9, 1, 'fall');
+      this.shootable = false;
+      return false;
+    }
+    // IN THE CART: it stands on the pile and throws snacks out until it is shot (the director spawn plays the throws)
+    if (!this.thud) { this.thud = true; if (play && !run.taken.has(sp.id)) B.SFX.play('veggieIn', { u: uOfPx(scr(c.cx, c.cy, c.cz)[0]) }); }
+    const k = lt - sp.land, live = t < last && run.state !== 'end';
+    const tp = live ? throwPose(cartState(run, t), sp.id, t) : null;
+    const sq = k < 0.3 ? 1 - 0.22 * Math.exp(-k * 10) * Math.cos(k * 22) : 1;
+    this.show(c.cx, c.cy + (tp ? 0 : 0.012 * Math.abs(Math.sin(t * 6 + sp.id))), c.cz, faceCam(c.cx, c.cz) + (tp === 'fall' ? c.dx * 0.5 : 0), tp ? 0 : 0.05 * Math.sin(t * 5 + sp.id), sq, tp || (k < 0.15 ? 'fall' : 'stand'));
+    this.shootable = live && k >= 0.05;
+    return t >= sp.t1;
+  }
+  // shot: veg bits burst off (its own chips, a few leafy flecks), a squelch. The chips fly from its TRUE pose. Shot while
+  // swinging on its rope: a bonus ding (+100 in points())
   shatter(point, opts) {
     if (!this.alive) return;
+    const lt = this.lastT - this.sp.t0;
+    this.deadLt = lt; this.deadLine = this.sp.pat === 3 && lt < this.sp.sw ? this.lastLine : null;
+    if (!this.deadLine && this.rope >= 0) ropeFree(this);
     this.group.position.copy(this.tp); this.group.scale.setScalar(1); this.group.updateMatrixWorld(true);
     const c = this.group.position.clone(); c.y += this.A.mid;
     super.shatter(c, Object.assign({ max: 110, power: 0.9 }, opts || {}));
     T.sparks(c, 5, ['lime', 'bone', 'yellow'], 1.1, 0.03);
-    B.SFX.play('veggiePop', { u: uOfPx(scr(c.x, c.y, c.z)[0]) });
+    const u = uOfPx(scr(c.x, c.y, c.z)[0]);
+    B.SFX.play('veggiePop', { u });
+    if (this.sp.pat === 3 && lt < this.sp.sw) { B.SFX.play('swingShot', { u }); T.sparks(c, 8, ['yellow', 'lemon', 'bone'], 1.6, 0.04); }
   }
+  dispose() { ropeFree(this); super.dispose(); }
 }
-// ---------- the director spawn: the pile, the finale (ride out, scanning, the receipt) and the stage's hold ----------
+// ---------- the director spawn: the HITS, the grasp jolts, the thrown snacks, the wave cue, the pile, the finale ----------
+// the grasp JOLTS of a timeline: [stage time, veggie spawn, weight, dir x, dir z, u] (a climber's grab onto the cart, each
+// grasp, the mantle; a rope / zipline landing on the rim; the drop into the cart), sorted by time
+const JOLTS = new WeakMap(), WAVES = new WeakMap();
+function joltsOf(run) {
+  let l = JOLTS.get(run.timeline); if (l) return l;
+  l = [];
+  for (const s of vegsOf(run)) {
+    const o = vegSpot(s, {}), u = uOfPx(scr(o.x, 0.5, o.z)[0]), add = (lt, w, dx = o.ox, dz = o.oz) => l.push([s.t0 + lt, s, w, dx, dz, u]);
+    if (s.pat <= 2) { add(HOP, 0.8); for (let i = 0; i < s.g.length; i += 4) if (!s.g[i + 2]) add(s.g[i], 1); add(s.win - MANTLE, 1.2); }
+    else add(s.sw, s.pat === 3 ? 1.6 : 1.3);
+    add(s.land, 1.5, 0, 0);
+  }
+  l.sort((a, b) => a[0] - b[0]); JOLTS.set(run.timeline, l); return l;
+}
+function wavesOf(run) {
+  let l = WAVES.get(run.timeline); if (l) return l;
+  const m = new Map(); for (const s of vegsOf(run)) if (!m.has(s.wv) || m.get(s.wv).t0 > s.t0) m.set(s.wv, s);
+  l = [...m.values()].map(s => { const o = vegSpot(s, {}); return [Math.max(0.05, s.t0 - 0.45), uOfPx(scr(o.x, 0.5, o.z)[0])]; }).sort((a, b) => a[0] - b[0]);
+  WAVES.set(run.timeline, l); return l;
+}
 class Aisle extends T.Target {
-  constructor(sp, run) { super('fx'); this.sp = sp; this.run = run; this.pt = -99; this.fin = -1; if (FIN.run !== run) { FIN.run = run; FIN.t = -1; } clearPile(); }
+  constructor(sp, run) {
+    super('fx'); this.sp = sp; this.run = run; this.pt = -99; this.fin = -1; if (FIN.run !== run) { FIN.run = run; FIN.t = -1; }
+    clearPile(); slotsReset(); for (let i = 0; i < ROPE_N; i++) { if (ROPES[i]) ROPES[i].rope = -1; ROPES[i] = null; ropeSet(i, null); }
+  }
   meshes() { return []; }
   update(lt, run) {
     const sp = this.sp, t = sp.t0 + lt, a = this.pt, live = run.state === 'play';
+    // round 3: every player's HITS = their snacks in the cart (snacks shot - snacks the veggies threw out); a climber shot
+    // is points only
+    const cs = cartState(run, t);
+    run.players.forEach((P, i) => { P.hits = cs.hits[i]; });
     if (this.fin < 0 && t >= sp.last && live && (run.versus || (run.me.hits >= run.cfg.quota && run.me.lives > 0))) { this.fin = sp.last; FIN.run = run; FIN.t = sp.last; }
     let flash = null;
     if (this.fin >= 0) {
@@ -1133,38 +1364,87 @@ class Aisle extends T.Target {
       if (f0 < RCPT_T && f1 >= RCPT_T) { B.SFX.play('receiptPrint', { u: 0.6 }); B.SFX.play('finale'); if (B.G && B.G.duckReact && inPlay()) B.G.duckReact('cheer', 2.2); }
     }
     updatePile(run, t, flash);
+    this.jolts(run, t, a, live);
+    this.tosses(run, t, a, cs, live);
+    if (live) for (const w of wavesOf(run)) if (w[0] > a && w[0] <= t) { B.SFX.play('waveIn', { u: w[1] }); if (B.G && B.G.duckReact && inPlay()) B.G.duckReact('angry', 0.8); }
     this.pt = t;
     return t >= sp.last + (this.fin >= 0 ? FIN_HOLD : 1.0);
+  }
+  // every grasp jolts the cart (summed: two at once = a bigger jolt); a grasp after the climber was shot never happens
+  jolts(run, t, a, live) {
+    const L = joltsOf(run), J = PARTS && PARTS.jolt; if (!J) return;
+    let lo = 0, hi = L.length; while (lo < hi) { const m = (lo + hi) >> 1; if (L[m][0] < t - 0.5) lo = m + 1; else hi = m; }
+    let jx = 0, jz = 0, jy = 0, jp = 0, nNew = 0, uS = 0, near = 0;
+    for (let i = lo; i < L.length && L[i][0] <= t; i++) {
+      const [T0, s, w, dx, dz, u] = L[i];
+      if (run.taken.has(s.id) && hitT(s) < T0) continue;
+      const tau = t - T0, f = Math.exp(-9 * tau) * Math.sin(42 * tau), g = Math.exp(-8 * tau) * Math.abs(Math.sin(34 * tau));
+      jx += w * f * dx; jz += w * f * dz; jy += w * g; jp += w * Math.exp(-6 * tau) * Math.abs(Math.sin(26 * tau));
+      if (T0 > a) { nNew++; uS += u; } if (tau < 0.12) near++;
+    }
+    J.x = 0.016 * jx; J.rz = -0.045 * jx; J.rx = 0.03 * jz; J.y = 0.012 * jy; J.pile = 0.025 * jp;
+    if (nNew && live) B.SFX.play('cartJolt', { u: uS / nNew, big: near > 1 ? 1 : 0 });
+  }
+  // the thrown snacks: held over the thrower's head through the wind-up, then an arc out of the cart, gone (drawn near)
+  tosses(run, t, a, cs, live) {
+    const P = PARTS && PARTS.toss; if (!P) return;
+    let k = 0;
+    for (const [tt, vid, pid] of cs.toss) {
+      if (pid < 0) continue;
+      if (live && tt > a && tt <= t) B.SFX.play('snackOut', { u: 0.5 });
+      if (t < tt - THROW_UP || t >= tt + TOSS_T || k >= P.length) continue;
+      const s = run.timeline[vid], p = run.timeline[pid], A = buildArt().prod[p.pk], m = P[k++], c = cartSpot(s, PILE.nProd, _cq2);
+      const hx = c.cx, hy = c.cy + handOf(s.vk) + 0.1, hz = c.cz;      // held up between its hands
+      let x = hx, y = hy, z = hz, sc = A.fit * 0.85, spin = 0;
+      if (t >= tt) { const q = (t - tt) / TOSS_T; x = hx + c.dx * 1.7 * q; z = hz + 0.6 * q; y = lerp(hy, 0.7, q) + 1.0 * 4 * q * (1 - q); spin = q * 10; if (q > 0.7) sc *= (1 - q) / 0.3; }
+      m.geometry = A.geo; placeNear(m, x, y, z); m.scale.setScalar(KN * sc); m.rotation.set(spin, faceCam(x, z), spin * 0.4); m.visible = true;
+    }
+    for (; k < P.length; k++) P[k].visible = false;
   }
 }
 function makeTarget(sp, run) { return sp.kind === 'aisle' ? new Aisle(sp, run) : sp.kind === 'veg' ? new Veg(sp, run) : new Product(sp, run); }
 
 // =========================================================================================
-// The dials per tier (variant 0; the variants change the AMMO ONLY: SNACK AISLE free fire, 12 ITEMS OR LESS 12 per
-// magazine, FAMILY SIZE 16 per magazine; share +2 % per variant, cap 90 %).
+// The dials per tier (variant 0). Round 3 (Jon 2026-11-01: "every grocery level should be pretty packed with groceries
+// and enemies", "complete chaos but not impossible").
 // time = the director's stream s (the clock = the last item + FIN_SLOT) | ride = s a product rides the MIDDLE board from
-// the far end to the edge of the screen (the pop window; the aisle speed follows) | live = products shootable at once |
-// gap / burst (b3: a burst of 3) / bgap / pause = the stream | hop / alt / adj = AIM TRAVEL (#90) | top = top-shelf share |
-// climbers per round, win = the climb window s, pair = two climbers at once | spare / share / rel (the reload trip s)
-// Insane gap 0.44-0.72 / burst 35 % -> 0.55-0.85 / 28 % after the solver: a slow bot (0.32 s reaction, 0.3 s between shots)
-// missed the quota in 48 of 90 Insane runs; now 5 of 90 (worst -2), the perfect bot clears all (worst +4)
+// the far end to the edge of the screen (the pop window; the aisle speed follows)
+// THE STREAM (round 2's director; = THE QUOTA POOL): live = stream products shootable at once | gap / burst (b3: a burst
+// of 3) / bgap / pause | hop / alt / adj = AIM TRAVEL (#90) | top = top-shelf share
+// fill = THE PACKED SHELVES: every board (6 tracks) gets another live snack every ~fill s (x0.55-1.45), >= 1 unit clear of
+// the others on its track. Real snacks (same points, they count as HITS) but not in the quota pool: a share of EVERY live
+// snack would be 70 (Beginner) to 300 (Insane) snacks, beyond a person; the quota stays a share of the stream
+// CLIMBERS: climbers per round in WAVES of wave [min, max], spread s between a wave's climbers, breathe = the least s
+// between waves (the rest of the stream is shared out between them), cap = climbers on the cart at once, win = the climb
+// window s (x0.9-1.1), pair = the next one climbs the same side a beat later, thd = s between a veggie's throws in the cart
+// spare / share / rel (the reload trip s): quota = share x the stream's snacks (+2 % a variant), <= stream - spare
+// Round 3 tuning: Insane's stream gap 0.55-0.85 / burst 28 % -> 0.74-1.1 / 22 % (its quota ~32 -> ~27): with 36 climbers a
+// slow bot (0.32 s reaction, 0.3 s between shots) missed the quota in 30 of 30 runs (worst -10); the snacks on the shelves
+// are as packed as before (the fill does not depend on the stream)
 // =========================================================================================
 const TIER_P = [
   { time: 44, ride: 3.2, live: 4, gap: [0.75, 1.15], burst: 0.2, b3: 0.2, bgap: [0.35, 0.5], pause: [0.8, 1.2], hop: [0.12, 0.35], alt: 0.25, adj: 0.12, top: 0.14,
-    climbers: 4, win: 3.4, pair: 0, spare: 8, share: 0.55, rel: 0.75 },
+    fill: 1.5, climbers: 14, wave: [2, 4], spread: [0.7, 1.2], breathe: 3.0, cap: 3, win: 4.0, pair: 0.15, thd: 0.8, spare: 8, share: 0.55, rel: 0.75 },
   { time: 40, ride: 2.5, live: 5, gap: [0.62, 0.98], burst: 0.25, b3: 0.25, bgap: [0.3, 0.45], pause: [0.85, 1.25], hop: [0.25, 0.5], alt: 0.45, adj: 0.15, top: 0.17,
-    climbers: 6, win: 2.8, pair: 0, spare: 5, share: 0.6, rel: 0.7 },
+    fill: 0.95, climbers: 20, wave: [3, 5], spread: [0.5, 0.9], breathe: 2.4, cap: 4, win: 3.0, pair: 0.2, thd: 0.7, spare: 5, share: 0.6, rel: 0.7 },
   { time: 36, ride: 1.8, live: 6, gap: [0.5, 0.82], burst: 0.3, b3: 0.3, bgap: [0.25, 0.38], pause: [0.9, 1.35], hop: [0.4, 0.7], alt: 0.65, adj: 0.17, top: 0.19,
-    climbers: 9, win: 2.1, pair: 0.35, spare: 3, share: 0.64, rel: 0.62 },
-  { time: 32, ride: 1.2, live: 7, gap: [0.55, 0.85], burst: 0.28, b3: 0.35, bgap: [0.26, 0.36], pause: [1.0, 1.45], hop: [0.55, 0.95], alt: 0.85, adj: 0.2, top: 0.21,
-    climbers: 12, win: 1.5, pair: 0.5, spare: 2, share: 0.68, rel: 0.55 }
+    fill: 0.55, climbers: 28, wave: [4, 7], spread: [0.35, 0.65], breathe: 1.7, cap: 5, win: 2.2, pair: 0.25, thd: 0.6, spare: 3, share: 0.64, rel: 0.62 },
+  { time: 32, ride: 1.2, live: 7, gap: [0.74, 1.1], burst: 0.22, b3: 0.35, bgap: [0.26, 0.36], pause: [1.0, 1.45], hop: [0.55, 0.95], alt: 0.85, adj: 0.2, top: 0.21,
+    fill: 0.3, climbers: 36, wave: [5, 8], spread: [0.25, 0.5], breathe: 1.2, cap: 6, win: 1.6, pair: 0.3, thd: 0.5, spare: 2, share: 0.68, rel: 0.55 }
 ];
+// climbing pattern weights [LADDER, SPRINTER, PEEKER, ROPE, ZIPLINE (Very Hard and Insane only)] by variant: SNACK AISLE the
+// standard mix, 12 ITEMS OR LESS more rope swingers and peekers, FAMILY SIZE the standard mix in BIGGER waves (+1 / +2)
+// with LONGER breathers (x1.35)
+const PAT_W = [[4, 2, 2, 1.6, 1.2], [2.6, 1.4, 3.6, 3.4, 1.4], [4, 2, 2, 1.6, 1.2]];
 const VARIANT_NAMES = ['SNACK AISLE', '12 ITEMS OR LESS', 'FAMILY SIZE'];
 function config(tier, v) {
   tier = clamp(tier | 0, 0, 3); v = clamp(v | 0, 0, 2);
   const b = TIER_P[tier], c = Object.assign({}, b);
   c.v = +(RIDE_REF / b.ride).toFixed(4);                         // the aisle speed (world units / s)
   c.share = Math.min(0.9, b.share + 0.02 * v);
+  c.patW = PAT_W[v].map((w, i) => (i === 4 && tier < 2 ? 0 : w));
+  c.wave = v === 2 ? [b.wave[0] + 1, b.wave[1] + 2] : b.wave.slice();
+  c.breathe = v === 2 ? +(b.breathe * 1.35).toFixed(2) : b.breathe;
   c.stream = b.time; c.time = b.time + b.ride + FIN_SLOT; c.finSlot = FIN_SLOT;
   c.quota = 8;
   c.ammo = ['unlimited', { mag: 12, reloadTime: b.rel, autoReload: false }, { mag: 16, reloadTime: b.rel, autoReload: false }][v];
@@ -1179,44 +1459,75 @@ function bayHeader(sd, t0, v) {
   const Dm = (((v * t0) % PERIOD) + PERIOD) % PERIOD, b = Math.floor((Z0 - Dm - ZS0) / BAY);
   return patOf(b, sd);
 }
-// the screen point the player is "made to aim at" for a spawn (aim travel): a product 45 % into its ride, a climber halfway up
+// the screen point the player is "made to aim at" for a spawn (aim travel): a product 45 % into its ride, a climber's body
 function aimPt(s) {
   if (s.kind === 'prod') { const lt = s.ra + 0.45 * s.span; return scr(s.side * XP, LEV[s.lv] + 0.26, Z0 + s.v * lt); }
-  const o = vegSpot(s, {}); return scr(o.x, HANG_Y * 0.6 + 0.25, o.z);
+  const o = vegSpot(s, {}); return scr(o.x, 0.5, o.z);
 }
 const AIM_D = 440;                                              // the play rect's diagonal-ish reference (px) for the hop dial
+// the climb spots: [face, side, cart-local z of a side spot]; ROPE swingers take a side (they swing in from that edge),
+// ZIPLINE riders a front corner or the front end of a side
+// The right side's spots sit further forward and a little closer in than the left's: the gun and the HITS pill are at the
+// bottom right (the widest climber's right edge stays <= x 277, its feet <= row 197); a zipline lands on spot flag 1
+const SPOTS = [['L', -1, -0.8, 1], ['L', -1, -0.5], ['L', -1, -0.22], ['R', 1, -0.9, 1], ['R', 1, -0.75], ['R', 1, -0.6], ['FL', -1, 0, 1], ['FR', 1, 0, 1], ['F', -1, 0], ['F', 1, 0]];
+const SPOT_W = [1.3, 1.3, 1.1, 1.3, 1.3, 1.1, 0.9, 0.9, 0.45, 0.45];   // the sides first; the front face least (it sits behind the pile on screen)
+const isSide = i => SPOTS[i][0] === 'L' || SPOTS[i][0] === 'R';
+// a climbing pattern's grasp keyframes in its window: [lt, climb fraction, 0 grasp | 1 duck, pull s] x n
+function climbPlan(pat, win, rng) {
+  const hg = win - MANTLE - clamp(0.12 * win, 0.18, 0.4), c0 = HOP, D = hg - c0, ev = [];
+  const add = (lt, y, ty) => ev.push([lt, y, ty]);
+  if (pat === 0) { const n = rng() < 0.5 ? 3 : 4; for (let i = 0; i < n; i++) add(c0 + D * (i + 0.1) / n, (i + 1) / n, 0); }        // LADDER: steady
+  else if (pat === 1) { const n = rng() < 0.5 ? 3 : 4, F = 0.4 * D; for (let i = 0; i < n; i++) add(c0 + F * (i + 0.05) / n, 0.86 * (i + 1) / n, 0); add(c0 + D * 0.84, 1, 0); }   // SPRINTER: fast, a stop under the rim
+  else { add(c0 + D * 0.03, 0.4, 0); add(c0 + D * 0.2, 0.75, 0); add(c0 + D * 0.38, 0, 1); add(c0 + D * 0.62, 0.5, 0); add(c0 + D * 0.8, 1, 0); }   // PEEKER: up, ducks back down, up again
+  const g = [];
+  ev.forEach((e, i) => { const nx = i + 1 < ev.length ? ev[i + 1][0] : hg, d = Math.max(0.06, Math.min(e[2] ? DUCK_T : PULL, 0.85 * (nx - e[0]))); g.push(r3(e[0]), r3(e[1]), e[2], r3(d)); });
+  return { g, hg: r3(hg), win: r3(win) };
+}
 
 // ---------- timeline: the DIRECTOR. Every spawn from the seeded rng only. ----------
-// Beats: a single product, a burst of 2-3 (different tracks), anticipation pauses after bursts. A product's TRACK (left /
-// right x low / middle / top) comes from AIM TRAVEL: the track whose aim point is closest to the wanted hop (tier dial x
-// AIM_D) from the last thing you were made to aim at, other side / height preferred, +2 near a product already up there;
-// the top shelf gets its share by a roll first. Tracks keep their products >= 0.9 units apart. Products shootable at once
-// <= live. Its LOOK: one of the looks its shelf bay's header stocks (rng). CLIMBERS: planned evenly through the round
-// (jittered); when one is due the next product is forced onto the TOP shelf and the climber starts while that product is
-// mid-ride (your eye is up there); a pair (two spots) from Very Hard.
-// RELOAD-AWARE (12 / 16 per magazine): the required item after every full magazine becomes shootable >= rel + 0.3 s after
-// the one before it. Spawn fields: prod { side, lv, pk, v, ra, span, gone }; veg { face 'L' | 'R' | 'F', side, slot, vk,
-// win, tin, thang, land }; aisle { v, last }.
+// THE STREAM (the quota pool): beats of a single product, a burst of 2-3 (different tracks), anticipation pauses after
+// bursts. A product's TRACK (left / right x low / middle / top) comes from AIM TRAVEL: the track whose aim point is
+// closest to the wanted hop (tier dial x AIM_D) from the last thing you were made to aim at, other side / height
+// preferred, +2 near a product already up there; the top shelf gets its share by a roll first. Tracks keep their products
+// >= 0.9 units apart. Stream products shootable at once <= live. Its LOOK: one of the looks its bay's header stocks.
+// RELOAD-AWARE (12 / 16 per magazine): the stream product after every full magazine is shootable >= rel + 0.3 s after
+// the one before it.
+// THE PACKED SHELVES (fill): every track another live snack every ~fill s, >= 1 unit clear of the others on its track.
+// THE CLIMBERS, in WAVES: wave sizes drawn until the round's count is reached; the waves are laid out from 2.4 s with
+// breathers >= breathe (the stream's spare time shared out between them); inside a wave a climber every spread s (a PAIR:
+// the next one on the same side 0.35-0.6 s later); never more than cap climbers on the cart at once (a later one waits);
+// a spot is free again 0.25 s after its climber dropped in. Pattern by the variant's weights.
+// Spawn fields: prod { side, lv, pk, v, ra, span, gone, f (1 = fill) }; veg { face, side, zl, pat, vk, wv (wave), cs (cart
+// spot), win (drop starts), land, th0 / thd (its throws in the cart), g / hg (climbs) or sw (swing / slide ends) };
+// aisle { v, last }.
 function timeline(c, rng) {
   rng(); rng(); rng();
   const TIME = c.stream, v = c.v, magN = c.ammo && c.ammo.mag && !c.ammo.autoReload ? c.ammo.mag : 0;
   const items = [];
-  let lastAim = null, reqN = 0, lastReqIn = -9, lastFace = '', forceTop = 0, lastPk = -1;
+  let lastAim = null, reqN = 0, lastReqIn = -9, lastPk = -1;
   const trackSpan = (lv, sd) => (zEnd(lv, sd).zs - Z0) / v;
   const prodsUp = t => items.filter(s => s.kind === 'prod' && s.t0 + s.ra <= t && s.t0 + s.ra + s.span > t);
-  function note(s) {                                              // a required item committed: aim + the magazine count
-    reqN++; lastReqIn = s.t0 + (s.kind === 'prod' ? s.ra : 0.08); lastAim = aimPt(s);
-  }
-  function gateAt(t, ra) {                                        // the reload rule: the earliest start for the next required item
+  function note(s) { reqN++; lastReqIn = s.t0 + s.ra; lastAim = aimPt(s); }
+  function gateAt(t, ra) {                                        // the reload rule: the earliest start for the next stream item
     if (!magN || reqN === 0 || reqN % magN !== 0) return t;
     return Math.max(t, lastReqIn + c.rel + 0.3 - ra);
   }
-  function product(t, o = {}) {
+  function lookAt(sd, t) {
+    const looks = HEADERS[bayHeader(sd, t, v)].looks, nl = looks.length;
+    let li = Math.floor(rng() * nl) % nl; if (looks[li] === lastPk && nl > 1) li = (li + 1 + Math.floor(rng() * (nl - 1))) % nl;
+    return (lastPk = looks[li]);
+  }
+  function prodSpawn(t, lv, sd, f) {
+    const span = trackSpan(lv, sd) - PROD_RA, gone = (zEnd(lv, sd).zg - Z0) / v;
+    const sp = { id: 0, t0: r3(t), t1: r3(t + gone + 0.1), kind: 'prod', side: sd, lv, pk: lookAt(sd, t), v, ra: PROD_RA, span: r3(span), gone: r3(gone) };
+    if (f) sp.f = 1;
+    items.push(sp); return sp;
+  }
+  function product(t) {
     t = gateAt(t, PROD_RA);
-    const D = rng.range(c.hop[0], c.hop[1]) * AIM_D, top = o.top || rng() < c.top, noise = rng();
+    const D = rng.range(c.hop[0], c.hop[1]) * AIM_D, top = rng() < c.top, noise = rng();
     const cands = [];
     for (const lv of top ? [2] : [0, 1]) for (const sd of [-1, 1]) {
-      // the track must be clear: no product on it within 0.9 units
       if (items.some(s => s.kind === 'prod' && s.lv === lv && s.side === sd && Math.abs(s.t0 - t) * v < 0.9)) continue;
       const span = trackSpan(lv, sd) - PROD_RA, sp = { kind: 'prod', side: sd, lv, v, ra: PROD_RA, span, t0: t }, p = aimPt(sp);
       let sc = 0;
@@ -1227,88 +1538,109 @@ function timeline(c, rng) {
         for (const q of prodsUp(t + PROD_RA + 0.45 * span)) { const qa = aimPt(q); if (hyp(qa[0] - p[0], qa[1] - p[1]) < c.adj * AIM_D) sc += 2; }
       }
       sc += 0.08 * ((noise * 7.13 + sd * 0.37 + lv * 0.61 + 3) % 1);
-      cands.push({ sc, lv, sd, span });
+      cands.push({ sc, lv, sd });
     }
     if (!cands.length) return null;
     cands.sort((a, b) => a.sc - b.sc || a.lv - b.lv || a.sd - b.sd);
-    const C = cands[0];
-    const looks = HEADERS[bayHeader(C.sd, t, v)].looks, nl = looks.length;
-    let li = Math.floor(rng() * nl) % nl; if (looks[li] === lastPk && nl > 1) li = (li + 1 + Math.floor(rng() * (nl - 1))) % nl;
-    const pk = looks[li]; lastPk = pk;
-    const gone = (zEnd(C.lv, C.sd).zg - Z0) / v;
-    const sp = { id: 0, t0: r3(t), t1: r3(t + gone + 0.1), kind: 'prod', side: C.sd, lv: C.lv, pk, v, ra: PROD_RA, span: r3(C.span), gone: r3(gone) };
-    items.push(sp); note(sp);
+    const sp = prodSpawn(t, cands[0].lv, cands[0].sd, 0); note(sp);
     return sp;
   }
-  function climber(t, face, side) {
-    const win = c.win * rng.range(0.92, 1.08), tin = clamp(0.16 * win, 0.25, 0.5), thang = clamp(0.13 * win, 0.2, 0.42);
-    t = gateAt(t, 0.08);
-    const sp = { id: 0, t0: r3(t), t1: 0, kind: 'veg', face, side, slot: Math.floor(rng() * 3), vk: Math.floor(rng() * VEGGIES.length) % VEGGIES.length,
-      win: r3(win), tin: r3(tin), thang: r3(thang), land: r3(win + DROP_T) };
-    sp.t1 = r3(t + sp.land + CHARGE_VS + 0.2);
-    items.push(sp); note(sp);
-    return sp;
-  }
-  // the climber plan: n starts spread through the round (jittered), pairs from Very Hard
-  const plan = [], nC = c.climbers;
-  for (let j = 0; j < nC; j++) plan.push(clamp(TIME * (j + 0.5 + rng.range(-0.3, 0.3)) / nC, 2.5, TIME - 1.5));
-  plan.sort((a, b) => a - b);
-  const faceNext = () => { const fs = ['L', 'R', 'F'].filter(f => f !== lastFace), f = fs[pickW(fs.map(q => q === 'F' ? 0.7 : 1), rng())]; lastFace = f; return f; };
-  let t = 0.6, guard = 0, nCl = 0;
+  // THE STREAM
+  let t = 0.6, guard = 0;
   while (guard++ < 4000 && t < TIME) {
-    // a climber is due: the next product goes on the top shelf; the climber starts while it is mid-ride
-    if (plan.length && plan[0] <= t && !forceTop) { plan.shift(); forceTop = 1; }
     const up = prodsUp(t + PROD_RA);
     if (up.length >= c.live) { t = Math.min(...up.map(s => s.t0 + s.ra + s.span)) + 0.02; continue; }
-    const n = forceTop ? 1 : rng() < c.burst ? 2 + (rng() < c.b3 ? 1 : 0) : 1;
+    const n = rng() < c.burst ? 2 + (rng() < c.b3 ? 1 : 0) : 1;
     let placed = 0;
     for (let i = 0; i < n; i++) {
-      const sp = product(t, { top: !!forceTop });
+      const sp = product(t);
       if (!sp) break;
       placed++; t = sp.t0;
-      if (forceTop) {
-        forceTop = 0;
-        const tc = sp.t0 + sp.ra + sp.span * rng.range(0.25, 0.5), pair = nCl + 1 < nC && rng() < c.pair;
-        const f1 = faceNext(); climber(tc, f1, rng() < 0.5 ? -1 : 1); nCl++;
-        if (pair) { let f2 = faceNext(); if (f2 === f1) f2 = f1 === 'L' ? 'R' : 'L'; climber(tc + rng.range(0.2, 0.45), f2, f1 === 'F' ? 1 : (rng() < 0.5 ? -1 : 1)); nCl++; if (plan.length) plan.shift(); }
-      }
       if (i < n - 1) t += rng.range(c.bgap[0], c.bgap[1]);
     }
     if (!placed) { t += 0.15; continue; }
     t += placed > 1 ? rng.range(c.pause[0], c.pause[1]) : rng.range(c.gap[0], c.gap[1]);
   }
-  // climbers that share a spot must not overlap: push a later one past the earlier one's landing
-  const cl = items.filter(s => s.kind === 'veg').sort((a, b) => a.t0 - b.t0);
-  for (let i = 0; i < cl.length; i++) for (let j = 0; j < i; j++) {
-    const A = cl[j], Bq = cl[i], same = A.face === Bq.face && (A.face !== 'F' || A.side === Bq.side);
-    if (same && Bq.t0 < A.t0 + A.land + 0.2) { Bq.t0 = r3(A.t0 + A.land + 0.25); Bq.t1 = r3(Bq.t0 + Bq.land + CHARGE_VS + 0.2); }
+  const nStream = items.length;
+  // THE PACKED SHELVES
+  const occ = {};
+  for (const s of items) (occ[s.lv * 2 + (s.side > 0 ? 1 : 0)] = occ[s.lv * 2 + (s.side > 0 ? 1 : 0)] || []).push(s.t0);
+  for (const lv of [0, 1, 2]) for (const sd of [-1, 1]) {
+    const o = occ[lv * 2 + (sd > 0 ? 1 : 0)] || [];
+    for (let tf = 0.3 + rng() * c.fill; tf < TIME; tf += c.fill * rng.range(0.55, 1.45)) {
+      if (o.some(x => Math.abs(x - tf) * v < 1.0)) continue;
+      prodSpawn(tf, lv, sd, 1); o.push(tf);
+    }
+  }
+  // THE CLIMBERS
+  // W = climbers / the mean wave size; each wave starts at the minimum size and the rest are dealt out at random
+  const W = Math.max(1, Math.round(c.climbers / ((c.wave[0] + c.wave[1]) / 2))), waves = new Array(W).fill(c.wave[0]);
+  let left = c.climbers - W * c.wave[0];
+  for (let g = 0; left > 0 && g < 2000; g++) { const i = Math.floor(rng() * W); if (waves[i] < c.wave[1]) { waves[i]++; left--; } }
+  for (let i = 0; left > 0; i = (i + 1) % W) { waves[i]++; left--; }
+  const spM = (c.spread[0] + c.spread[1]) / 2, busyS = waves.reduce((a, n) => a + (n - 1) * spM + c.win + DROP_T, 0);
+  // the breathers share the stream's spare time; never under 80 % of the dial (a round may then run a little long)
+  const T0 = 2.4, br = W > 1 ? Math.max(0.8 * c.breathe, (TIME - T0 - 0.6 - busyS) / (W - 1)) : 0;
+  const busy = SPOTS.map(() => -9), act = [];
+  let tw = T0, ci = 0;
+  for (let wi = 0; wi < W; wi++) {
+    let ts = tw, wEnd = tw, pairSide = 0;
+    for (let k = 0; k < waves[wi]; k++) {
+      if (k) ts += pairSide ? rng.range(0.35, 0.6) : rng.range(c.spread[0], c.spread[1]);
+      for (let g = 0; g < 50; g++) { const on = act.filter(e => e[0] <= ts && e[1] > ts); if (on.length < c.cap) break; ts = Math.min(...on.map(e => e[1])) + 0.05; }
+      const pat = pairSide ? (rng() < 0.6 ? 0 : 1) : pickW(c.patW, rng());
+      let cand = SPOTS.map((s, i) => i).filter(i => pat === 3 ? isSide(i) : pat === 4 ? !!SPOTS[i][3] : true);
+      if (pairSide) { const ps = cand.filter(i => isSide(i) && SPOTS[i][1] === pairSide); if (ps.length) cand = ps; }
+      let free = cand.filter(i => busy[i] <= ts);
+      if (!free.length) { const i0 = cand.reduce((b2, i) => (busy[i] < busy[b2] ? i : b2), cand[0]); ts = busy[i0] + 0.05; free = [i0]; }
+      const si = free[pickW(free.map(i => SPOT_W[i]), rng())], S = SPOTS[si], winB = c.win * rng.range(0.9, 1.1);
+      const sp = { id: 0, t0: r3(ts), t1: 0, kind: 'veg', face: S[0], side: S[1], zl: S[2], pat, vk: Math.floor(rng() * VEGGIES.length) % VEGGIES.length,
+        wv: wi, cs: ci++, th0: r3(Math.max(0.55, c.thd)), thd: c.thd };
+      if (pat <= 2) Object.assign(sp, climbPlan(pat, winB, rng));
+      else if (pat === 3) { const sw = clamp(0.55 * winB, 0.85, 2.0); sp.sw = r3(sw); sp.win = r3(sw + RIM_PAUSE); }
+      else { const sw = clamp(0.45 * winB, 0.6, 1.3); sp.sw = r3(sw); sp.win = r3(sw + ZIP_PAUSE); }
+      sp.land = r3(sp.win + DROP_T);
+      busy[si] = sp.t0 + sp.land + 0.25; act.push([sp.t0, sp.t0 + sp.win]); wEnd = Math.max(wEnd, sp.t0 + sp.land);
+      items.push(sp);
+      pairSide = !pairSide && isSide(si) && k < waves[wi] - 1 && rng() < c.pair ? S[1] : 0;
+    }
+    tw = wEnd + br * rng.range(0.9, 1.15);
   }
   items.sort((a, b) => a.t0 - b.t0);
   const last = r3(items.reduce((m, s) => Math.max(m, s.kind === 'prod' ? s.t0 + s.ra + s.span : s.t0 + s.land + 0.2), 0) + 0.3);
+  for (const s of items) if (s.kind === 'veg') s.t1 = r3(last + FIN_HOLD);
   const dir = { id: 0, t0: 0, t1: r3(last + FIN_HOLD), kind: 'aisle', v, last };
   const out = [dir, ...items];
   out.sort((a, b) => a.t0 - b.t0 || (a.kind === 'aisle' ? -1 : b.kind === 'aisle' ? 1 : 0));
   out.forEach((s, i) => { s.id = i; });
-  const nP = items.filter(s => s.kind === 'prod').length, nV = items.filter(s => s.kind === 'veg').length, good = nP + nV;
-  c.prodCount = nP; c.vegCount = nV; c.goodCount = good; c.topCount = items.filter(s => s.kind === 'prod' && s.lv === 2).length;
+  const nP = items.filter(s => s.kind === 'prod').length, nV = items.filter(s => s.kind === 'veg').length;
+  c.prodCount = nP; c.streamCount = nStream; c.fillCount = nP - nStream; c.vegCount = nV; c.waveCount = W; c.goodCount = nP;
+  c.topCount = items.filter(s => s.kind === 'prod' && s.lv === 2).length;
   c.time = Math.ceil(last + FIN_SLOT);
-  c.quota = Math.max(4, Math.min(good - c.spare, Math.round(good * c.share)));
+  c.quota = Math.max(4, Math.min(nStream - c.spare, Math.round(nStream * c.share)));
   return out;
 }
-// points: a product 100, +50 on the top shelf, +50 shot in the far third of its ride; a climber 200. points() is the
-// engine's only call on an awarded hit: it records the SHARED hit stage time (the pile order reads it)
+// points: a product 100, +50 on the top shelf, +50 shot in the far third of its ride; a climber 200 POINTS (+100 for a
+// rope swinger shot mid-swing), in the cart too. points() is the engine's only call on an awarded hit: it records the
+// SHARED hit stage time (the pile, the throws and the HITS read it). A climber is NOT a snack: in solo the engine's HITS
+// +1 (and the shot: accuracy counts snack shots) is undone here, before applyHit's quota check; the director spawn
+// rewrites every player's HITS from the cart's state each frame anyway (versus is settled there)
 function points(sp, lt) {
   const st = +(sp.t0 + lt).toFixed(4);
   HIT.set(sp, st);
-  if (sp.kind === 'veg') return 200;
+  if (sp.kind === 'veg') {
+    const run = B.G && B.G.run;
+    if (run && !run.versus && run.timeline && run.timeline[sp.id] === sp) { run.me.hits--; run.me.shots = Math.max(0, run.me.shots - 1); }
+    return 200 + (sp.pat === 3 && lt < sp.sw ? 100 : 0);
+  }
   if (sp.kind !== 'prod') return 0;
   const f = (lt - sp.ra) / Math.max(0.05, sp.span);
   return 100 + (sp.lv === 2 ? 50 : 0) + (f < 1 / 3 ? 50 : 0);
 }
 function briefing(c) {
-  const HINTS = ['SHOOT THEM FAR AWAY FOR +50!', 'TOP SHELF = +50!', 'WATCH THE CART WHILE YOU AIM HIGH!', 'TWO VEGGIES AT ONCE: BE QUICK!'];
+  const HINTS = ['SHOOT THEM FAR AWAY FOR +50!', 'ROPE SWINGER MID-SWING: +100!', 'EVERY GRASP SHAKES THE CART!', 'WAVES OF VEGGIES: BE QUICK!'];
   return { rule: [['SHOOT ', 'void'], [c.quota + ' SNACKS', 'red'], [' OR MORE!', 'void']], icon: 'chips', unit: 'SNACKS',
-    dont: null, tip: 'KEEP THE VEGGIES OUT OF YOUR CART!', hint: HINTS[clamp(c.tier | 0, 0, 3)] };
+    dont: null, tip: 'VEGGIES IN THE CART THROW SNACKS OUT. SHOOT THEM!', hint: HINTS[clamp(c.tier | 0, 0, 3)] };
 }
 // briefing card icon: a bag of BLAM! chips (a red pillow bag bulging in the middle, crimped silver ends with a sawtooth
 // edge, a yellow starburst with a red B!, chips peeking at the bottom, a coral shine down the left)
@@ -1346,7 +1678,7 @@ function drawHud(run) {
   _v3.set(SO_X + 0.33, 1.2, SO_Z + RZ - 0.12).applyMatrix4(PARTS.world.matrixWorld);
   const p = scr(_v3.x, _v3.y, _v3.z);
   const W = 54, FULL = 74, h = Math.max(1, Math.round(FULL * E.outCubic(k))), x = Math.round(p[0] - W / 2), y0 = Math.round(p[1]) - h;
-  const snacks = run.timeline.filter(s => s.kind === 'prod' && run.taken.has(s.id) && run.taken.get(s.id) >= 0).length;
+  const snacks = run.me.hits;                                   // round 3: the snacks in the cart (shot - thrown out)
   const lines = [['B.L.A.M. MART', 'crimson'], ['- - - - - - -', 'steel'], ['SNACKS  X' + snacks, 'void'], ['- - - - - - -', 'steel'], ['TOTAL', 'void'], [String(run.me.score).padStart(6, '0'), 'red'], ['THANK YOU!', 'blue']];
   const cv = H.pixImg('rcpt' + W + 'x' + FULL + '|' + snacks + '|' + run.me.score, W, FULL, (px, py) => {
     if (px === 0 || px === W - 1) return 'void';
@@ -1431,6 +1763,48 @@ if (B.FX && B.FX.ricochetColors) B.FX.ricochetColors[ID] = { hot: ['lemon', 'bon
         noise(v, { kind: 'pink', ft: 'highpass', ff: 2200, at: 0.95, a: 0.01, d: 0.14, g: 0.05 });
         return 1.2;
       });
+    // ---- round 3 ----
+    K.def('cartJolt', { max: 3, gap: 0.05, pv: 0.5, dv: 0.12, verb: 0.08, pri: 1, gain: 8.0 },
+      v => {                                 // a grasp jolts the cart: a wire clink + a short basket rattle (big: two at once, a knock under it)
+        const big = !!(v.o && v.o.big);
+        clank(v, v.r(1700, 2300), 0.0, big ? 0.026 : 0.018, 0.12); clank(v, v.r(2600, 3300), 0.008, 0.009, 0.08);
+        K.grains(v, { n: big ? 7 : 4, span: big ? 0.11 : 0.07, at: 0.006, f: [2600, 5200], q: 6, d: [0.003, 0.008], g: [0.008, 0.02] });
+        if (big) { tone(v, { f: 170, f2: 90, ft: 0.05, a: 0.002, d: 0.06, g: 0.05 }); clank(v, 760, 0.004, 0.014, 0.16); }
+        return 0.25;
+      });
+    K.def('snackOut', { max: 3, gap: 0.05, pv: 0.7, dv: 0.1, verb: 0.08, pri: 2, gain: 6.0 },
+      v => {                                 // a veggie flings a snack out of the cart: a bag crinkle, a WHOOSH up and away, a cheeky "hup"
+        K.grains(v, { n: 6, span: 0.08, f: [2400, 5600], q: 3, d: [0.004, 0.01], g: [0.02, 0.04] });
+        noise(v, { kind: 'pink', ft: 'bandpass', ff: 700, ff2: 2600, fft: 0.22, q: 1.4, at: 0.03, a: 0.05, d: 0.2, g: 0.06 });
+        tone(v, { type: 'triangle', f: 520, fs: [[0.06, 760], [0.13, 600]], at: 0.0, a: 0.005, d: 0.08, g: 0.03 });
+        return 0.4;
+      });
+    K.def('swingShot', { max: 2, gap: 0.05, pv: 0, dv: 0.03, verb: 0.12, pri: 3, gain: 3.0 },
+      v => {                                 // a rope swinger shot mid-swing: the +100 bonus ding (two bright bell notes up)
+        K.bell(v, { f: 1318, at: 0.0, d: 0.25, g: 0.05, ratios: [1, 2.0, 3.01], amps: [1, 0.35, 0.15], damp: 1.4 });
+        K.bell(v, { f: 1976, at: 0.08, d: 0.35, g: 0.05, ratios: [1, 2.0, 3.01], amps: [1, 0.35, 0.15], damp: 1.2 });
+        return 0.5;
+      });
+    K.def('waveIn', { max: 1, gap: 0.3, pv: 0.4, dv: 0.06, verb: 0.1, pri: 2, gain: 5.0 },
+      v => {                                 // a wave is coming: a scurry of little feet on the tiles + two squeaky "hup! hup!"s
+        for (let k = 0; k < 14; k++) noise(v, { ft: 'bandpass', ff: v.r(1300, 2300), q: 4, at: k * 0.035 + v.r(0, 0.012), a: 0.001, d: 0.014, g: v.r(0.02, 0.045) * (0.5 + 0.5 * Math.sin(Math.PI * k / 13)), nd: true });
+        tone(v, { type: 'triangle', f: 700, fs: [[0.05, 1050]], at: 0.12, a: 0.005, d: 0.05, g: 0.03 });
+        tone(v, { type: 'triangle', f: 780, fs: [[0.05, 1180]], at: 0.3, a: 0.005, d: 0.05, g: 0.03 });
+        return 0.6;
+      });
+    K.def('ropeSwing', { max: 2, gap: 0.1, pv: 0.5, dv: 0.08, verb: 0.12, pri: 2, gain: 3.5 },
+      v => {                                 // a rope swinger: a rope creak, a long whoosh down, a tiny "wheee"
+        tone(v, { type: 'triangle', f: 380, f2: 330, ft: 0.08, a: 0.004, d: 0.06, g: 0.012, lp: 1500 });
+        noise(v, { kind: 'pink', ft: 'bandpass', ff: 500, ff2: 1600, fft: 0.5, q: 1.1, at: 0.05, a: 0.25, d: 0.35, g: 0.05 });
+        tone(v, { type: 'triangle', f: 900, fs: [[0.18, 1300], [0.45, 820]], at: 0.08, a: 0.03, hold: 0.25, d: 0.15, g: 0.022 });
+        return 0.9;
+      });
+    K.def('zipLine', { max: 2, gap: 0.1, pv: 0.4, dv: 0.08, verb: 0.1, pri: 2, gain: 6.0 },
+      v => {                                 // a zipline rider: a metallic ZZZZIP down the line (a buzzing trolley, a rising whine)
+        noise(v, { ft: 'bandpass', ff: 1800, ff2: 3400, fft: 0.6, q: 6, a: 0.03, d: 0.6, g: 0.04 });
+        tone(v, { type: 'sawtooth', f: 160, f2: 240, ft: 0.6, a: 0.02, hold: 0.4, d: 0.2, g: 0.012, lp: 1400 });
+        return 0.8;
+      });
     // the market bed: a freezer compressor hum, the fluorescent tubes' faint buzz, room tone, a far cart's wheels rattling
     // past now and then (a squeaky wheel sometimes). No PA chimes. Hooked into K.beds as 'grocery' (the stage id).
     K.stageBeds = K.stageBeds || {};
@@ -1469,8 +1843,10 @@ if (B.FX && B.FX.ricochetColors) B.FX.ricochetColors[ID] = { hot: ['lemon', 'bon
     if (K.beds && !K.beds.grocery) K.beds.grocery = K.stageBeds.market;
   }
 }
-B.Stage.register({ id: ID, name: 'GROCERY RUN', short: 'MART', variants: 3, variantNames: VARIANT_NAMES, penalty: -300,
+// (no penalty: round 3 costs no life anywhere; the field stays 0 in case anything ever calls penaltyNow here)
+B.Stage.register({ id: ID, name: 'GROCERY RUN', short: 'MART', variants: 3, variantNames: VARIANT_NAMES, penalty: 0,
   buildEnv, config, timeline, makeTarget, points, briefing, drawIcon, drawHud,
-  TIER_P, EXIT, RIDE_REF, scr, aimPt, isReq, vegPose, vegSpot, HIT, FIN, PILE, PRODUCTS, VEGGIES, KINDS, HEADERS, POSE_K, buildArt, setPose, aisleEnd, bayHeader,
-  Z0, XP, LEV, LIP, STK, CX, CZ, RIM, KN, H_MAX, FIN_RIDE, SCAN_T, RCPT_T, parts: () => PARTS });
+  TIER_P, PAT_W, PAT, SPOTS, EXIT, RIDE_REF, scr, aimPt, isReq, vegPose, vegSpot, cartSpot, cartState, pileList, joltsOf, HIT, FIN, PILE, PRODUCTS, VEGGIES, KINDS, HEADERS, POSE_K,
+  buildArt, setPose, aisleEnd, bayHeader, HOP, MANTLE, DROP_T, THROW_UP, LOOK,
+  Z0, XP, LEV, LIP, STK, CX, CZ, RIM, KN, H_MAX, FIN_RIDE, SCAN_T, RCPT_T, NSLOT, parts: () => PARTS });
 })(window.BLAM);
