@@ -74,6 +74,10 @@ and the duck heckling from the corner. NO light flicker, NO camera flash, NO fal
   - **LASER TAG** (Jon 2026-10-29): black-lit neon room, glowing targets.
 - **SHUFFLE CUPS** (2026-10-29): cups slide and swap, guess which hides the target; shoot the right cup.
 - **WINDOWS**: a tenement front with blinds that snap up on a plate, a decoy or a bomb (Elevators pacing, range catalogue).
+- **MARSH HUNT** (Jon 2026-11-01, "a Duck Hunt type level"): reeds, a sunset marsh, birds burst up from the grass one or two at a time and fly off; shoot them before they leave the screen. Fable's twist: Deputy Duck plays the DOG (pops up from the reeds holding the catch, laughs at a double miss, as the duck already laughs on the 3rd miss); the birds are NOT ducks (clay pigeons, geese, wind-up tin birds, or the sheriff's wanted birds) so our mascot is never the target. Rounds of 10 birds, a HIT tally strip along the bottom, the bird count and speed rise by tier; the famous 'fly away' miss.
+- **CAN SHOOT** (Jon 2026-11-01, Hogan's Alley / Duck Hunt 'shoot the can' ref): a can is tossed up on the left; every hit kicks it higher / sideways; keep it in the air and steer it onto the scoring ledges on the left (300 / 800 / 5000 like the ref); it drops off the bottom = a miss. Several cans at once at high tiers. Shot-driven motion from hit zones (Skee Ball / Soccer recipe).
+- **SALOON** (Jon 2026-11-01, Wild Gunman bonus-stage ref): a western bar back wall: shelves of bottles, a WANTED poster, lanterns, a barrel; shoot the bottles (they shatter with a splash) against the clock, in rows and rhythm patterns; some bottles are the sheriff's (don't shoot) or hide a bomb at high tiers; the poster is the fixed B.L.A.M. logo spot.
+- **LIGHTSPEED** (Jon 2026-11-01, Space Harrier / After Burner ref): you are IN a fighter cockpit at lightspeed, chasing enemy ships that swoop, bank and roll across the screen in swooping formations; the horizon tilts and the ground scrolls as you twist and turn; shoot them before they peel away; waves and a boss ship. Cockpit HUD frame. Closest to the future rail-shooter cabinets; big art job.
 
 ## 4. Decoy redesign brief (#67, Jon 2026-10-29)
 Goal: a bomb disguised as a target that FOOLS you at a glance (corner of the eye while shooting) but is OBVIOUSLY a bomb once you look, and silly: cheap paint, cardboard, paper. Build several variants in the look test; Jon picks one or MORE (several can ship together, mixed at random). The current decoy (thin sloppy plate strokes on the bomb, wobble tell) STAYS as variant A in case he prefers it.
@@ -391,6 +395,35 @@ SIMPLE. Find the plate under the cups. Three ammo-only variants. No bombs anywhe
 **Sounds (inside `js/stages/cups.js`):** `cupDown`, `cupSwap {u}`, `cupStop`, `cupGuess`, `cupWrong`, `cupsReveal`, bed `midway` (calliope far off, crowd, bulbs buzzing).
 
 **Done when:** registered as 'cups' (name 'SHUFFLE CUPS', short 'CUPS') after soccer, 3 variants (ammo only), 4 tiers, briefing icon, versus-safe (the shuffle is pure in seed; the guess is the shared hit record), no console errors, Beginner + Insane play-checked MUTED (right, wrong, timed-out sets), draw calls, screenshots, the doc text handed to Fable; the agent edits ONLY `js/stages/cups.js` + its harness.
+
+## 17. MARSH HUNT build brief (Jon's idea 2026-11-01, Fable wrote it up 2026-11-08; stage 12, built next; the DOCK / MOLE HOLES / SOCCER / SHUFFLE CUPS briefs renumber behind it) -- WAITING FOR GO
+SIMPLE (Jon's rule): one mechanic (shoot the birds before they fly off), three variants that differ in AMMO ONLY, nothing from the "NOT" list. A Duck Hunt-type level; Deputy Duck plays the DOG, and the birds are NOT ducks (our mascot is never the target).
+
+**Scene:** a marsh at sunset. A wall of REEDS and cattails across the lower third of the play rect (the birds burst up from behind them), still water with a sky reflection behind, a far treeline in silhouette, an orange-to-violet dither sky, the moon rising. A DUCK BLIND (a little stilted shed) at one edge wears the "B.L.A.M. MARSH" sign (the fixed logo); a canoe pulled up on the bank, a heron statue, dragonflies, fireflies as the light fades. Original art, pixel / dither voxel, the Bee Hive level of care. The reeds never cover the HUD duck (bottom-left), the gun (bottom-right), the hearts, the quota pill or the timer.
+
+**The birds (Jon to pick, see question 1):** WIND-UP TIN BIRDS by default: toy birds with a key in the back, enamel paint, button eyes, stiff flapping wings; they fit the gallery's toy look and keep the level cheerful. Alternatives: clay pigeons, geese, the sheriff's WANTED birds.
+
+**The mechanic:** a bird BURSTS up out of the reeds at a seeded spot (a reed shiver, a feather puff, `birdBurst {u}`), climbs, flies a seeded zig-zag across the sky (two or three heading changes, wings beating, `birdFlap {u}`; pure in lt from the spawn's seed), and after the tier's AIR TIME it LEAVES off the top or a side edge, gone for good. Shoot it in the air: it FREEZES for 0.3 s in the classic hit pose (eyes X'd, `birdHit`), then drops straight down into the reeds (`birdFall {u}`): HIT, +100, +50 QUICK SHOT if hit within 0.6 s of its burst. One that leaves unshot: a fading flutter (`birdAway {u}`), NO hit, no points, NO life (the Duck Hunt rule; the quota is the only pressure). Birds come singly or in PAIRS (two bursts a `beat` apart from different spots, EVERY tier; more often at higher tiers); both birds of a pair = PAIR +100. Birds in the air at once 1-2 -> 2-3 by tier.
+
+**Rounds and the dog:** birds come in ROUNDS of 10 (a "ROUND n" banner as INVASION's wave banners; rounds run until the stage clock ends). A TALLY STRIP of 10 small bird silhouettes sits just above the pills between the HUD duck and the gun: each fills red (hit) or grey (flew away) as the round goes. After each round the DOG pops up out of the reeds: Deputy Duck in a hunter's cap and a bandana, range.js's placeholder voxel duck style (`js/duck.js` untouched), holding up the round's birds by the feet (1, 2 or a fistful), grins, and drops back down (`dogUp`, pure in lt). Both birds of a pair flew away (a DOUBLE MISS): the dog pops up at once and LAUGHS (`dogLaugh`, the HUD duck's belly-slap rhythm; cosmetic). 10 of 10 in a round: PERFECT ROUND +500, the dog cheers (`dogCheer`). The dog is NOT shootable (see question 3).
+
+**Difficulty (4 tiers; counts, speed, leeway only, every tier gets pairs):** air time ~4.0 / 3.2 / 2.5 / 2.0 s, burst-to-burst gap by the range director's gaps / bursts / pauses recipe, pair share ~20 / 30 / 40 / 50 %, heading changes 2 / 2 / 3 / 3, birds up at once 1-2 / 2 / 2-3 / 3. Quota = share of the birds the timeline produced (the range rule: 55 / 60 / 64 / 68 % + 2 % a variant, cap 90 %).
+
+**Scoring and briefing:** as above. Briefing "SHOOT n BIRDS OR MORE!", unit `BIRDS`, icon a tin bird mid-flap with a motion whoosh (`drawIcon`), `dont: null`, tip "SHOOT THEM BEFORE THEY FLY AWAY!" Ammo by variant (ammo is the ONLY difference): **MARSH 1 OPEN SEASON** free fire; **MARSH 2 THREE SHELLS** 3 per magazine, auto reload (the Duck Hunt rule); **MARSH 3 LAST BOX** a hard cap of quota + spare (range's cap recipe; the box of shells painted on the blind's step counts down). See question 2.
+
+**Finale:** on clear the dog hops out of the reeds with the whole bag, the moon is up, and the fireflies drift together to spell B.L.A.M. over the water. **NOT in this stage:** no bombs, no decoys, no bystanders, no fly-away life penalty, no shootable dog, no bonus can, no variant-specific mechanics, no weather.
+
+**Sounds (recipes + bed inside `js/stages/marsh.js`, see the parallel-agent rule in section 12):** `birdBurst {u}`, `birdFlap {u}`, `birdHit`, `birdFall {u}`, `birdAway {u}`, `dogUp`, `dogLaugh`, `dogCheer`, `roundBanner`, bed `marsh` (frogs, crickets, water lap, wind in the reeds).
+
+**Level card:** `def.drawCard` inside `marsh.js` (56x32: the reed line, a tin bird over the sunset, the moon), per the level-cards rule (#110).
+
+**Done when:** registered as 'marsh' (name 'MARSH HUNT', short 'MARSH') after grocery, 3 variants (ammo only), 4 tiers, briefing icon, level card, versus-safe (every bird path pure in lt from the seeded rng), no console errors, Beginner + Insane play-checked MUTED with an autopilot + a deliberate double miss (the dog laughs) + a perfect round, draw calls, screenshots, the ENGINE.md section + audio.js lines + PLAYTEST.md checklist + index.html tag handed to Fable as text. The agent edits ONLY `js/stages/marsh.js` and its own harness under `review/tools/`.
+
+**Questions for Jon (answer with the go, or let the defaults stand):**
+1. Which bird: wind-up tin birds (default), clay pigeons, geese, or the sheriff's wanted birds?
+2. Variant ammo: free fire / 3 shells per magazine / hard cap of quota + spare. OK, or two magazine sizes like the Dock?
+3. The dog: safe (default) or a bystander (shooting him when he pops up = LIFE -1)?
+4. Fly-away: no life lost (default, Duck Hunt). OK?
 
 ## 3. Open questions for Jon
 1. Approve Alley, Boneyard, Sky Show as the next three, in that order?

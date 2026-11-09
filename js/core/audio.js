@@ -112,6 +112,17 @@
      scanBeep    : the finale: the cashier duck scans the pile, one beep per item (opts.n)
      receiptPrint: the finale: the receipt prints up out of the register ('finale' plays too; the HUD duck cheers)
      + the ambience bed 'grocery' (K.stageBeds.market: a freezer hum, a faint fluorescent buzz, a far cart's wheels rattling)
+   MARSH HUNT (stage 12; recipes + the bed are defined in stages/marsh.js with SFXKit.def / K.stageBeds):
+     birdBurst   : a tin bird bursts up out of the reeds: a reed rustle, a flurry of tin wings, a toy chirp (opts.u)
+     birdFlap    : a flying bird changes heading: three stiff tin flaps + a wind-up tick (opts.u)
+     birdHit     : a bird was shot: a tin clank, a squawk, a spring boing ('hit' plays too)
+     birdFall    : the shot bird drops into the reeds after its 0.3 s freeze: a falling whistle + a swish / splash (opts.u)
+     birdAway    : a bird got away off the edge: a fading flutter + two receding chirps (opts.u; no penalty)
+     dogUp       : the dog pops up out of the reeds: a reed swish + a "hup!"
+     dogLaugh    : a double miss (or a round with no bird): heh-heh-heh on a belly-slap rhythm (opts.u)
+     dogCheer    : a perfect round (10 of 10) / the finale: a rising "yahoo!" over a three-note toot
+     roundBanner : ROUND n: a duck-call toot (two nasal honks) + a ding (opts.n)
+     + the ambience bed 'marsh' (K.stageBeds.marsh: crickets, a frog now and then, water lapping, wind in the reeds)
    Internal (the router plays these itself): duckScared, duckRelief, duckHeckle, duckCheer, duckSad (Deputy Duck's
    pose changes, watched on BLAM.G.duck.pose; duckQuiet(s) mutes the scared / relief ones for s seconds, used by the
    bomb's silent scared face), the title-menu chiptune and a quiet ambience bed per stage.

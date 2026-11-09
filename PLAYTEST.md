@@ -16,6 +16,20 @@ Live link: https://jonbeam1-netizen.github.io/blam/ (hard refresh once: Ctrl+Shi
 - [ ] Nothing covers Deputy Duck or the gun
 - Also in 0.032-0.036: practice list below the floor edge (static), every menu sign static, pillar RELOAD markers only when empty, hit ding +9 dB.
 
+## Build 0.039: MARSH HUNT (stage 12, 2026-11-08)
+- [ ] THE SET: a marsh at sunset that slowly turns to night over the round (the sun sinks behind the treeline, the moon rises, stars, fireflies come out). Reeds and cattails across the lower third sway and shiver where a bird bursts out. The duck blind on the left wears the B.L.A.M. MARSH sign; a heron decoy in the water, a canoe in the reeds, dragonflies. Does it read? Anything covering the HUD duck, the hearts, the timer, the quota pill or the gun?
+- [ ] THE BIRDS: wind-up TIN birds (red / blue / yellow / green enamel, button eyes, stiff wings, a turning key in the back). They burst out of the reeds, zig-zag (2 turns Beginner / Advanced, 3 Very Hard / Insane) and dash off the top or a side after their air time (4.0 / 3.2 / 2.5 / 2.0 s). Shot: they freeze with X eyes for a moment, then drop into the reeds. Big enough? Fair speed at Insane?
+- [ ] FLY-AWAY: a bird that gets away costs nothing (no life, no points); only the quota matters.
+- [ ] ROUNDS OF 10: a ROUND n banner; the tally strip over the timer fills red (hit) or grey (flew away). Rounds: Beginner 2, Advanced 2, Very Hard 3, Insane 4 (about 54-68 s a stage).
+- [ ] THE DOG (Deputy Duck in a blaze-orange hunter's cap and a bandana): after every round he pops up holding that round's birds (1, 2 or a fistful). Both birds of a PAIR fly away: he pops up at once and LAUGHS. 10 of 10: he cheers, PERFECT! +500. Never shootable.
+- [ ] SCORING: 100 a bird, +50 QUICK SHOT (within 0.6 s of clearing the reeds), +100 for both birds of a pair, +500 a perfect round.
+- [ ] VARIANTS (ammo only): MARSH 1 OPEN SEASON free fire; MARSH 2 THREE SHELLS 3 per magazine, auto reload (the engine reloads instantly, so it plays like free fire with a 3-shell HUD: keep, or switch to a manual side reload?); MARSH 3 LAST BOX quota + spare shells (the box on the blind's porch empties as you shoot; once the box is empty with the quota met, the finale plays right away).
+- [ ] FINALE: the dog hops out with the whole bag, the moon is up, the fireflies drift together to spell B.L.A.M.
+- [ ] LEVEL CARD (FREE PLAY page 2/2 and HIGH SCORES): sunset, moon, a tin bird, the reed line. Briefing icon: the tin bird with a whoosh.
+- [ ] Sounds (synth, untested by ear): reed burst + chirp, tin flaps, hit clank + squawk, falling whistle + splash, getaway flutter, dog hup / laugh / yahoo, the ROUND duck-call toot, the marsh bed (crickets, frogs, water, wind).
+- NOT VERIFIED by the agent: anything by ear (muted throughout); real mouse / touch play (script-driven autopilot + stills only); a real frame rate (stepped clock); portrait; a two-browser versus (parity checked with two runs in one page).
+- Open questions: (1) THREE SHELLS: keep the auto reload (free fire in practice) or make it a manual side reload? (2) Beginner and Advanced have 20 birds (2 rounds); want a 3rd round (about 77-95 s)? (3) The dog laughs at a double miss and at a round with no birds; also at a round with only 1-2?
+
 ## Build 0.038: GROCERY RUN round 3 (2026-11-01)
 - [ ] PACKED SHELVES: every board now carries live snacks (turning, bobbing, shootable): about 14 on screen at Beginner, 20+ at Insane, on top of the stock. Enough? Too much? (The stock is warmer now: dusty reds / oranges / navy / green instead of grey.)
 - [ ] CLIMBER WAVES: veggies come in waves (Beginner 2-4 at a time, 14 a round; Insane 5-8 at a time, 36 a round) with a breather between (about 3 s Beginner, about 1.2 s Insane), never more than 3 (Beginner) .. 6 (Insane) on the cart at once. A scurry sound + the HUD duck's angry face says a wave is coming. Chaos but not impossible?
