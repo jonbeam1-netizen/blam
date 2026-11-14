@@ -989,3 +989,60 @@ NOT in this stage: bombs, decoys, bystanders, a fly-away life penalty, a shootab
 **SFX peaks** (`SFX.render` x3, volume 0.35): birdBurst 0.040, birdFlap 0.029, birdHit 0.096, birdFall 0.053, birdAway 0.017, dogUp 0.069, dogLaugh 0.091, dogCheer 0.092, roundBanner 0.070; bed `marsh` 0.011 (grocery's bed 0.011; shelfPop 0.038 / veggieIn 0.086 for scale).
 
 **Open / rough:** THREE SHELLS = free fire in practice (instant auto reload). The X'd eyes are partly hidden by the raised wings in the 3/4 view (the freeze reads by the pose + sparks). The shell box countdown is a 1 px brass row on the porch (subtle). Fireflies spell B.L.A.M. over the far water line, not on the water. Beginner / Advanced have only 20 birds (2 rounds; 3 Advanced rounds made a 77 s stage). The pair / perfect bonuses rarely trigger in versus (split birds). LAST BOX's early finale writes `run.dryT` and calls `run.end` from the stage.
+
+## THE DOCK (stage 13, 2026-11-14)
+
+Built against DESIGN-STAGES.md section 13 (Jon: SIMPLE; one mechanic, three variants that differ in AMMO ONLY). Everything lives in `js/stages/dock.js`, INCLUDING its sound recipes (`B.SFXKit.def`) and the `harbour` bed (`K.stageBeds.harbour`, hooked into `K.beds.dock` from dock.js); one script tag after marsh.js (registry order ... marsh, dock: FREE PLAY picker page 2/2). No engine file changed. Dev harness: `review/tools/dock-measure.js` (`DK.ready` (injects dock.js), `start / step / to / frame / grab / save / saveFull / calls / px / fire / auto / hullHit / ammo / build / solve / measure / repeat / versus / finale`; blocks its tab's writes to blam.save.v1; mutes SFX first).
+NOT in this stage: near-miss balls, ships to sink, bombs / decoys / bystanders, mines, variant-specific mechanics.
+
+**Set (camera unchanged; horizon row ~99).** Sky: one ShaderMaterial quad at z -50 (sunset ramp indigo -> amber by screen row, three drifting stratus streaks with coral undersides, a sun disc low between the ships, stars past dusk 0.3; rows under the horizon paint the far sea so the open horizon is seamless). Dusk is pure in the stage clock: 0 -> 0.62 over the round, up to 0.85 in the finale. Water: a y 0 plane mirroring the ramp (rows x1.5), swell bands + ripple crests (faded near the camera), the sun's glitter column (fades out toward the HUD). Far left: hills + a town with lit windows (env class, z -44); far right: a headland with a red / bone LIGHTHOUSE whose lamp turns (glow instance). Left: a stone quay, the boathouse with a life ring, a lit window and the "B.L.A.M." / "HARBOUR" sign (3x5 lettering, lemon / yellow on oxblood, bone frame), a pier on pilings (barrels, a crate, a rope coil, bollards, two perched gulls) with the LAMP POST at its shore end (kept off the ships). A red / bone BUOY with a bell and a blinking light (bobs). 7 GULLS wheeling (one instanced draw call, kept off the top-left MENU / SCORE corner). Unlit baked colours, `fog: false`. Misses: a proxy finds the water under the ray and throws a splash; it reports no hit (no square bullet hole on the water).
+
+**The ships.** 3 slots, one merged mesh each; a run shows 2 (x -8 / 8) or 3 (x -10.5 / 0.5 / 11.5) at z -24, broadside, bows toward the middle (the right one mirrored). Hull with a red gun-deck band, gilt trim, FIVE gun ports on the camera side (void port, red lid propped up, slate muzzle), stern castle with lit windows + a lantern, forecastle, bowsprit, figurehead, two masts with four billowed square sails (three paint schemes; the middle one has a skull on the main course), a crow's nest, a Jolly Roger on the main and a red pennant on the fore, rigging. Each ship bobs and heels away from every shot (pure in the timeline + stage clock). Before a shot the port glints amber for 0.38 s, then flashes lemon (glow instances, pure in t).
+
+**The rowboat + the duck.** A red rowboat with a bone stripe, tan gunwale and floor planks, three thwarts, oarlocks, a rope coil, a tin bucket, "DEPUTY" in bone on the transom; centre x 0, z -2, yawed 0.7 rad (3/4 view, bow back-left), on screen ~rows 128-182, x ~150-260 (clear of the HUD duck, hearts, timer, quota pill and gun). Two oars resting in the water. Deputy Duck in range.js's placeholder style (DS 0.068; sheriff hat, star; faces idle / scared / angry; separate wings; js/duck.js untouched). The boat bobs (stage clock) and ROCKS after each hull hit (damped pitch / roll / a dip, pure in the timeline + run.taken). Duck states (`duckState(run, t)`): COVER while any unshot ball is <= 0.6 s from the boat (sinks 0.12, wings up over his hat, eyes squeezed, trembling); PEEK for 0.5 s after a cover ends (the only bit that remembers local state, cosmetic); FIST for 1.5 s after a hull hit (a 0.2 s flinch, then the angry face and a wing shaken at the ships); IDLE (he turns a little toward the ship that fires next). Cover outranks fist.
+
+**The mechanic.** Every spawn is a cannonball aimed at the boat: `ballAt(sp, lt)` = straight lerp port -> aim point + a parabola of height H (4 f (1 - f)), flight F. Aim points (boat-local, rotated by the boat's yaw): the bow, the two bow quarters, the two gunwales beside the duck. The ball: an icosphere, its own toon iron shader (haze / slate / navy / midnight from the true normal, an orange sunset rim, a void outline), drawn over the set (depthTest off) so the boat or the duck never hides it at the end; never under 3.2 px radius (~3 px on the horizon, ~11 px at the boat); a smoke trail (a puff every 0.035 s). Shootable from lt 0.12 to F - 0.03; hit test = a screen-space disc (1.25 x its radius, never under 6 px / 9 touch), distance = px from the crosshair (the nearest ball in a volley wins). Shot: iron bits + sparks drop into the water (`ballPop`, then `splash` when they land). Unshot: at F a THUD + wood chips + a splash column (`hullThud` + `splash`), the boat rocks; the LIFE is charged at F (solo) / F + 1.0 (versus) through `chargeHull(run)`, which is INVASION's landing hook (`run.penaltyNow(i, 'bomb', null, null)` for every player still standing, only if `run.taken` has no claim on the ball; a ball shattered locally but never awarded still lands).
+THE PUFFS: the stage's own fog-free particles (one instanced draw call, 320) for the port smoke, the trails, the iron bits, the splashes. The engine's chips fog toward midnight past 13 m, and the ships are at ~29 m.
+
+**The director (`timeline`, pure).** Beats from t 1.2: a SINGLE (gap after; a BURST = a quick follow-up at bgap, then a pause) or a VOLLEY (2, or 3 with chance v3, from ONE ship vbeat apart, the arc heights alternating low / high, the ports and aim points alternating, a pause after). A beat waits while the balls in the air + its own would exceed its cap (`live` [lo, hi], hi with chance l2). AIM TRAVEL (#90): every ship x {low arc, high arc} (seeded port + aim point) is scored by how close its point 40 % into the flight lands to the wanted hop (hop x 440 px) from the last ball you were made to aim at, +0.35 alt for the same ship. Spawn fields: ball { sh, n, pt, ai, ax, p0, p1, H, F, ra, readyAt, vo, k }; dir { last, balls } (kind 'dir', t0 0, id 0). The clock = last + FIN_SLOT 5.4 s. Quota = round(share x balls), share 55 / 60 / 64 / 68 % + 2 % a variant (cap 90 %), >= 4. Practice: balls until the chunk window, c.prior carries the balls in the air; a newer chunk's director retires the old one.
+
+**Scoring.** A ball 100, +50 if shot in the first third of its flight (`lt <= F / 3`). A hull hit: LIFE -1, -300 (the engine's penalty). Briefing: `SHOOT n CANNONBALLS OR MORE!`, unit CANNONBALLS, icon = a cannonball with a motion whoosh and two smoke puffs (2 frames), `dont: null`, tip `DON'T LET THEM HIT THE BOAT!`. Level card: `def.drawCard` (sunset, a two-masted ship, a smoke trail arcing up to a cannonball, the red boat with the duck and oars, the sun's glitter).
+
+**Variants (ammo only):** DOCK 1 HARBOUR `'unlimited'`; DOCK 2 BROADSIDE `{mag: 8}` (manual side reload); DOCK 3 ARMADA `{mag: 12}`.
+
+**Finale** (the quota met at `last`, versus always): the ships run up WHITE FLAGS (7x7 cells, a 3x5 letter + a dot, two flutter frames) up the masts in screen order, 0.32 s apart: 2 ships = B. L. | A. M.; 3 ships = [plain] B. | L. A. | M. [plain]; `flagUp` each; the duck turns and rows off toward the pier (a rowing stroke, waving his other wing), dusk deepens. `finale` sound, the HUD duck cheers. FIN_HOLD 5.0 s.
+
+**Dials (`TIER_P`, variant 0; share +2 % a variant):**
+
+| | BEGINNER | ADVANCED | VERY HARD | INSANE |
+|---|---|---|---|---|
+| `ships` | 2 | 2 | 3 | 3 |
+| `F` flight s | 3.6 | 2.8 | 2.1 | 1.6 |
+| `balls` a stage | 20 | 32 | 48 | 70 |
+| `live` in the air (cap; hi with chance l2) | 1-2 (50 %) | 2 | 2-3 (50 %) | 3-4 (50 %) |
+| `gap` / `burst` / `bgap` / `pause` s | 1.35-1.8 / 15 % / 0.75-0.95 / 1.4-1.8 | 1.0-1.35 / 20 % / 0.55-0.72 / 1.15-1.45 | 0.7-0.95 / 25 % / 0.45-0.6 / 1.0-1.3 | 0.48-0.66 / 30 % / 0.32-0.42 / 0.9-1.15 |
+| `volley` share / `v3` / `vbeat` s | 8 % / 0 / 0.75-0.9 | 15 % / 0 / 0.55-0.7 | 30 % / 30 % / 0.4-0.5 | 40 % / 50 % / 0.32-0.42 |
+| `hop` / `alt` | 0.12-0.3 / 0.5 | 0.2-0.42 / 0.6 | 0.32-0.56 / 0.75 | 0.45-0.75 / 0.85 |
+| `Hlo` / `Hhi` arc heights | 2.4-3.2 / 4.3-5.2 | 2.4-3.2 / 4.4-5.4 | 2.3-3.1 / 4.5-5.6 | 2.2-3.0 / 4.6-5.8 |
+| `share` | 55 % | 60 % | 64 % | 68 % |
+
+Volleys run at EVERY tier as a share dial (the brief said "from Very Hard"; the never-gate rule won; Jon to confirm).
+
+**Measured** (`DK.measure({ seeds: 60 })`; perfect + slow bots; a ball the bot can't reach = a life):
+
+| tier | balls | volleys | quota | clock s (range) | in the air mean / max | aim travel px | highest apex row | slow bot lives lost (mean / worst) |
+|---|---|---|---|---|---|---|---|---|
+| BEGINNER | 20 | 1.5 | 11.3 | 63 (56-72) | 1.32 / 2 | 113 | 41 | 0 / 0 |
+| ADVANCED | 32 | 4.0 | 19.7 | 60 (57-65) | 1.69 / 2 | 118 | 38 | 0 / 0 |
+| VERY HARD | 48 | 10.4 | 32.0 | 61 (57-66) | 1.86 / 3 | 134 | 35 | 0 / 0 |
+| INSANE | 70 | 17.4 | 49.0 | 58 (56-62) | 2.11 / 4 | 130 | 32 | 0.02 / 1 |
+
+The bots don't need to track an arc, so humans will find Very Hard / Insane much harder than this. Timelines repeat (40 / 40); a build takes ~0.2-0.3 ms.
+
+**Versus.** Every ball, port, arc, impact, the rocking and the duck's states are pure in (seed, tier, variant), the stage clock and `run.taken`; the charge reads `run.taken` at F + 1.0 on both tabs. `DK.versus` (two Runs on a fake wall clock, optimistic + late awards, every 5th ball left to hit the hull, one ball shot 0.08 s before impact): identical hits / lives / bombs / taken and timeline hash in 5 of 5; the late ball was not charged. Scores matched in 3 of 5; the other 2 differ only through Run.penaltyNow's max(0, ...) clamp when an award and a charge land in a different order on each tab (engine behaviour, INVASION has the same; the host's `sc` snapshot overrides the guest's tally).
+
+**Draw calls** (scene + post + HUD, `renderer.info` over one frame): 37-45 in play (means 38-40), 41-45 through the finale; ~88-92k triangles.
+
+**SFX peaks** (`SFX.render` x3, volume 0.35): cannonFire 0.060, ballWhistle 0.022, ballPop 0.070, hullThud 0.084, splash 0.035, flagUp 0.040; bed `dock` 0.011.
+
+**Open / rough:** the cover pose reads as wings up beside the hat more than over it; the puffs/trails are cosmetic Math.random; the duck is ~25 px tall at the boat; a far ball (~3 px) reads less well against the dark hulls just after leaving the port; in versus a hit awarded after impact shows a rock / fist on the host for a moment (no life lost). Engine finding (unchanged): the engine's debris chips fog to midnight past 13 m.

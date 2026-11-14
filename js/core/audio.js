@@ -123,6 +123,14 @@
      dogCheer    : a perfect round (10 of 10) / the finale: a rising "yahoo!" over a three-note toot
      roundBanner : ROUND n: a duck-call toot (two nasal honks) + a ding (opts.n)
      + the ambience bed 'marsh' (K.stageBeds.marsh: crickets, a frog now and then, water lapping, wind in the reeds)
+   THE DOCK (stage 13; recipes + the bed are defined in stages/dock.js with SFXKit.def / K.stageBeds):
+     cannonFire  : a pirate ship's gun port fires: a deep boom, a crack, the roll off the bay (opts.u)
+     ballWhistle : a cannonball past 42 % of its flight: a faint falling whistle (opts.u)
+     ballPop     : a cannonball was shot: an iron clang, a crunch, a shower of iron bits (opts.u; 'hit' plays too)
+     hullThud    : an unshot ball hits the rowboat: a hollow wooden thud + a plank creak ('bomb' + 'lifeLost' play too)
+     splash      : water spray + drips: at a hull hit, and when a shot ball's bits land (opts.u; opts.small = the bits)
+     flagUp      : the finale: a white flag runs up a mast: rope zip, two cloth flaps, a ding (opts.n 0-3, pitch steps)
+     + the ambience bed 'dock' (K.stageBeds.harbour: the sea on the quay, a gull now and then, a mooring rope creaking, a far buoy bell)
    Internal (the router plays these itself): duckScared, duckRelief, duckHeckle, duckCheer, duckSad (Deputy Duck's
    pose changes, watched on BLAM.G.duck.pose; duckQuiet(s) mutes the scared / relief ones for s seconds, used by the
    bomb's silent scared face), the title-menu chiptune and a quiet ambience bed per stage.

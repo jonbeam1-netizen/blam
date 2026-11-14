@@ -16,6 +16,21 @@ Live link: https://jonbeam1-netizen.github.io/blam/ (hard refresh once: Ctrl+Shi
 - [ ] Nothing covers Deputy Duck or the gun
 - Also in 0.032-0.036: practice list below the floor edge (static), every menu sign static, pillar RELOAD markers only when empty, hit ding +9 dB.
 
+## Build 0.040: THE DOCK (stage 13, 2026-11-14)
+- [ ] THE SET: a harbour at sunset that darkens over the round (stars at the end). Two or three pirate ships on the horizon (sails, Jolly Rogers, lanterns, five red-lidded gun ports each), the boathouse on the quay with the B.L.A.M. HARBOUR sign, a pier with a lamp post, barrels, gulls, a buoy with a light, a far town and a lighthouse whose lamp turns. Does it read? Anything covering the HUD duck, the hearts, the timer, the quota pill or the gun?
+- [ ] THE BOAT: Deputy Duck in a little red rowboat ("DEPUTY" on the stern), oars out, bobbing in the lower middle. Big enough? (He is about 25 px tall.)
+- [ ] THE CANNONBALLS: a port glints, flashes and puffs smoke, then a black iron ball arcs at the boat with a smoke trail, small on the horizon and big at the end. Flight 3.6 / 2.8 / 2.1 / 1.6 s; 2 ships Beginner / Advanced, 3 Very Hard / Insane. Easy to see on the sails and the sky? Fair at Insane?
+- [ ] SHOOT ONE: it bursts into iron bits that splash into the water. 100, +50 if you get it in the first third of its flight.
+- [ ] MISS ONE: THUD on the hull, a splash, the boat rocks, LIFE -1 and -300 (every ball is aimed at the boat; there are no near misses).
+- [ ] THE DUCK: ducks and covers when a ball is 0.6 s out (wings up, eyes squeezed), peeks back up after, shakes a fist at the ships after a hit. Readable?
+- [ ] VOLLEYS: 2-3 balls from one ship a beat apart, high arc then low. They happen at EVERY tier (rare at Beginner, 40 % of the shots at Insane). OK, or Very Hard + only as the brief said?
+- [ ] VARIANTS (ammo only): DOCK 1 HARBOUR free fire; DOCK 2 BROADSIDE 8 per magazine (side reload); DOCK 3 ARMADA 12 per magazine.
+- [ ] FINALE: the ships run up white flags spelling B. L. A. M. up the masts (3 ships: a plain white flag on each outer mast), and the duck rows off toward the pier waving.
+- [ ] LEVEL CARD (FREE PLAY page 2/2 and HIGH SCORES): sunset, a ship, a cannonball arcing up on its smoke trail, the boat with the duck. Briefing icon: a cannonball with a whoosh.
+- [ ] Sounds (synth, untested by ear): cannon boom, falling whistle, iron clang on a hit, wooden thud on the hull, splashes, flag zip + ding, the harbour bed (sea, gulls, a creaking rope, a far bell).
+- NOT VERIFIED by the agent: anything by ear (muted throughout; levels only from offline renders); real mouse / touch play (script-driven autopilot + stills only); a real frame rate (stepped clock); portrait; a two-browser versus (parity checked with two runs in one page).
+- Open questions: (1) Volleys at every tier (the never-gate rule) or Very Hard + only (the brief)? (2) Stage length is ~60 s at every tier (20 / 32 / 48 / 70 balls); right? (3) The quota rarely matters here (you run out of lives before you miss the quota); fine, or should missed balls also count against something?
+
 ## Build 0.039: MARSH HUNT (stage 12, 2026-11-08)
 - [ ] THE SET: a marsh at sunset that slowly turns to night over the round (the sun sinks behind the treeline, the moon rises, stars, fireflies come out). Reeds and cattails across the lower third sway and shiver where a bird bursts out. The duck blind on the left wears the B.L.A.M. MARSH sign; a heron decoy in the water, a canoe in the reeds, dragonflies. Does it read? Anything covering the HUD duck, the hearts, the timer, the quota pill or the gun?
 - [ ] THE BIRDS: wind-up TIN birds (red / blue / yellow / green enamel, button eyes, stiff wings, a turning key in the back). They burst out of the reeds, zig-zag (2 turns Beginner / Advanced, 3 Very Hard / Insane) and dash off the top or a side after their air time (4.0 / 3.2 / 2.5 / 2.0 s). Shot: they freeze with X eyes for a moment, then drop into the reeds. Big enough? Fair speed at Insane?
