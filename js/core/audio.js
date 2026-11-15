@@ -131,6 +131,13 @@
      splash      : water spray + drips: at a hull hit, and when a shot ball's bits land (opts.u; opts.small = the bits)
      flagUp      : the finale: a white flag runs up a mast: rope zip, two cloth flaps, a ding (opts.n 0-3, pitch steps)
      + the ambience bed 'dock' (K.stageBeds.harbour: the sea on the quay, a gull now and then, a mooring rope creaking, a far buoy bell)
+   MOLE HOLES (stage 14; recipes + the bed are defined in stages/moles.js with SFXKit.def / K.stageBeds):
+     molePop     : a mole pops up out of its hole: a cartoon "pop!", a dirt thump, crumbs (opts.u)
+     moleDown    : a mole ducks back down unshot: a short slide-whistle drop + a soft dirt scuff (opts.u)
+     moleBonk    : a mole was shot: a wooden BONK, a squeaky "eek", stars twinkling (opts.u; 'hit' plays too)
+     bombUp      : a bomb pops up out of a hole: an iron clunk on the rim + the fuse fizzing (opts.u; shooting it = 'bomb' + 'lifeLost')
+     moleCards   : the finale: four quick rising pops (the moles come up with B. L. A. M.) + a little ta-daa ('finale' plays too)
+     + the ambience bed 'moles' (K.stageBeds.lawn: a breeze, birds chirping now and then, the sprinkler ticking round and ratcheting back)
    Internal (the router plays these itself): duckScared, duckRelief, duckHeckle, duckCheer, duckSad (Deputy Duck's
    pose changes, watched on BLAM.G.duck.pose; duckQuiet(s) mutes the scared / relief ones for s seconds, used by the
    bomb's silent scared face), the title-menu chiptune and a quiet ambience bed per stage.

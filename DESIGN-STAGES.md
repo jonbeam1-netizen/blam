@@ -345,7 +345,7 @@ SIMPLE (Jon's rule for every new level): one mechanic, three variants that diffe
 
 **Done when:** registered as 'dock' (name 'THE DOCK', short 'DOCK') after grocery, 3 variants (ammo only), 4 tiers, briefing icon, versus-safe, no console errors, Beginner + Insane play-checked MUTED with an autopilot + a deliberate hull hit (LIFE -1), draw calls, screenshots, the ENGINE.md section + audio.js lines + PLAYTEST.md checklist + index.html tag handed to Fable as text. The agent edits ONLY `js/stages/dock.js` and its own harness under `review/tools/`.
 
-## 14. MOLE HOLES build brief (Fable, Jon answered 2026-11-01; stage 13) -- WAITING FOR GO
+## 14. MOLE HOLES build brief (Fable, Jon answered 2026-11-01; now stage 14, after THE DOCK) -- GO given 2026-11-15 ("make another level"; picked MOLE HOLES, next brief in line). Add: level card via def.drawCard (#110 rule).
 SIMPLE. Whack-a-mole with a gun. Three ammo-only variants.
 
 **Scene:** a backyard lawn seen from a low angle, a GRID of 3 rows x 4 mole holes (dirt rings, the far row smaller), a picket fence, a garden gnome, a shed with the "B.L.A.M. LAWN CARE" sign (the fixed logo), a sprinkler ticking in the corner, flowers. Original art, pixel / dither voxel.

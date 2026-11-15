@@ -16,6 +16,20 @@ Live link: https://jonbeam1-netizen.github.io/blam/ (hard refresh once: Ctrl+Shi
 - [ ] Nothing covers Deputy Duck or the gun
 - Also in 0.032-0.036: practice list below the floor edge (static), every menu sign static, pillar RELOAD markers only when empty, hit ding +9 dB.
 
+## Build 0.041: MOLE HOLES (stage 14, 2026-11-15)
+- [ ] THE SET: a sunny backyard lawn rising gently to a white picket fence, mowed in stripes; 12 mole holes (3 rows x 4, the far row smaller); a red shed with the B.L.A.M. LAWN CARE sign over its door, a garden gnome, a sprinkler ticking in the far right corner, flower beds, butterflies, trees and a neighbour's roof over the fence. Does it read? Anything covering the HUD duck, the hearts, the timer, the quota pill or the gun?
+- [ ] THE MOLES: pop up out of the holes with a dirt puff, hold, look about, duck back down. Three paints (brown, blue-grey, ginger). Big enough in the back row? Hold 1.6 / 1.15 / 0.8 / 0.65 s.
+- [ ] SHOOT ONE: it goes X-eyed, spins, flops back with stars round its head and sinks. 100, +50 QUICK WHACK if you get it within half a second of its pop.
+- [ ] BOMBS: plain iron bombs with a lit fuse pop up out of the same holes on the same timing. Shoot one: boom, LIFE -1, -300. Let it sink: nothing happens. About 15 % of the pops at Beginner, 30 % at Insane; never two bombs in a row.
+- [ ] PATTERNS: now and then three moles on a beat: a ROW, a DIAGONAL or a COLUMN. Readable? Fun?
+- [ ] DIFFICULTY: more at once, faster, more of the back row and more bombs by tier (all tiers ~50-57 s). Insane fair?
+- [ ] VARIANTS (ammo only): MOLE 1 BACKYARD free fire; MOLE 2 WHACK RUSH 8 per magazine (side reload); MOLE 3 DIRT NAP 12 per magazine.
+- [ ] FINALE: four moles come up together in the front row holding cards that spell B. L. A. M. and bob in a wave.
+- [ ] LEVEL CARD (FREE PLAY page 2/2 and HIGH SCORES): sky, picket fence, striped lawn, a mole up in a hole, a lit bomb beside it. Briefing icon: a mole popping out of its mound; the don't-shoot sticker is the engine's bomb.
+- [ ] Sounds (synth, untested by ear): pop, slide-whistle down, a wooden BONK + "eek" + twinkles, a bomb clunk + fuse fizz, the finale's four pops + ta-daa, the lawn bed (breeze, birds, sprinkler ticks).
+- NOT VERIFIED yet: anything by ear (built and checked muted); real mouse / touch play; a real frame rate; portrait; a two-browser versus.
+- Open questions: (1) Insane's "5-6 up at once" is the cap; the stage mostly runs 2-3 with clusters to 5. Want denser waves even if Insane gets harder? (2) Should the back row be bigger (a steeper hill / larger moles), or is "small and hard" the point? (3) Patterns are plain moles only (per the brief); keep them bomb-free at every tier?
+
 ## Build 0.040: THE DOCK (stage 13, 2026-11-14)
 - [ ] THE SET: a harbour at sunset that darkens over the round (stars at the end). Two or three pirate ships on the horizon (sails, Jolly Rogers, lanterns, five red-lidded gun ports each), the boathouse on the quay with the B.L.A.M. HARBOUR sign, a pier with a lamp post, barrels, gulls, a buoy with a light, a far town and a lighthouse whose lamp turns. Does it read? Anything covering the HUD duck, the hearts, the timer, the quota pill or the gun?
 - [ ] THE BOAT: Deputy Duck in a little red rowboat ("DEPUTY" on the stern), oars out, bobbing in the lower middle. Big enough? (He is about 25 px tall.)
