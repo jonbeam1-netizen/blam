@@ -4,7 +4,7 @@
     {
       "name": "blam",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8790", "--directory", "C:/Users/jonbe/OneDrive/Desktop/Arcade Shooter"],
+      "runtimeArgs": ["-m", "http.server", "8790", "--directory", "C:/Users/jonbe/Desktop/ALL CLAUDE PROJECTS/ACTIVE/BLAM"],
       "port": 8790
     }
   ]
